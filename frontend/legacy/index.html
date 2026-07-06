@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>国科智能体平台</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <header><strong>国科智能体平台</strong></header>
+      <nav class="sidebar-nav">
+        <button id="new-msg-btn" class="nav-btn primary">+ 新消息</button>
+        <button id="agents-btn" class="nav-btn">智能体</button>
+      </nav>
+      <div id="list" class="list"></div>
+      <footer>
+        <span id="who">…</span>
+        <button id="logout">退出</button>
+      </footer>
+    </aside>
+    <section class="main" id="main">
+      <!-- 新消息页面 -->
+      <div id="view-new" class="view view-new">
+        <div class="new-msg-container">
+          <div class="agent-select-row">
+            <label>选择智能体</label>
+            <select id="new-agent-select"></select>
+          </div>
+          <div class="new-input-wrap">
+            <textarea id="new-input" placeholder="输入消息..."></textarea>
+            <button id="new-send">发送</button>
+            <button id="new-stop" class="stop-btn" style="display:none">停止</button>
+          </div>
+        </div>
+      </div>
+      <!-- 对话页面 -->
+      <div id="view-chat" class="view view-chat" style="display:none">
+        <div id="messages" class="messages"></div>
+        <div class="composer">
+          <textarea id="input" placeholder="发消息(Enter 发送,Shift+Enter 换行)"></textarea>
+          <button id="send">发送</button>
+          <button id="stop" class="stop-btn" style="display:none">停止</button>
+        </div>
+      </div>
+      <!-- 智能体管理页面 -->
+      <div id="view-agents" class="view view-agents" style="display:none">
+        <div class="agents-header">
+          <h2>智能体管理</h2>
+          <button id="add-agent-btn" class="primary">+ 新建智能体</button>
+        </div>
+        <div id="agents-list" class="agents-list"></div>
+        <div id="agent-form-panel" class="agent-form-panel" style="display:none">
+          <h3 id="agent-form-title">新建智能体</h3>
+          <label>名称 <input id="af-name" /></label>
+          <label>系统提示词 <textarea id="af-prompt" rows="4"></textarea></label>
+          <label>技能
+            <div id="af-skills" class="skills-checkboxes"></div>
+          </label>
+          <div class="form-actions">
+            <button id="af-save" class="primary">保存</button>
+            <button id="af-cancel">取消</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

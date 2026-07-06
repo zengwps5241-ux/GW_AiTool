@@ -1,0 +1,442 @@
+// API 数据类型定义
+
+export interface UserMe {
+  id: number | null;
+  username: string;
+  wechat_user_id?: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  department: string | null;
+  department_ids?: number[] | null;
+  position: string | null;
+  mobile: string | null;
+  email: string | null;
+  auth_source: string;
+  role: "super" | "admin" | "user";
+}
+
+export type WorkspaceKind = "personal" | "team";
+export type TeamMemberRole = "reader" | "editor";
+
+export interface TeamSpace {
+  id: number;
+  name: string;
+  description: string | null;
+  owner_user_id: number;
+  owner_name: string;
+  member_count: number;
+  locked_by_user_id: number | null;
+  locked_by_name: string | null;
+  lock_acquired_at: string | null;
+  lock_note: string | null;
+  member_role: TeamMemberRole;
+  can_write: boolean;
+  is_owner: boolean;
+  readonly_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamSpaceMember {
+  id: number;
+  user_id: number;
+  username: string;
+  display_name: string | null;
+  role: TeamMemberRole;
+  is_owner: boolean;
+  added_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamSpaceMemberSearchItem {
+  user_id: number;
+  username: string;
+  display_name: string | null;
+  is_member: boolean;
+}
+
+export interface Session {
+  id: string;
+  title: string;
+  agent_id: number | null;
+  agent_name: string | null;
+  created_by_user_id: number | null;
+  created_by_name: string | null;
+  workspace_kind: WorkspaceKind;
+  team_space_id: number | null;
+  team_space_name: string | null;
+  is_shared: boolean;
+  workspace_member_role: TeamMemberRole | null;
+  workspace_can_write: boolean;
+  workspace_readonly_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Agent {
+  id: number;
+  name: string;
+  code: string;
+  system_prompt: string | null;
+  skills: string;
+  plugins: string;
+  category_id: number;
+  category: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  category: string;
+}
+
+/** 后端扫描到的本地插件,字段与 backend.app.schemas.PluginOut 对齐 */
+export interface Plugin {
+  name: string;
+  version: string;
+  description: string;
+  /** 相对于 claude_data_dir/plugins 的 POSIX 路径,用作勾选/存储 key */
+  path: string;
+  category: string;
+}
+
+/** 分类 */
+export interface Category {
+  id: number;
+  name: string;
+}
+
+/** 已上传文件的元数据,由后端 /api/uploads 返回 */
+export interface UploadedFile {
+  name: string;
+  path: string;
+  size: number;
+  preview_path: string;
+  agent_path: string;
+  converted: boolean;
+}
+
+export type ThinkingLevelValue = "disabled" | "low" | "medium" | "high";
+
+export interface ThinkingLevelOption {
+  value: ThinkingLevelValue;
+  label: string;
+}
+
+export interface ModelSettings {
+  models: string[];
+  thinking_levels: ThinkingLevelOption[];
+  default_model: string | null;
+  default_thinking_level: ThinkingLevelValue;
+}
+
+export interface ChatModelSelection {
+  model?: string | null;
+  thinking_level: ThinkingLevelValue;
+}
+
+export interface LoginWhitelistUser {
+  id: number;
+  name: string;
+}
+
+export interface LoginWhitelistDepartment {
+  id: number;
+  department_id: number;
+  name: string;
+  path: string;
+}
+
+export interface LoginWhitelistDepartmentSearchItem {
+  department_id: number;
+  name: string;
+  path: string;
+}
+
+export interface LoginWhitelistConfig {
+  users: LoginWhitelistUser[];
+  departments: LoginWhitelistDepartment[];
+}
+
+/** 个人空间文件树节点 —— 与 backend.app.routes.workspace.WorkspaceNode 对齐 */
+export interface WorkspaceNode {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  size?: number;
+  mtime?: number;
+  /** 已转换为 markdown 的源文件,这里给出 agent 应使用的 md 路径;未转换为 null */
+  agent_path?: string | null;
+  children?: WorkspaceNode[];
+  conversion_status?: "queued" | "running" | "succeeded" | "failed" | null;
+  conversion_task_id?: number | null;
+  conversion_error?: string | null;
+  markdown_path?: string | null;
+}
+
+/** SSE 事件类型 —— 与 backend.claude_runner 输出格式对齐 */
+export type ChatEvent =
+  | { type: "user_text"; text: string }
+  | { type: "assistant_text"; text: string }
+  | { type: "assistant_thinking"; text?: string }
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: unknown;
+    }
+  | {
+      type: "tool_result";
+      tool_use_id: string;
+      content: unknown;
+      is_error?: boolean;
+    }
+  | { type: "result"; [key: string]: unknown }
+  | { type: "error"; message: string };
+
+/** 带序号的运行事件,用于恢复运行中会话的 SSE 流 */
+export interface RunEvent {
+  seq: number;
+  event: ChatEvent;
+}
+
+/** 运行中会话的恢复状态,与 /api/sessions/{id}/running 对齐 */
+export interface RunningSessionState {
+  running: boolean;
+  run_id?: string;
+  status: "running" | "completed" | "failed" | "interrupted" | string;
+  events: RunEvent[];
+  latest_seq: number;
+  error_message?: string | null;
+}
+
+export type ThemeMode = "light" | "dark";
+export type ViewName =
+  | "new"
+  | "chat"
+  | "workspace"
+  | "personalSpace"
+  | "personalSpaceDetail"
+  | "teamSpaces"
+  | "teamSpaceChat"
+  | "teamSpaceDetail"
+  | "agents"
+  | "skills"
+  | "feedback"
+  | "usage"
+  | "loginWhitelist";
+
+export interface UsageOverview {
+  call_count: number;
+  active_user_count: number;
+  agent_count: number;
+  skill_trigger_count: number;
+  plugin_trigger_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  error_count: number;
+  interrupted_count: number;
+  avg_duration_ms: number | null;
+}
+
+export interface UsageTimeseriesPoint {
+  bucket: string;
+  call_count: number;
+  active_user_count: number;
+  total_tokens: number;
+  error_count: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface UsageAgentRank {
+  agent_id: number | null;
+  agent_name: string;
+  call_count: number;
+  active_user_count: number;
+  total_tokens: number;
+  error_count: number;
+}
+
+export interface UsageSkillRank {
+  resource_name: string;
+  trigger_count: number;
+}
+
+export interface UsagePluginRank {
+  plugin_name: string;
+  resource_name: string;
+  trigger_count: number;
+}
+
+export interface UsageStatusBreakdown {
+  status: "success" | "error" | "interrupted" | string;
+  count: number;
+}
+
+export interface UsageTokenSummary {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  timeseries: UsageTimeseriesPoint[];
+}
+
+export interface UsageSummary {
+  range: string;
+  start: string;
+  end: string;
+  granularity: "hour" | "day" | string;
+  overview: UsageOverview;
+  timeseries: UsageTimeseriesPoint[];
+  agents: UsageAgentRank[];
+  skills: UsageSkillRank[];
+  plugins: UsagePluginRank[];
+  tokens: UsageTokenSummary;
+  status_breakdown: UsageStatusBreakdown[];
+}
+
+/** 用户提交问题反馈后返回的创建结果 */
+export interface FeedbackIssueCreated {
+  id: number;
+  title: string;
+  description: string;
+  reporter_username: string;
+  created_at: string;
+  attachment_count: number;
+}
+
+/** 反馈截图附件元数据 */
+export interface FeedbackAttachment {
+  id: number;
+  filename: string;
+  content_type: string;
+  size: number;
+  url: string;
+}
+
+/** 管理员反馈列表条目 */
+export interface FeedbackIssueListItem {
+  id: number;
+  title: string;
+  reporter_username: string;
+  created_at: string;
+}
+
+/** 管理员反馈分页列表 */
+export interface FeedbackIssueList {
+  items: FeedbackIssueListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** 管理员反馈详情 */
+export interface FeedbackIssueDetail {
+  id: number;
+  title: string;
+  description: string;
+  reporter_username: string;
+  created_at: string;
+  attachments: FeedbackAttachment[];
+}
+
+export interface UploadItem {
+  name: string;
+  path: string | null;
+  size: number;
+  preview_path: string | null;
+  agent_path: string | null;
+  converted: boolean;
+  conversion_task_id: number | null;
+  status: "success" | "failed";
+  error: string | null;
+}
+
+export interface UploadBatch {
+  summary: { total: number; succeeded: number; failed: number };
+  items: UploadItem[];
+}
+
+/** 个人空间上传任务,与 backend.app.schemas.UploadTaskOut 对齐 */
+export interface UploadTask {
+  id: number;
+  target_dir: string;
+  relative_path: string;
+  filename: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  progress: number;
+  size: number;
+  saved_path: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface UploadTaskCreateItem {
+  filename: string;
+  relative_path: string;
+  size: number;
+}
+
+/** 个人空间右侧统一任务列表项,task_key 用于区分上传/转换任务的同名数字 id */
+export interface WorkspaceTask {
+  task_key: string;
+  type: "upload" | "conversion";
+  id: number;
+  name: string;
+  path: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  progress: number | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ConversionTask {
+  id: number;
+  source_path: string;
+  source_name: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  error_message: string | null;
+  markdown_path: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface FileNode {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  size?: number;
+  mtime?: number;
+  children?: FileNode[];
+}
+
+export interface AgentCommand {
+  name: string;
+  description: string;
+  source: "personal_skill" | "skill" | "plugin";
+  plugin: string | null;
+}
+
+export interface SkillMeta {
+  name: string;
+  description: string;
+}
+
+export interface PluginMeta {
+  name: string;
+  version: string;
+  description: string;
+  path: string;
+}
+
+export type AdminTab = "skills" | "plugins" | "categories";

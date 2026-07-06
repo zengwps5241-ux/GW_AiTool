@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>goktech-agents 多智能体团队系统 · 技术方案 v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --accent: #06b6d4;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --bg-light: #1e293b;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, sans-serif;
+            background: #f1f5f9;
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        code, pre {
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+        }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #312e81 100%);
+            color: white;
+            padding: 80px 40px 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.3) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.3) 0%, transparent 40%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .hero-badge {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .hero h1 {
+            font-size: 44px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #fff 0%, #c7d2fe 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            opacity: 0.85;
+            max-width: 800px;
+        }
+
+        .hero-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 40px;
+            max-width: 900px;
+        }
+
+        .hero-meta-item {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .hero-meta-label {
+            font-size: 12px;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .hero-meta-value {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Section */
+        .section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .section-number {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+            margin-right: 16px;
+        }
+
+        .section-title {
+            font-size: 26px;
+            font-weight: 700;
+        }
+
+        h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 32px 0 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        h3::before {
+            content: '';
+            width: 4px;
+            height: 22px;
+            background: var(--accent);
+            border-radius: 2px;
+            margin-right: 10px;
+        }
+
+        h4 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 12px;
+            color: var(--primary);
+        }
+
+        p {
+            margin-bottom: 12px;
+            color: #334155;
+        }
+
+        /* Architecture Diagram */
+        .arch-diagram {
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            border-radius: 16px;
+            padding: 32px;
+            margin: 24px 0;
+            border: 1px solid var(--border);
+        }
+
+        .arch-layer {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+
+        .arch-layer:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .arch-layer-title {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .arch-layer-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .arch-layer-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .arch-layer-tag {
+            margin-left: auto;
+            font-size: 12px;
+            padding: 4px 10px;
+            background: #e0e7ff;
+            color: var(--primary);
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .arch-components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .arch-component {
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            border-left: 3px solid var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .arch-arrow {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 18px;
+            margin: -8px 0;
+        }
+
+        /* Tables */
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin: 16px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border);
+            color: var(--text);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        tr:hover td { background: #f8fafc; }
+
+        /* Code blocks */
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 20px 24px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 16px 0;
+            border: 1px solid #334155;
+        }
+
+        pre .comment { color: #64748b; font-style: italic; }
+        pre .keyword { color: #c084fc; }
+        pre .string { color: #86efac; }
+        pre .function { color: #60a5fa; }
+        pre .decorator { color: #fbbf24; }
+        pre .class { color: #f472b6; }
+        pre .number { color: #fb923c; }
+
+        code:not(pre code) {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--primary);
+        }
+
+        /* Tags */
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 6px;
+        }
+
+        .tag-primary { background: #e0e7ff; color: var(--primary); }
+        .tag-success { background: #d1fae5; color: #065f46; }
+        .tag-warning { background: #fef3c7; color: #92400e; }
+        .tag-danger { background: #fee2e2; color: #991b1b; }
+        .tag-info { background: #cffafe; color: #155e75; }
+        .tag-purple { background: #ede9fe; color: #5b21b6; }
+
+        /* Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .card {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.1);
+        }
+
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            color: white;
+            font-size: 22px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .card-desc {
+            font-size: 13px;
+            color: var(--text-light);
+        }
+
+        /* Flow */
+        .flow {
+            margin: 24px 0;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: stretch;
+            margin-bottom: 4px;
+        }
+
+        .flow-num {
+            width: 36px;
+            min-width: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            margin-right: 16px;
+            flex-shrink: 0;
+            height: 36px;
+        }
+
+        .flow-content {
+            flex: 1;
+            background: #f8fafc;
+            padding: 14px 18px;
+            border-radius: 10px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .flow-content strong {
+            color: var(--primary);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .flow-arrow {
+            text-align: center;
+            color: var(--primary);
+            font-size: 20px;
+            margin: 4px 0 4px 8px;
+        }
+
+        /* Decision badge */
+        .decision {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid var(--warning);
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 16px 0;
+        }
+
+        /* Highlight */
+        .highlight {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            border-left: 4px solid var(--primary);
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 16px 0;
+        }
+
+        /* Status flow */
+        .state-machine {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 20px 0;
+            padding: 24px;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: 12px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .state {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .state-todo { background: #e2e8f0; color: #475569; }
+        .state-assigned { background: #dbeafe; color: #1e40af; }
+        .state-running { background: #fef3c7; color: #92400e; animation: pulse 2s infinite; }
+        .state-done { background: #d1fae5; color: #065f46; }
+        .state-rework { background: #fed7aa; color: #9a3412; }
+        .state-blocked { background: #fecaca; color: #991b1b; }
+        .state-cancelled { background: #e5e7eb; color: #6b7280; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .state-arrow {
+            color: var(--text-light);
+            font-size: 18px;
+        }
+
+        /* Lanes */
+        .lanes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .lane {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+        }
+
+        .lane-id {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .lane-name {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .lane-desc {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        .lane-deps {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: var(--warning);
+            color: white;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Risk */
+        .risk {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr;
+            gap: 0;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+
+        .risk-name {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            padding: 14px 16px;
+            font-weight: 600;
+            font-size: 14px;
+            border-right: 1px solid var(--border);
+        }
+
+        .risk-symptom {
+            background: #fef3c7;
+            padding: 14px 16px;
+            font-size: 13px;
+            border-right: 1px solid var(--border);
+        }
+
+        .risk-mitigation {
+            background: #d1fae5;
+            padding: 14px 16px;
+            font-size: 13px;
+        }
+
+        /* Topology */
+        .topology {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            border-radius: 16px;
+            margin: 20px 0;
+            position: relative;
+            min-height: 320px;
+        }
+
+        .topology-leader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.15), 0 0 0 16px rgba(99, 102, 241, 0.08);
+            z-index: 2;
+        }
+
+        .topology-worker {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .topology-line {
+            position: absolute;
+            background: var(--primary);
+            height: 2px;
+            transform-origin: 0 0;
+            opacity: 0.4;
+        }
+
+        /* Conclusion */
+        .conclusion {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 16px;
+            margin: 24px 0;
+        }
+
+        .conclusion h3 {
+            color: white;
+            font-size: 22px;
+            margin-bottom: 16px;
+        }
+
+        .conclusion h3::before { background: white; }
+
+        .conclusion p { color: rgba(255,255,255,0.95); }
+
+        /* Sidebar */
+        .layout {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            gap: 0;
+        }
+
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: white;
+            border-right: 1px solid var(--border);
+            height: calc(100vh - 20px);
+            position: sticky;
+            top: 20px;
+            padding: 24px 16px;
+            overflow-y: auto;
+            border-radius: 16px 0 0 16px;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .sidebar-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-light);
+            margin-bottom: 16px;
+            padding-left: 12px;
+            font-weight: 600;
+        }
+
+        .nav-list {
+            list-style: none;
+        }
+
+        .nav-item { margin-bottom: 2px; }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 9px 12px;
+            color: var(--text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 13.5px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .nav-link:hover {
+            background: #f1f5f9;
+            color: var(--primary);
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+
+        .nav-number {
+            width: 22px;
+            height: 22px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            margin-right: 10px;
+            color: var(--text-light);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .nav-link.active .nav-number {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+        }
+
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            padding: 40px 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .layout { display: block; }
+            .sidebar {
+                position: relative;
+                width: 100%;
+                min-width: 0;
+                height: auto;
+                top: 0;
+                border-radius: 16px;
+                margin: 20px 20px 0;
+                max-height: 300px;
+            }
+            .main-content { padding: 20px; }
+        }
+
+        @media (max-width: 768px) {
+            .section { padding: 24px; }
+            .hero { padding: 40px 20px; }
+            .hero h1 { font-size: 28px; }
+            .topology { min-height: 280px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="hero">
+    <div class="hero-content">
+        <div class="hero-badges">
+            <span class="hero-badge">📐 技术方案 v1.0</span>
+            <span class="hero-badge">🚀 Claude Agent SDK</span>
+            <span class="hero-badge">🐍 Python</span>
+            <span class="hero-badge">🧠 Multi-Agent</span>
+        </div>
+        <h1>多智能体团队系统 (MATS) 技术方案</h1>
+        <p class="hero-subtitle">动态组队 + Leader 中心化调度 + 人在环干预的工程落地设计，基于 Claude Agent SDK 构建可观测、可审计、可恢复的智能体协作平台。</p>
+
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">版本</div>
+                <div class="hero-meta-value">v1.0</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">日期</div>
+                <div class="hero-meta-value">2026-05-31</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">实现栈</div>
+                <div class="hero-meta-value">claude-agent-sdk (Python)</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">定位</div>
+                <div class="hero-meta-value">独立新设计（轻量路线）</div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-title">📑 目录导航</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="#sec1" class="nav-link"><span class="nav-number">1</span>概述</a></li>
+            <li class="nav-item"><a href="#sec2" class="nav-link"><span class="nav-number">2</span>总体架构</a></li>
+            <li class="nav-item"><a href="#sec3" class="nav-link"><span class="nav-number">3</span>动态组建团队</a></li>
+            <li class="nav-item"><a href="#sec4" class="nav-link"><span class="nav-number">4</span>Leader 任务分解</a></li>
+            <li class="nav-item"><a href="#sec5" class="nav-link"><span class="nav-number">5</span>Worker 执行</a></li>
+            <li class="nav-item"><a href="#sec6" class="nav-link"><span class="nav-number">6</span>中心化协调</a></li>
+            <li class="nav-item"><a href="#sec7" class="nav-link"><span class="nav-number">7</span>人工干预</a></li>
+            <li class="nav-item"><a href="#sec8" class="nav-link"><span class="nav-number">8</span>任务状态机</a></li>
+            <li class="nav-item"><a href="#sec9" class="nav-link"><span class="nav-number">9</span>端到端示例</a></li>
+            <li class="nav-item"><a href="#sec10" class="nav-link"><span class="nav-number">10</span>技术栈</a></li>
+            <li class="nav-item"><a href="#sec11" class="nav-link"><span class="nav-number">11</span>MVP 实施</a></li>
+            <li class="nav-item"><a href="#sec12" class="nav-link"><span class="nav-number">12</span>风险与应对</a></li>
+            <li class="nav-item"><a href="#sec13" class="nav-link"><span class="nav-number">13</span>测试策略</a></li>
+            <li class="nav-item"><a href="#sec14" class="nav-link"><span class="nav-number">14</span>结论</a></li>
+        </ul>
+    </aside>
+
+    <div class="main-content">
+
+    <!-- 1. 概述 -->
+    <section id="sec1" class="section">
+        <div class="section-header">
+            <span class="section-number">1</span>
+            <h2 class="section-title">概述</h2>
+        </div>
+
+        <p>本方案给出多智能体团队系统（MATS）的工程落地设计，覆盖四个核心需求：</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">🧩</div>
+                <div class="card-title">动态组建团队</div>
+                <div class="card-desc">从团队目标经澄清问答，自动产出角色蓝图，复用已有 skills/plugins，prompt 兜底</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📋</div>
+                <div class="card-title">Leader 分解分配</div>
+                <div class="card-desc">planning 能力的 Leader 分解任务、分配给子智能体、调度执行、汇总结果</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">✋</div>
+                <div class="card-title">运行中人工干预</div>
+                <div class="card-desc">用户随时插话：中断 Agent、任务 CRUD、令某 Agent 重做</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">⭐</div>
+                <div class="card-title">Leader 中心化协调</div>
+                <div class="card-desc">Agent 间不直接通信，所有协调经 Leader 中转并全程留痕</div>
+            </div>
+        </div>
+
+        <h3>1.1 设计取舍（关键决策）</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:25%">决策点</th>
+                        <th style="width:30%">选择</th>
+                        <th>理由</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">实现栈</span></td>
+                        <td>Python <code>claude-agent-sdk</code></td>
+                        <td>与团队既有技术栈一致，异步原语完善，便于自建编排层</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">与 DDMAO v2 关系</span></td>
+                        <td>独立新设计</td>
+                        <td>面向实训营/MVP 的轻量路线，不背负重型编排器；可向 v2 演进</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">teammate 运行机制</span></td>
+                        <td><strong>混合模式</strong></td>
+                        <td>一次性任务用无状态 subagent 省 token；需中断/迭代/讨论的角色升级为持久会话</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">通信拓扑</span></td>
+                        <td>星形（Leader 中转）</td>
+                        <td>满足需求 4，可观测、可审计、易控制</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">状态权威</span></td>
+                        <td>编排层（非 LLM）</td>
+                        <td>LLM 只提建议，任务状态由确定性的 TaskStore 维护</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>1.2 SDK 能力对照</h3>
+        <div class="decision">
+            <strong>⚠️ 注意：</strong>Claude Agent SDK 原生不提供 Agent Teams / Mailbox / 共享任务列表，需自建。
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>需求</th>
+                        <th>SDK 原语</th>
+                        <th>用途</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>持久、可中断的 Agent</td>
+                        <td><code>ClaudeSDKClient</code></td>
+                        <td>异步上下文管理器；持久会话 teammate，支持 <code>interrupt()</code></td>
+                    </tr>
+                    <tr>
+                        <td>一次性子任务</td>
+                        <td><code>query()</code></td>
+                        <td>无状态 subagent，结果回传即销毁</td>
+                    </tr>
+                    <tr>
+                        <td>角色能力封装</td>
+                        <td><code>AgentDefinition</code> + <code>ClaudeAgentOptions(agents=...)</code></td>
+                        <td>用 SDK 子代理机制承载角色</td>
+                    </tr>
+                    <tr>
+                        <td>自定义工具</td>
+                        <td><code>@tool</code> + <code>create_sdk_mcp_server</code></td>
+                        <td>把"汇报给 Leader""读写 Artifact"做成工具</td>
+                    </tr>
+                    <tr>
+                        <td>技能/插件接入</td>
+                        <td><code>setting_sources</code> / <code>mcp_servers</code> / <code>allowed_tools</code></td>
+                        <td>复用平台已有 skills、plugins</td>
+                    </tr>
+                    <tr>
+                        <td>模型分层</td>
+                        <td><code>ClaudeAgentOptions(model=...)</code> per agent</td>
+                        <td>Leader 用 Opus，Worker 用 Sonnet/Haiku</td>
+                    </tr>
+                    <tr>
+                        <td>中断</td>
+                        <td><code>client.interrupt()</code></td>
+                        <td>运行中干预时打断正在跑的 Agent</td>
+                    </tr>
+                    <tr>
+                        <td>流式观测</td>
+                        <td><code>async for msg in client.receive_response()</code></td>
+                        <td>实时把消息推到协作时间线</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 2. 总体架构 -->
+    <section id="sec2" class="section">
+        <div class="section-header">
+            <span class="section-number">2</span>
+            <h2 class="section-title">总体架构</h2>
+        </div>
+
+        <h3>2.1 架构分层</h3>
+        <p>MATS 分为四层：<strong>交互层、编排层（Orchestrator，确定性核心）、Agent 运行层、状态与资产层</strong>。</p>
+
+        <div class="arch-diagram">
+            <!-- 交互层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">🌐</div>
+                    <span class="arch-layer-name">交互层</span>
+                    <span class="arch-layer-tag">Web UI</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">组队向导</div>
+                    <div class="arch-component">团队总览</div>
+                    <div class="arch-component">任务看板</div>
+                    <div class="arch-component">协作时间线</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓ WebSocket（流式消息/状态）</div>
+
+            <!-- 编排层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">⚙️</div>
+                    <span class="arch-layer-name">编排层 Orchestrator</span>
+                    <span class="arch-layer-tag">确定性核心（非 LLM 控状态）</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">TeamBuilder</div>
+                    <div class="arch-component">LeaderRuntime</div>
+                    <div class="arch-component">TaskStore</div>
+                    <div class="arch-component">MessageBus</div>
+                    <div class="arch-component">AgentPool</div>
+                    <div class="arch-component">SkillRegistry</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓</div>
+
+            <!-- Agent 层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">🤖</div>
+                    <span class="arch-layer-name">Agent 运行层</span>
+                    <span class="arch-layer-tag">混合机制</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">Leader (ClaudeSDKClient)</div>
+                    <div class="arch-component">Worker A (持久)</div>
+                    <div class="arch-component">Worker B (一次性)</div>
+                    <div class="arch-component">Worker C (持久)</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓</div>
+
+            <!-- 状态层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">💾</div>
+                    <span class="arch-layer-name">状态与资产层</span>
+                    <span class="arch-layer-tag">持久化</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">Postgres (团队/任务/审计)</div>
+                    <div class="arch-component">对象存储 (Artifact)</div>
+                    <div class="arch-component">向量索引 (技能匹配)</div>
+                </div>
+            </div>
+        </div>
+
+        <h3>2.2 组件职责</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件</th>
+                        <th>职责</th>
+                        <th>是否 LLM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>TeamBuilder</code></td>
+                        <td>解析目标、生成澄清问题、产出团队蓝图、调用技能匹配、实例化团队</td>
+                        <td><span class="tag tag-warning">部分</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>LeaderRuntime</code></td>
+                        <td>承载 Leader 持久会话，驱动分解/分配/调度/汇总/干预决策</td>
+                        <td><span class="tag tag-primary">是</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>TaskStore</code></td>
+                        <td>任务列表的权威状态：CRUD、依赖图、状态机流转</td>
+                        <td><span class="tag tag-success">否（确定性）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>MessageBus</code></td>
+                        <td>星形拓扑消息中转，Leader↔Worker 单跳，全量留痕</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>AgentPool</code></td>
+                        <td>创建/复用/销毁 teammate，管理持久会话与一次性任务</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>SkillRegistry</code></td>
+                        <td>索引 skills/plugins/command，提供语义匹配与绑定</td>
+                        <td><span class="tag tag-info">检索（embedding）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>ArtifactStore</code></td>
+                        <td>存放 Agent 产物，供 Leader 汇总与下游引用</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>AuditLog</code></td>
+                        <td>记录组队、分配、状态变更、干预、消息等事件</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>2.3 控制反转：LLM 提建议，编排层定状态</h3>
+        <div class="highlight">
+            <strong>核心原则：</strong>Leader（LLM）输出的是"<strong>意图</strong>"（JSON 指令），编排层执行并写状态。Leader 不直接修改 TaskStore，而是产出结构化指令（如 <code>assign_task</code>、<code>interrupt_agent</code>、<code>update_task</code>），由 Orchestrator 校验后执行。这样保证任务状态<strong>可审计、可恢复</strong>，避免 LLM 幻觉直接污染系统状态。
+        </div>
+    </section>
+
+    <!-- 3. 动态组建团队 -->
+    <section id="sec3" class="section">
+        <div class="section-header">
+            <span class="section-number">3</span>
+            <h2 class="section-title">动态组建团队（需求 1）</h2>
+        </div>
+
+        <h3>3.1 组队流水线</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content">
+                    <strong>团队目标（自然语言）</strong>
+                    用户描述想要什么样的团队
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content">
+                    <strong>TeamBuilder.analyze_goal()</strong>
+                    LLM 理解目标，产出澄清问题（3–5）
+                </div>
+            </div>
+            <div class="flow-arrow">▼ 澄清问题 → 用户回答</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content">
+                    <strong>TeamBuilder.draft_blueprint()</strong>
+                    LLM 产出 TeamBlueprint（角色/技能/产出契约）
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content">
+                    <strong>SkillRegistry.match()</strong>
+                    检索：每个技能项 → 已有 skill/plugin 或 prompt 兜底
+                </div>
+            </div>
+            <div class="flow-arrow">▼ 用户确认/微调（增删角色、改技能）</div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-content">
+                    <strong>AgentPool.instantiate(team)</strong>
+                    创建 Leader + N Worker
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">6</div>
+                <div class="flow-content">
+                    <strong>团队就绪</strong>
+                    可保存为模板
+                </div>
+            </div>
+        </div>
+
+        <h3>3.2 团队蓝图数据模型</h3>
+<pre><span class="keyword">from</span> dataclasses <span class="keyword">import</span> dataclass, field
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">SkillBinding</span>:
+    name: str                 <span class="comment"># 技能逻辑名</span>
+    source: str               <span class="comment"># "skill" | "plugin" | "command" | "prompt"</span>
+    ref: str | <span class="class">None</span> = <span class="class">None</span>    <span class="comment"># 命中时的 skill/plugin 标识</span>
+    prompt_fallback: str | <span class="class">None</span> = <span class="class">None</span>  <span class="comment"># 未命中时现场构造的能力描述</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">RoleSpec</span>:
+    role_id: str
+    name: str                 <span class="comment"># 如 "需求分析师"</span>
+    description: str
+    is_leader: <span class="class">bool</span> = <span class="keyword">False</span>
+    model: str = <span class="string">"claude-sonnet-4-6"</span>
+    skills: <span class="class">list</span>[<span class="class">SkillBinding</span>] = field(default_factory=<span class="class">list</span>)
+    output_contract: str = <span class="string">""</span> <span class="comment"># 产出契约（结构化模板）</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">TeamBlueprint</span>:
+    team_id: str
+    goal: str
+    roles: <span class="class">list</span>[<span class="class">RoleSpec</span>]
+    topology: str = <span class="string">"star"</span>    <span class="comment"># 星形：Leader 中转</span></pre>
+
+        <h3>3.3 技能匹配引擎（复用已有 skills/plugins）</h3>
+        <p>平台 skill 以 <code>SKILL.md</code> frontmatter（<code>name</code> + <code>description</code>）描述，plugin 以 <code>installed_plugins.json</code> 登记。匹配流程：</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">1️⃣</div>
+                <div class="card-title">索引构建</div>
+                <div class="card-desc">启动时扫描 <code>~/.claude/skills/*/SKILL.md</code> 与 plugins 目录，embedding 写入向量索引</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">2️⃣</div>
+                <div class="card-title">语义召回</div>
+                <div class="card-desc">对蓝图中每个技能项，用其描述向量检索 Top-K 候选</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">3️⃣</div>
+                <div class="card-title">阈值判定</div>
+                <div class="card-desc">相似度 ≥ 阈值（0.78）→ 绑定为 <code>source="skill"/"plugin"</code>；否则进入兜底</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">4️⃣</div>
+                <div class="card-title">Prompt 兜底</div>
+                <div class="card-desc">未命中项由 LLM 生成能力描述，作为 system prompt 的一部分</div>
+            </div>
+        </div>
+
+<pre><span class="keyword">def</span> <span class="function">match_skill</span>(query: str, top_k=<span class="number">5</span>, threshold=<span class="number">0.78</span>) -&gt; <span class="class">SkillBinding</span>:
+    hits = vector_index.search(embed(query), top_k=top_k)
+    <span class="keyword">if</span> hits <span class="keyword">and</span> hits[<span class="number">0</span>].score &gt;= threshold:
+        h = hits[<span class="number">0</span>]
+        <span class="keyword">return</span> <span class="class">SkillBinding</span>(name=query, source=h.kind, ref=h.id)
+    <span class="comment"># 未命中：用 prompt 现场构造能力</span>
+    cap = llm_generate_capability_prompt(query)
+    <span class="keyword">return</span> <span class="class">SkillBinding</span>(name=query, source=<span class="string">"prompt"</span>, prompt_fallback=cap)</pre>
+
+        <h3>3.4 团队实例化（映射到 SDK）</h3>
+        <p>每个角色编译为一个 <code>AgentDefinition</code>；技能绑定转换为该角色的 <code>allowed_tools</code>（命中 skill/plugin）与 <code>prompt</code> 增量（prompt 兜底）。</p>
+
+<pre><span class="keyword">from</span> claude_agent_sdk <span class="keyword">import</span> <span class="class">AgentDefinition</span>, <span class="class">ClaudeAgentOptions</span>
+
+<span class="keyword">def</span> <span class="function">compile_role</span>(role: <span class="class">RoleSpec</span>) -&gt; <span class="class">AgentDefinition</span>:
+    base = <span class="string">f"你是{role.name}。{role.description}\n产出契约：\n{role.output_contract}"</span>
+    fallbacks = [s.prompt_fallback <span class="keyword">for</span> s <span class="keyword">in</span> role.skills <span class="keyword">if</span> s.source == <span class="string">"prompt"</span>]
+    prompt = base + (<span class="string">"\n\n额外能力：\n"</span> + <span class="string">"\n"</span>.join(fallbacks) <span class="keyword">if</span> fallbacks <span class="keyword">else</span> <span class="string">""</span>)
+    tools = [s.ref <span class="keyword">for</span> s <span class="keyword">in</span> role.skills <span class="keyword">if</span> s.source <span class="keyword">in</span> (<span class="string">"skill"</span>, <span class="string">"plugin"</span>, <span class="string">"command"</span>)]
+    <span class="keyword">return</span> <span class="class">AgentDefinition</span>(
+        description=role.description,
+        prompt=prompt,
+        tools=tools <span class="keyword">or</span> <span class="class">None</span>,
+        model=<span class="string">"opus"</span> <span class="keyword">if</span> role.is_leader <span class="keyword">else</span> <span class="string">"sonnet"</span>,
+    )</pre>
+
+        <div class="decision">
+            <strong>💡 说明：</strong>命中的 skill/plugin 通过平台 MCP server 暴露为工具，<code>tools</code> 引用其工具名；<code>setting_sources=["user","project"]</code> 使 SDK 加载已安装的技能与插件。
+        </div>
+    </section>
+
+    <!-- 4. Leader 任务分解与分配 -->
+    <section id="sec4" class="section">
+        <div class="section-header">
+            <span class="section-number">4</span>
+            <h2 class="section-title">Leader 任务分解与分配（需求 2）</h2>
+        </div>
+
+        <h3>4.1 任务数据模型</h3>
+<pre><span class="keyword">from</span> enum <span class="keyword">import</span> <span class="class">Enum</span>
+
+<span class="keyword">class</span> <span class="class">TaskStatus</span>(str, <span class="class">Enum</span>):
+    TODO = <span class="string">"todo"</span>; ASSIGNED = <span class="string">"assigned"</span>; RUNNING = <span class="string">"running"</span>
+    DONE = <span class="string">"done"</span>; REWORK = <span class="string">"rework"</span>; BLOCKED = <span class="string">"blocked"</span>; CANCELLED = <span class="string">"cancelled"</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">Task</span>:
+    task_id: str
+    title: str
+    detail: str
+    assignee_role: str            <span class="comment"># 负责的角色 role_id</span>
+    depends_on: <span class="class">list</span>[str] = field(default_factory=<span class="class">list</span>)
+    status: <span class="class">TaskStatus</span> = <span class="class">TaskStatus</span>.TODO
+    mode: str = <span class="string">"serial"</span>          <span class="comment"># serial | parallel | discussion</span>
+    result_ref: str | <span class="class">None</span> = <span class="class">None</span> <span class="comment"># 产物 Artifact 引用</span>
+    attempt: <span class="class">int</span> = <span class="number">0</span></pre>
+
+        <p>TaskStore 是任务列表的<strong>唯一权威</strong>，提供 <code>create/read/update/delete/list</code>、依赖图维护、状态机校验（非法流转拒绝），并对每次变更写 AuditLog。</p>
+
+        <h3>4.2 Leader 的工具集（编排指令）</h3>
+        <p>Leader 不直接改状态，而是调用一组自定义工具，由 Orchestrator 落地。用 SDK 的 <code>@tool</code> + <code>create_sdk_mcp_server</code> 暴露：</p>
+
+<pre><span class="keyword">from</span> claude_agent_sdk <span class="keyword">import</span> tool, create_sdk_mcp_server
+
+<span class="decorator">@tool</span>(<span class="string">"create_tasks"</span>, <span class="string">"创建任务列表"</span>, {<span class="string">"tasks"</span>: <span class="class">list</span>})
+<span class="keyword">async def</span> <span class="function">create_tasks</span>(args):
+    ids = task_store.bulk_create(args[<span class="string">"tasks"</span>])  <span class="comment"># 校验依赖 + 写状态</span>
+    <span class="keyword">return</span> {<span class="string">"content"</span>: [{<span class="string">"type"</span>: <span class="string">"text"</span>, <span class="string">"text"</span>: <span class="string">f"created: {ids}"</span>}]}
+
+<span class="decorator">@tool</span>(<span class="string">"assign_task"</span>, <span class="string">"把任务分配给某角色并指定执行模式"</span>,
+      {<span class="string">"task_id"</span>: str, <span class="string">"role_id"</span>: str, <span class="string">"mode"</span>: str})
+<span class="keyword">async def</span> <span class="function">assign_task</span>(args):
+    task_store.assign(args[<span class="string">"task_id"</span>], args[<span class="string">"role_id"</span>], args[<span class="string">"mode"</span>])
+    <span class="keyword">return</span> {<span class="string">"content"</span>: [{<span class="string">"type"</span>: <span class="string">"text"</span>, <span class="string">"text"</span>: <span class="string">"assigned"</span>}]}
+
+<span class="decorator">@tool</span>(<span class="string">"dispatch"</span>, <span class="string">"下发已分配任务给 Worker 执行"</span>, {<span class="string">"task_id"</span>: str})
+<span class="keyword">async def</span> <span class="function">dispatch</span>(args):
+    <span class="keyword">await</span> orchestrator.dispatch(args[<span class="string">"task_id"</span>])
+    <span class="keyword">return</span> {<span class="string">"content"</span>: [{<span class="string">"type"</span>: <span class="string">"text"</span>, <span class="string">"text"</span>: <span class="string">"dispatched"</span>}]}
+
+leader_tools = create_sdk_mcp_server(
+    <span class="string">"leader_ctrl"</span>, <span class="string">"1.0"</span>,
+    [create_tasks, assign_task, dispatch],
+)</pre>
+
+        <h3>4.3 Leader 运行时（持久会话）</h3>
+        <p>Leader 用 <code>ClaudeSDKClient</code> 持久会话承载，便于后续接收用户插话与中断。</p>
+
+<pre><span class="keyword">from</span> claude_agent_sdk <span class="keyword">import</span> <span class="class">ClaudeSDKClient</span>, <span class="class">ClaudeAgentOptions</span>
+
+leader_opts = <span class="class">ClaudeAgentOptions</span>(
+    model=<span class="string">"opus"</span>,
+    system_prompt=<span class="string">"你是团队 Leader，具备 planning 能力。"
+                  "负责把团队问题分解为带依赖的任务列表，分配给合适角色，"
+                  "选择执行模式(serial/parallel/discussion)，"
+                  "并在所有任务完成后汇总为最终交付物。"
+                  "你只能通过 leader_ctrl 工具改动任务，不要臆造状态。"</span>,
+    mcp_servers={<span class="string">"leader_ctrl"</span>: leader_tools},
+    allowed_tools=[<span class="string">"mcp__leader_ctrl__create_tasks"</span>,
+                   <span class="string">"mcp__leader_ctrl__assign_task"</span>,
+                   <span class="string">"mcp__leader_ctrl__dispatch"</span>],
+    setting_sources=[<span class="string">"user"</span>, <span class="string">"project"</span>],
+)
+
+<span class="keyword">async def</span> <span class="function">run_leader</span>(problem: str):
+    <span class="keyword">async with</span> <span class="class">ClaudeSDKClient</span>(options=leader_opts) <span class="keyword">as</span> leader:
+        <span class="keyword">await</span> leader.query(<span class="string">f"团队问题：{problem}\n请分解、分配并开始调度。"</span>)
+        <span class="keyword">async for</span> msg <span class="keyword">in</span> leader.receive_response():
+            <span class="keyword">await</span> timeline.push(msg)     <span class="comment"># 流式推送到协作时间线</span></pre>
+
+        <h3>4.4 调度模式</h3>
+        <p>Orchestrator 的 <code>dispatch</code> 根据任务 <code>mode</code> 与依赖图调度：</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>模式</th>
+                        <th>触发条件</th>
+                        <th>执行</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-info">serial</span></td>
+                        <td>任务有未完成的 <code>depends_on</code></td>
+                        <td>依赖全 <code>done</code> 后才进入 ready，逐个执行</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">parallel</span></td>
+                        <td>多个 ready 任务且无相互依赖</td>
+                        <td><code>asyncio.gather</code> 并发执行，受团队并发上限约束</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">discussion</span></td>
+                        <td>任务标 <code>discussion</code></td>
+                        <td>Leader 串行征询相关角色意见，汇总后产出（见 §6.2）</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4>调度主循环（确定性）</h4>
+<pre><span class="keyword">async def</span> <span class="function">scheduler_loop</span>(team):
+    <span class="keyword">while not</span> task_store.all_terminal():
+        ready = task_store.ready_tasks()          <span class="comment"># 依赖满足 & status=assigned</span>
+        parallel = [t <span class="keyword">for</span> t <span class="keyword">in</span> ready <span class="keyword">if</span> t.mode == <span class="string">"parallel"</span>]
+        serial   = [t <span class="keyword">for</span> t <span class="keyword">in</span> ready <span class="keyword">if</span> t.mode == <span class="string">"serial"</span>]
+        <span class="keyword">if</span> parallel:
+            <span class="keyword">await</span> asyncio.gather(*(run_worker(team, t) <span class="keyword">for</span> t <span class="keyword">in</span> parallel[:team.max_parallel]))
+        <span class="keyword">elif</span> serial:
+            <span class="keyword">await</span> run_worker(team, serial[<span class="number">0</span>])
+        <span class="keyword">else</span>:
+            <span class="keyword">await</span> asyncio.sleep(<span class="number">0.2</span>)              <span class="comment"># 等待干预或讨论解阻塞</span>
+    <span class="keyword">await</span> leader_summarize(team)                  <span class="comment"># 汇总</span></pre>
+    </section>
+
+    <!-- 5. Worker 执行 -->
+    <section id="sec5" class="section">
+        <div class="section-header">
+            <span class="section-number">5</span>
+            <h2 class="section-title">Worker 执行（混合机制）</h2>
+        </div>
+
+        <h3>5.1 两种 Worker，按需选择</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>机制</th>
+                        <th>SDK 原语</th>
+                        <th>适用</th>
+                        <th>优势</th>
+                        <th>代价</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">一次性 Worker</span></td>
+                        <td><code>query()</code></td>
+                        <td>无需中断/迭代的独立子任务</td>
+                        <td>token 省、无状态、易并发</td>
+                        <td>不可中途中断</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">持久会话 Worker</span></td>
+                        <td><code>ClaudeSDKClient</code></td>
+                        <td>需中断/多轮迭代/参与讨论</td>
+                        <td>可 <code>interrupt()</code>、可追问</td>
+                        <td>占用会话、成本高</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="highlight">
+            <strong>🧠 选择规则：</strong>任务 <code>mode == "discussion"</code> 或角色被标记为"可能被干预"→ 持久会话；其余默认一次性。
+        </div>
+
+        <h3>5.2 一次性 Worker</h3>
+<pre><span class="keyword">from</span> claude_agent_sdk <span class="keyword">import</span> query, <span class="class">ClaudeAgentOptions</span>
+
+<span class="keyword">async def</span> <span class="function">run_worker_oneshot</span>(team, task):
+    role = team.role(task.assignee_role)
+    opts = <span class="class">ClaudeAgentOptions</span>(
+        model=role.model,
+        system_prompt=role.system_prompt,
+        agents={r.role_id: compile_role(r) <span class="keyword">for</span> r <span class="keyword">in</span> team.roles},
+        setting_sources=[<span class="string">"user"</span>, <span class="string">"project"</span>],
+    )
+    task_store.set_status(task.task_id, <span class="class">TaskStatus</span>.RUNNING)
+    out = []
+    <span class="keyword">async for</span> msg <span class="keyword">in</span> query(prompt=build_task_prompt(task), options=opts):
+        out.append(msg); <span class="keyword">await</span> timeline.push(msg)
+    ref = artifact_store.save(task.task_id, out)
+    <span class="comment"># 结果经 MessageBus 回报 Leader（中转），不直接写他人状态</span>
+    <span class="keyword">await</span> bus.report_to_leader(task.task_id, ref)
+    task_store.set_result(task.task_id, ref, <span class="class">TaskStatus</span>.DONE)</pre>
+
+        <h3>5.3 持久会话 Worker</h3>
+        <p>持久 Worker 注册到 <code>AgentPool</code>，保留 <code>ClaudeSDKClient</code> 句柄，使 Orchestrator 能对其 <code>interrupt()</code>。</p>
+
+<pre><span class="keyword">class</span> <span class="class">PersistentWorker</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, team, role):
+        self.role = role
+        self.client = <span class="class">ClaudeSDKClient</span>(options=<span class="class">ClaudeAgentOptions</span>(
+            model=role.model, system_prompt=role.system_prompt,
+            setting_sources=[<span class="string">"user"</span>, <span class="string">"project"</span>]))
+        self._task = <span class="class">None</span>  <span class="comment"># 当前运行的 asyncio.Task</span>
+
+    <span class="keyword">async def</span> <span class="function">open</span>(self):  <span class="keyword">await</span> self.client.connect()
+
+    <span class="keyword">async def</span> <span class="function">run</span>(self, task):
+        task_store.set_status(task.task_id, <span class="class">TaskStatus</span>.RUNNING)
+        <span class="keyword">await</span> self.client.query(build_task_prompt(task))
+        out = []
+        <span class="keyword">async for</span> msg <span class="keyword">in</span> self.client.receive_response():
+            out.append(msg); <span class="keyword">await</span> timeline.push(msg)
+        ref = artifact_store.save(task.task_id, out)
+        <span class="keyword">await</span> bus.report_to_leader(task.task_id, ref)
+        task_store.set_result(task.task_id, ref, <span class="class">TaskStatus</span>.DONE)
+
+    <span class="keyword">async def</span> <span class="function">interrupt</span>(self):
+        <span class="keyword">await</span> self.client.interrupt()   <span class="comment"># 打断正在进行的生成</span></pre>
+
+        <p><code>AgentPool</code> 负责创建、复用、关闭（<code>async with</code> 或显式 <code>disconnect</code>）持久 Worker，并维护 <code>role_id → PersistentWorker</code> 映射。</p>
+    </section>
+
+    <!-- 6. Leader 中心化协调 -->
+    <section id="sec6" class="section">
+        <div class="section-header">
+            <span class="section-number">6</span>
+            <h2 class="section-title">Leader 中心化协调（需求 4）</h2>
+        </div>
+
+        <h3>6.1 星形拓扑与 MessageBus</h3>
+        <p>Worker 之间<strong>没有</strong>直接通道。所有消息经 <code>MessageBus</code> 单跳中转，且全量落 AuditLog。</p>
+
+        <div class="topology">
+            <div class="topology-worker" style="top: 20px; left: 50%; transform: translateX(-50%);">Worker A</div>
+            <div class="topology-worker" style="top: 50%; right: 20px; transform: translateY(-50%);">Worker B</div>
+            <div class="topology-worker" style="bottom: 20px; left: 50%; transform: translateX(-50%);">Worker C</div>
+            <div class="topology-worker" style="top: 50%; left: 20px; transform: translateY(-50%);">Worker D</div>
+            <svg style="position:absolute;width:100%;height:100%;top:0;left:0;pointer-events:none;" viewBox="0 0 600 320" preserveAspectRatio="none">
+                <line x1="300" y1="160" x2="300" y2="60" stroke="#6366f1" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="160" x2="540" y2="160" stroke="#6366f1" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="160" x2="300" y2="260" stroke="#6366f1" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="160" x2="60" y2="160" stroke="#6366f1" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+            </svg>
+            <div class="topology-leader">⭐ Leader</div>
+        </div>
+
+        <h4>消息结构</h4>
+<pre><span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">Message</span>:
+    msg_id: str
+    sender: str        <span class="comment"># role_id 或 "leader" / "user"</span>
+    recipient: str     <span class="comment"># 总是 "leader" 或由 leader 指定的 role_id</span>
+    kind: str          <span class="comment"># report | instruction | discussion | intervention</span>
+    payload: dict
+    ts: <span class="class">float</span></pre>
+
+        <div class="decision">
+            <strong>🔒 强制约束：</strong><code>MessageBus</code> 强制 — 当 <code>sender</code> 为 Worker 时，<code>recipient</code> 只能是 <code>"leader"</code>；Worker→Worker 直发被拒绝。Leader 是唯一可把消息转发给具体 Worker 的角色。
+        </div>
+
+        <h3>6.2 讨论模式（经 Leader 中转）</h3>
+        <p>首版的"讨论"不是 Worker 间自由协商，而是 <strong>Leader 主持的串行征询</strong>：</p>
+
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content"><strong>讨论任务</strong>Leader 拟定讨论提纲与参与角色</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content"><strong>串行征询</strong>for role in participants：Leader → role 抛出问题 → role → Leader 返回意见</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content"><strong>汇总</strong>Leader 汇总各方意见 → 形成结论/决策</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content"><strong>产物</strong>把结论作为该讨论任务的产物</div>
+            </div>
+        </div>
+
+        <div class="highlight">
+            <strong>💡 设计哲学：</strong>这样既满足"多角色协作 + 交叉验证"，又保证全程可观测、可审计，避免自由协商的失控。<strong>后续版本</strong>可在稳定后引入受控的多轮协商。
+        </div>
+
+        <h3>6.3 为什么不用 SDK 子代理的隐式委派</h3>
+        <p>SDK 的 <code>agents=</code> 机制会让主 Agent 自行决定调用哪个子代理，委派路径对编排层不透明。MATS 需要<strong>显式控制</strong>分配与中转，因此采用"Leader 产出指令 → Orchestrator 执行 → MessageBus 中转"的显式路径，子代理机制仅用于<strong>封装角色能力</strong>（system prompt + 工具），不用于隐式编排。</p>
+    </section>
+
+    <!-- 7. 运行中人工干预 -->
+    <section id="sec7" class="section">
+        <div class="section-header">
+            <span class="section-number">7</span>
+            <h2 class="section-title">运行中人工干预（需求 3）</h2>
+        </div>
+
+        <h3>7.1 干预流水线</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content"><strong>用户插话</strong>新要求/约束/纠偏</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content"><strong>注入 Leader</strong>作为 user 消息进 MessageBus → 注入 Leader 会话</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content"><strong>评估影响</strong>Leader 评估影响 → 产出干预指令（JSON）</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content"><strong>执行指令</strong>Orchestrator 校验并执行（确定性）</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-content"><strong>说明 + 继续</strong>Leader 向用户说明调整方案 + scheduler_loop 按新状态继续</div>
+            </div>
+        </div>
+
+        <h4>Leader 可产出的干预指令类型</h4>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">⏸️</div>
+                <div class="card-title">interrupt_agent(role_id)</div>
+                <div class="card-desc">是否中断正在跑的 Agent</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📝</div>
+                <div class="card-title">update_task / add_task / delete_task</div>
+                <div class="card-desc">任务 CRUD 操作</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🔁</div>
+                <div class="card-title">rework_task(task_id, role_id)</div>
+                <div class="card-desc">令某 Agent 重做某任务</div>
+            </div>
+        </div>
+
+        <h3>7.2 中断正在执行的 Agent</h3>
+        <p>只有持久会话 Worker 可被中断。一次性 Worker 通过取消其 <code>asyncio.Task</code> 实现"软中断"（丢弃结果、标记为 cancelled）。</p>
+
+<pre><span class="keyword">async def</span> <span class="function">apply_intervention</span>(team, directive: dict):
+    <span class="comment"># 1) 中断</span>
+    <span class="keyword">for</span> rid <span class="keyword">in</span> directive.get(<span class="string">"interrupt"</span>, []):
+        w = pool.get(rid)
+        <span class="keyword">if</span> isinstance(w, <span class="class">PersistentWorker</span>):
+            <span class="keyword">await</span> w.interrupt()
+        <span class="keyword">else</span>:
+            pool.cancel_oneshot(rid)             <span class="comment"># 取消 asyncio.Task</span>
+        task_store.mark_interrupted(rid)
+
+    <span class="comment"># 2) 任务 CRUD（确定性校验：依赖、环检测、状态合法性）</span>
+    <span class="keyword">for</span> op <span class="keyword">in</span> directive.get(<span class="string">"task_ops"</span>, []):
+        task_store.apply_op(op)                  <span class="comment"># add/update/delete</span>
+
+    <span class="comment"># 3) 重做：重置 attempt 与状态，重新进 ready</span>
+    <span class="keyword">for</span> r <span class="keyword">in</span> directive.get(<span class="string">"rework"</span>, []):
+        task_store.requeue(r[<span class="string">"task_id"</span>], r[<span class="string">"role_id"</span>])
+
+    audit.log(<span class="string">"intervention"</span>, directive)</pre>
+
+        <h3>7.3 干预的并发安全</h3>
+        <div class="highlight">
+            <strong>🔐 关键约束：</strong>干预与调度可能并发改任务，需用 <strong>TaskStore 级别的锁 / 单写者队列</strong>保证一致性：所有状态写入串行化到一个事件循环任务里，Leader 指令与 scheduler 的状态变更都经同一队列，避免竞争。
+        </div>
+    </section>
+
+    <!-- 8. 任务状态机 -->
+    <section id="sec8" class="section">
+        <div class="section-header">
+            <span class="section-number">8</span>
+            <h2 class="section-title">任务状态机</h2>
+        </div>
+
+        <p>Task 状态流转（编排层校验，非法流转拒绝）：</p>
+
+        <div class="state-machine">
+            <span class="state state-todo">todo</span>
+            <span class="state-arrow">→</span>
+            <span class="state state-assigned">assigned</span>
+            <span class="state-arrow">→</span>
+            <span class="state state-running">running</span>
+            <span class="state-arrow">→</span>
+            <span class="state state-done">done</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>状态流转</th>
+                        <th>触发条件</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="state state-todo">todo</span> → <span class="state state-assigned">assigned</span></td>
+                        <td>Leader 分配角色后</td>
+                    </tr>
+                    <tr>
+                        <td><span class="state state-assigned">assigned</span> → <span class="state state-running">running</span></td>
+                        <td>依赖满足并被 dispatch</td>
+                    </tr>
+                    <tr>
+                        <td><span class="state state-running">running</span> → <span class="state state-done">done</span></td>
+                        <td>Worker 产出且回报 Leader</td>
+                    </tr>
+                    <tr>
+                        <td><span class="state state-running">running</span> → <span class="state state-rework">rework</span></td>
+                        <td>Leader 校验不通过或用户要求重做 → 重置后回 <code>assigned</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="state state-running">running</span> → <span class="state state-cancelled">cancelled</span></td>
+                        <td>被干预中断且不重做</td>
+                    </tr>
+                    <tr>
+                        <td><code>*</code> → <span class="state state-blocked">blocked</span></td>
+                        <td>依赖失败或缺输入，等待干预解阻塞</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 9. 端到端示例 -->
+    <section id="sec9" class="section">
+        <div class="section-header">
+            <span class="section-number">9</span>
+            <h2 class="section-title">端到端示例：电网 AI 售前方案团队</h2>
+        </div>
+
+        <h3>流程全景</h3>
+
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content">
+                    <strong>🧩 组队</strong>用户输入"组一支做电网 AI 售前方案的团队"。TeamBuilder 反问 3 题（交付物形式 / 客户细分 / 是否要竞品分析），产出蓝图：<code>需求分析师</code>、<code>方案撰写</code>、<code>竞品调研</code>、<code>评审</code>（+ Leader）。SkillRegistry 命中 <code>presales-req-analysis</code>、<code>competitor-analysis</code> 直接绑定，"评审"用 prompt 兜底。用户确认。
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content">
+                    <strong>📋 分解</strong>用户给问题"基于这份招标文件输出应答方案"。Leader 调 <code>create_tasks</code> 生成：T1 解析招标（需求分析师）→ T2 提取评分项（需求分析师）→ [T3 撰写技术章节（方案撰写）∥ T4 竞品对比（竞品调研）] → T5 汇总评审（评审）。
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content">
+                    <strong>⚡ 执行</strong>T1/T2 serial；T3/T4 parallel 并发；Worker 产出经 bus 回报 Leader。
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content">
+                    <strong>✋ 干预</strong>T3 进行中用户插话"竞品要重点对比 XX 厂商"。Leader 产出干预指令：interrupt 竞品调研、给 T4 update 约束、T3 标记 rework。Orchestrator 执行并向用户说明影响（T3 将重做，T1/T2 不受影响）。
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-content">
+                    <strong>📦 汇总</strong>全部 done 后 Leader 串联各产物，输出一版完整应答方案。团队可保存为模板。
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 10. 技术栈与持久化 -->
+    <section id="sec10" class="section">
+        <div class="section-header">
+            <span class="section-number">10</span>
+            <h2 class="section-title">技术栈与持久化</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>层</th>
+                        <th>选型</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">Agent 运行</span></td>
+                        <td><code>claude-agent-sdk</code>（Python）</td>
+                        <td><code>query()</code> 一次性 / <code>ClaudeSDKClient</code> 持久</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">编排服务</span></td>
+                        <td>FastAPI + asyncio</td>
+                        <td>单进程事件循环承载 Orchestrator</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">实时通道</span></td>
+                        <td>WebSocket</td>
+                        <td>把 timeline/状态流式推前端</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">状态库</span></td>
+                        <td>Postgres</td>
+                        <td>teams / roles / tasks / messages / audit_events</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">Artifact</span></td>
+                        <td>对象存储（MinIO/S3）</td>
+                        <td>Worker 产物，按 task_id 归档</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-danger">技能索引</span></td>
+                        <td>向量库（pgvector/Chroma）</td>
+                        <td>skills/plugins 的 embedding 匹配</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">技能/插件来源</span></td>
+                        <td><code>setting_sources=["user","project"]</code></td>
+                        <td>复用 <code>~/.claude/skills</code>、已安装 plugins</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>状态权威与崩溃恢复</h3>
+        <div class="highlight">
+            <strong>📌 状态权威：</strong>TaskStore 在内存维护运行态，每次变更同步 append 到 Postgres <code>audit_events</code>，并更新 <code>tasks</code> 快照表，<strong>支持崩溃恢复</strong>（重放事件 + 快照）。
+        </div>
+
+        <h3>模型分层</h3>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">🧠</div>
+                <div class="card-title">Leader = Opus</div>
+                <div class="card-desc">强 planning 能力，负责任务分解与决策</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">⚙️</div>
+                <div class="card-title">Worker 默认 Sonnet</div>
+                <div class="card-desc">执行具体任务的默认模型</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">⚡</div>
+                <div class="card-title">轻量任务 Haiku</div>
+                <div class="card-desc">抽取/格式化类任务可降级以省成本</div>
+            </div>
+        </div>
+        <p style="text-align:center;color:var(--text-light);font-size:13px;margin-top:8px">每角色可在蓝图覆盖</p>
+    </section>
+
+    <!-- 11. MVP 范围与实施阶段 -->
+    <section id="sec11" class="section">
+        <div class="section-header">
+            <span class="section-number">11</span>
+            <h2 class="section-title">MVP 范围与实施阶段</h2>
+        </div>
+
+        <h3>11.1 MVP 必含</h3>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">1</div>
+                <div class="card-title">TeamBuilder</div>
+                <div class="card-desc">目标→澄清（固定3–5题）→蓝图→技能匹配→实例化</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">2</div>
+                <div class="card-title">SkillRegistry</div>
+                <div class="card-desc">skills/plugins 索引 + 语义匹配 + prompt 兜底</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">3</div>
+                <div class="card-title">Leader 持久会话</div>
+                <div class="card-desc"><code>create_tasks/assign_task/dispatch</code> 工具</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">4</div>
+                <div class="card-title">TaskStore</div>
+                <div class="card-desc">CRUD + 依赖图 + 状态机 + 审计</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">5</div>
+                <div class="card-title">Worker 混合机制</div>
+                <div class="card-desc">一次性 <code>query()</code> + 持久 <code>ClaudeSDKClient</code></div>
+            </div>
+            <div class="card">
+                <div class="card-icon">6</div>
+                <div class="card-title">调度</div>
+                <div class="card-desc">serial / parallel</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">7</div>
+                <div class="card-title">MessageBus</div>
+                <div class="card-desc">星形中转 + 全量留痕</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">8</div>
+                <div class="card-title">干预</div>
+                <div class="card-desc">interrupt + 任务 CRUD + rework + 影响说明</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">9</div>
+                <div class="card-title">WebSocket</div>
+                <div class="card-desc">推送任务看板与协作时间线</div>
+            </div>
+        </div>
+
+        <h3>11.2 MVP 暂不含</h3>
+        <ul>
+            <li><span class="tag tag-danger">×</span> 复杂多轮自由协商（讨论模式首版仅 Leader 串行征询）</li>
+            <li><span class="tag tag-danger">×</span> 团队模板市场、跨团队共享</li>
+            <li><span class="tag tag-danger">×</span> 细粒度沙箱/网络/Secret 权限（对齐 DDMAO v2，后续引入）</li>
+            <li><span class="tag tag-danger">×</span> 预算上限自动暂停（先只统计，不强制）</li>
+        </ul>
+
+        <h3>11.3 并行实施 lanes</h3>
+        <p>通过并行 lanes 加速 MVP 落地：</p>
+        <div class="lanes">
+            <div class="lane">
+                <span class="lane-id">Lane A</span>
+                <div class="lane-name">TaskStore + 状态机 + Postgres</div>
+                <div class="lane-desc">无依赖</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane B</span>
+                <div class="lane-name">SkillRegistry 索引/匹配</div>
+                <div class="lane-desc">无依赖</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane C</span>
+                <div class="lane-name">SDK 封装</div>
+                <div class="lane-desc">一次性/持久 Worker、AgentPool</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane D</span>
+                <div class="lane-name">Orchestrator 调度 + MessageBus</div>
+                <div class="lane-desc">需 A+C 完成</div>
+                <span class="lane-deps">After A+C</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane E</span>
+                <div class="lane-name">TeamBuilder 组队流水线</div>
+                <div class="lane-desc">需 B 完成</div>
+                <span class="lane-deps">After B</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane F</span>
+                <div class="lane-name">干预与中断</div>
+                <div class="lane-desc">需 D 完成</div>
+                <span class="lane-deps">After D</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane G</span>
+                <div class="lane-name">前端 + E2E 串联</div>
+                <div class="lane-desc">WebSocket、看板、时间线</div>
+                <span class="lane-deps">最后</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- 12. 风险与应对 -->
+    <section id="sec12" class="section">
+        <div class="section-header">
+            <span class="section-number">12</span>
+            <h2 class="section-title">风险与应对</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:22%">风险</th>
+                        <th style="width:25%">表现</th>
+                        <th>应对</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-danger">SDK 不达预期</span></td>
+                        <td>持久会话/中断能力 <code>interrupt()</code> 行为不稳定</td>
+                        <td>最小原型先验证；不达标则全用一次性 Worker + 软取消</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">Leader 幻觉</span></td>
+                        <td>产出非法任务图：环依赖、引用不存在角色</td>
+                        <td>TaskStore 确定性校验，拒绝并要求 Leader 重提</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">技能匹配召回差</span></td>
+                        <td>命中率低、错绑</td>
+                        <td>阈值 + 人工确认环节；持续补 skill 元数据</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">Leader 中心化瓶颈</span></td>
+                        <td>大团队延迟高</td>
+                        <td>团队规模 ≤6；Leader 只做编排不做重活</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">Token 成本</span></td>
+                        <td>并行多 Worker 翻倍</td>
+                        <td>按需唤醒、Worker 降级模型、一次性优先</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-danger">并发竞争</span></td>
+                        <td>干预与调度状态写冲突</td>
+                        <td>单写者队列串行化所有状态变更</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">上下文不继承</span></td>
+                        <td>Worker 缺背景</td>
+                        <td>Context Builder 注入最小必要上下文 + Artifact 引用</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 13. 测试策略 -->
+    <section id="sec13" class="section">
+        <div class="section-header">
+            <span class="section-number">13</span>
+            <h2 class="section-title">测试策略</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>模块</th>
+                        <th>必测</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">TaskStore</span></td>
+                        <td>CRUD、依赖图、环检测、非法状态流转拒绝</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">SkillRegistry</span></td>
+                        <td>命中绑定、未命中兜底、阈值边界</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">TeamBuilder</span></td>
+                        <td>澄清生成、蓝图结构、实例化 AgentDefinition 正确</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">Scheduler</span></td>
+                        <td>serial 依赖阻塞、parallel 并发上限、ready 选择</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">MessageBus</span></td>
+                        <td>Worker→Worker 直发被拒、中转留痕完整</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">干预</span></td>
+                        <td>持久 Worker interrupt、一次性软取消、rework 重排、并发安全</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">汇总</span></td>
+                        <td>多产物串联、缺产物时的阻塞与提示</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">E2E</span></td>
+                        <td>§9 全流程：组队→分解→并行执行→干预重做→汇总</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 14. 结论 -->
+    <section id="sec14" class="section">
+        <div class="section-header">
+            <span class="section-number">14</span>
+            <h2 class="section-title">结论</h2>
+        </div>
+
+        <div class="conclusion">
+            <h3>🎯 核心要点</h3>
+            <p>MATS 用"<strong>对话式动态组队 + Leader 中心化智能调度 + 人在环干预</strong>"覆盖四条核心需求，落点在 <strong>Claude Agent SDK（Python）</strong>：</p>
+            <ul style="margin: 16px 0; padding-left: 24px; color: rgba(255,255,255,0.95);">
+                <li>一次性 <code>query()</code> 与持久 <code>ClaudeSDKClient</code> 的<strong>混合机制</strong>兼顾成本与可控</li>
+                <li>自建的 <code>TaskStore</code> / <code>MessageBus</code> / <code>Orchestrator</code> 补齐 SDK 不原生支持的团队协作能力</li>
+                <li>坚持"<strong>LLM 提建议、编排层定状态</strong>"以保证可观测、可审计、可恢复</li>
+            </ul>
+            <p style="margin-top:16px"><strong>建议先按 §11 跑通 MVP 闭环</strong>，再逐步引入讨论协商、权限沙箱与预算控制，并在成熟后把团队导出为 DDMAO v2 <code>team.yaml</code> 资产。</p>
+        </div>
+    </section>
+
+    <footer style="text-align:center;padding:40px 0;color:var(--text-light);font-size:13px;">
+        <p>goktech-agents · 多智能体团队系统技术方案 v1.0 · 2026-05-31</p>
+    </footer>
+
+    </div><!-- /main-content -->
+</div><!-- /layout -->
+
+<script>
+    // Smooth scroll for navigation
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href').substring(1);
+            const target = document.getElementById(targetId);
+            if (target) {
+                const offset = 20;
+                const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+
+    // Highlight current section on scroll
+    const sections = document.querySelectorAll('.section');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    function updateActiveNav() {
+        let current = sections[0]?.getAttribute('id');
+        sections.forEach(section => {
+            const rect = section.getBoundingClientRect();
+            if (rect.top <= 150) {
+                current = section.getAttribute('id');
+            }
+        });
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + current) {
+                link.classList.add('active');
+            }
+        });
+    }
+
+    window.addEventListener('scroll', updateActiveNav);
+    updateActiveNav();
+</script>
+
+</body>
+</html>

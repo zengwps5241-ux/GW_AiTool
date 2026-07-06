@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+
+# TypeScript 增量构建缓存
+*.tsbuildinfo
+
+# 误生成的 vite.config 编译产物（源文件是 vite.config.ts）
+vite.config.js
+vite.config.d.ts

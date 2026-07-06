@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: docker.1ms.run/library/postgres:16.13
+    container_name: gokagent-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: gokagent
+    volumes:
+      - ./volumes/postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gokagent
+
+  redis:
+    image: docker.1ms.run/library/redis:7.4
+    container_name: gokagent-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./volumes/redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gokagent
+
+  backend:
+    image: ${GOKAGENT_IMAGE:-gokagent-backend:release}
+    container_name: gokagent-backend
+    restart: always
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    env_file:
+      - ${GOKAGENT_ENV_FILE:-./.env}
+    environment:
+      # 容器内访问 postgres 使用服务名而非 localhost
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/gokagent}
+      # 容器内访问 redis 使用服务名而非 localhost
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # 运行时数据目录映射到容器内路径
+      WORKSPACES_DIR: /app/user_workspaces
+      CLAUDE_DATA_DIR: /app/claude_data
+      AGENT_WORKDIRS_DIR: /app/agent_workspaces
+      FEEDBACK_UPLOADS_DIR: /app/feedback_uploads
+      WECHAT_WORK_LOGIN_MODE: ${WECHAT_WORK_LOGIN_MODE:-sso}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./volumes/user_workspaces:/app/user_workspaces
+      - ./volumes/claude_data:/app/claude_data
+      - ./volumes/agent_workspaces:/app/agent_workspaces
+      - ./volumes/feedback_uploads:/app/feedback_uploads
+      - ./volumes/logs:/app/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - gokagent
+    ipc: host
+
+networks:
+  gokagent:
+    driver: bridge

@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>goktech-agents 工具管理平台（Tools Platform）技术方案</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+        :root {
+            --primary: #1a365d;
+            --secondary: #2c5282;
+            --accent: #3182ce;
+            --light: #ebf8ff;
+            --border: #e2e8f0;
+            --text: #2d3748;
+            --text-light: #718096;
+            --bg: #ffffff;
+            --bg-alt: #f7fafc;
+            --success: #38a169;
+            --warning: #d69e2e;
+            --danger: #e53e3e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--text);
+            background: var(--bg);
+            font-size: 15px;
+        }
+        /* Layout */
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        /* Sidebar TOC */
+        .sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            background: linear-gradient(180deg, #1a365d 0%, #2c5282 100%);
+            color: white;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+        }
+        .sidebar-header {
+            padding: 24px 20px16px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            position: sticky;
+            top: 0;
+            background: inherit;
+        }
+        .sidebar-header h3 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+        .sidebar-header .doc-title {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        .sidebar nav {
+            padding: 16px 0;
+        }
+        .sidebar nav a {
+            display: block;
+            padding: 10px 20px;
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 13px;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar nav a:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+            border-left-color: var(--accent);
+        }
+        .sidebar nav a.active {
+            color: white;
+            background: rgba(255,255,255,0.15);
+            border-left-color: #fed7d7;
+            font-weight: 600;
+        }
+        .sidebar nav .section-title {
+            padding: 16px 20px 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.5;
+        }
+        .sidebar .nav-num {
+            display: inline-block;
+            background: rgba(255,255,255,0.15);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-right: 6px;
+            min-width: 20px;
+            text-align: center;
+        }
+        /* Main content */
+        .main {
+            flex: 1;
+            margin-left: 260px;
+            min-width: 0;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 48px;
+        }
+        /* Header */
+        .doc-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 48px 40px;
+            border-radius: 12px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(26,54,93,0.15);
+        }
+        .doc-header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        .doc-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .doc-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .doc-meta span::before {
+            content: "●";
+            font-size: 8px;
+        }
+        /* Section */
+        .doc-section {
+            margin-bottom: 48px;
+        }
+        .doc-section h2 {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--primary);
+            border-left: 4px solid var(--accent);
+            padding-left: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .doc-section h2::before {
+            content: attr(data-num);
+            background: var(--accent);
+            color: white;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        .doc-section h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--secondary);
+            margin: 32px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed var(--border);
+        }
+        .doc-section h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+            margin: 24px 0 12px;
+        }
+        /* Paragraph */
+        .doc-section p {
+            margin-bottom: 16px;
+            text-align: justify;
+        }
+        /* Table */
+        .table-wrapper {
+            overflow-x: auto;
+            margin: 24px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 14px;
+        }
+        thead {
+            background: var(--primary);
+            color: white;
+        }
+        th {
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        tbody tr:nth-child(even) {
+            background: var(--bg-alt);
+        }
+        tbody tr:hover {
+            background: var(--light);
+        }
+        /* Code Block */
+        pre {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px 24px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-size: 13px;
+            line-height: 1.6;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+        code {
+            font-family: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+        }
+        :not(pre) > code {
+            background: var(--light);
+            color: var(--danger);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        /* Mermaid */
+        .mermaid {
+            background: var(--bg-alt);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: center;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid var(--border);
+        }
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        /* 节点/边文字统一为深灰色，确保在浅色背景上清晰可读 */
+        .mermaid svg text,
+        .mermaid svg .nodeLabel,
+        .mermaid svg .edgeLabel,
+        .mermaid svg .edgeLabel text,
+        .mermaid svg .actor,
+        .mermaid svg .messageText,
+        .mermaid svg .loopText,
+        .mermaid svg .label,
+        .mermaid svg foreignObject div,
+        .mermaid svg foreignObject span,
+        .mermaid svg foreignObject p,
+        .mermaid svg foreignObject li {
+            fill: #4a5568 !important;
+            color: #4a5568 !important;
+            font-weight: 500;
+        }
+        .mermaid svg .edgeLabel {
+            background: #f7fafc;
+        }
+        .mermaid svg .edgeLabel rect,
+        .mermaid svg .edgeLabel foreignObject {
+            background: #f7fafc;
+        }
+        /* 子图(subgraph)背景统一 */
+        .mermaid svg .cluster rect {
+            fill: #ffffff !important;
+            stroke: #cbd5e0 !important;
+        }
+        .mermaid svg .cluster text,
+        .mermaid svg .cluster .nodeLabel {
+            fill: #2d3748 !important;
+            color: #2d3748 !important;
+            font-weight: 600 !important;
+        }
+        /* Sequence Diagram (时序图) 专用样式 */
+        .mermaid svg .actor {
+            fill: #e6f0fa !important;
+            stroke: #3182ce !important;
+        }
+        .mermaid svg text.actor,
+        .mermaid svg tspan.actor {
+            fill: #2d3748 !important;
+            color: #2d3748 !important;
+            font-weight: 600 !important;
+        }
+        .mermaid svg .actor-line {
+            stroke: #cbd5e0 !important;
+        }
+        .mermaid svg .messageLine0,
+        .mermaid svg .messageLine1 {
+            stroke: #4a5568 !important;
+        }
+        .mermaid svg .labelBox {
+            fill: #f7fafc !important;
+            stroke: #cbd5e0 !important;
+        }
+        .mermaid svg .labelText,
+        .mermaid svg .labelText tspan,
+        .mermaid svg .loopText {
+            fill: #4a5568 !important;
+            color: #4a5568 !important;
+        }
+        .mermaid svg .note {
+            fill: #fffbe6 !important;
+            stroke: #d69e2e !important;
+        }
+        .mermaid svg .noteText,
+        .mermaid svg .noteText tspan {
+            fill: #4a5568 !important;
+            color: #4a5568 !important;
+        }
+        /* Callout */
+        .callout {
+            background: linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%);
+            border-left: 4px solid var(--accent);
+            padding: 16px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+        }
+        .callout.warning {
+            background: linear-gradient(135deg, #faf5ff 0%, #fefce8 100%);
+            border-left-color: var(--warning);
+        }
+        .callout.danger {
+            background: linear-gradient(135deg, #fff5f5 0%, #fffaf0 100%);
+            border-left-color: var(--danger);
+        }
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-new { background: #c6f6d5; color: #22543d; }
+        .badge-must { background: #fed7d7; color: #742a2a; }
+        .badge-v2 { background: #bee3f8; color: #2a4365; }
+        /* Divider */
+        hr {
+            border: none;
+            border-top: 2px solid var(--border);
+            margin: 40px 0;
+        }
+        /* Architecture Card */
+        .arch-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 16px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .arch-card-title {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+        /* Flow Legend */
+        .flow-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin: 16px 0;
+            padding: 12px 16px;
+            background: var(--bg-alt);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .flow-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .flow-legend-item span {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        /* State indicator */
+        .state-active { background: var(--success); }
+        .state-degraded { background: var(--warning); }
+        .state-offline { background: var(--danger); }
+        .state-registered { background: var(--accent); }
+        /* Compact list */
+        ul, ol {
+            margin: 12px 0 12px 24px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 220px;
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main {
+                margin-left: 0;
+            }
+            .container { padding: 20px 16px; }
+            .doc-header { padding: 32px 20px; }
+            .doc-header h1 { font-size: 24px; }
+            .doc-meta { flex-direction: column; gap: 8px; }
+            th, td { padding: 10px 12px; }
+        }
+        /* Scroll offset for anchor links */
+        .doc-section {
+            scroll-margin-top: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar TOC -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>文档导航</h3>
+                <div class="doc-title">工具管理平台技术方案</div>
+            </div>
+            <nav>
+                <a href="#section-1" class="active"><span class="nav-num">1</span>概述</a>
+                <a href="#section-2"><span class="nav-num">2</span>总体架构</a>
+                <a href="#section-3"><span class="nav-num">3</span>连接器注册中心</a>
+                <a href="#section-4"><span class="nav-num">4</span>Serverless 代码沙箱</a>
+                <a href="#section-5"><span class="nav-num">5</span>工具调用网关</a>
+                <a href="#section-6"><span class="nav-num">6</span>授权与权限</a>
+                <a href="#section-7"><span class="nav-num">7</span>消费端契约</a>
+                <a href="#section-8"><span class="nav-num">8</span>连通性测试</a>
+                <a href="#section-9"><span class="nav-num">9</span>模型与参数</a>
+                <a href="#section-10"><span class="nav-num">10</span>技术栈与持久化</a>
+                <a href="#section-11"><span class="nav-num">11</span>相邻模块边界</a>
+                <a href="#section-12"><span class="nav-num">12</span>MVP 范围与阶段</a>
+                <a href="#section-13"><span class="nav-num">13</span>风险与应对</a>
+                <a href="#section-14"><span class="nav-num">14</span>测试策略</a>
+                <a href="#section-15"><span class="nav-num">15</span>结论</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="container">
+        <!-- Document Header -->
+        <header class="doc-header" id="section-top">
+            <h1>goktech-agents 工具管理平台（Tools Platform）技术方案</h1>
+            <div class="doc-meta">
+                <span>版本：v2.0</span>
+                <span>日期：2026-06-04</span>
+                <span>定位：售前/方案级技术方案</span>
+            </div>
+        </header>
+
+        <!-- 1. 概述 -->
+        <section class="doc-section" id="section-1">
+            <h2 data-num="1">概述</h2>
+            <p>工具管理平台是 goktech-agent 平台「工具」主线的承载模块，职责是<strong>统一注册、托管、授权、调用和治理 Agent 可调用的外部能力来源——即 MCP Server 与 HTTP API</strong>。它提供完整的"代码→部署→注册→授权→调用→治理"闭环，让 FDE 既能复用既有 MCP/API，也能通过上传代码包快速生成可托管的工具。</p>
+
+            <div class="mermaid">
+flowchart LR
+    subgraph SRC["能力来源 (Tools)"]
+        A1["MCP Server&lt;br/&gt;(外部)"]
+        A2["HTTP API&lt;br/&gt;(外部)"]
+        A3["用户上传&lt;br/&gt;Python 包"]
+        A4["用户上传&lt;br/&gt;Java 包"]
+    end
+    subgraph PLAT["工具管理平台"]
+        B1["ConnectorRegistry"]
+        B2["HTTPConnectorProvider"]
+        B3["CodeSandbox&lt;br/&gt;Runtime"]
+    end
+    subgraph AGT["Agent 运行时"]
+        C1["ClaudeAgentOptions&lt;br/&gt;.mcp_servers"]
+        C2["HTTP 工具声明&lt;br/&gt;+ allowed_tools"]
+        C3["Agent&lt;br/&gt;直接调用"]
+    end
+    A1 -- "注册" --&gt; B1
+    A2 -- "注册" --&gt; B2
+    A3 -- "上传" --&gt; B3
+    A4 -- "上传" --&gt; B3
+    B1 -- "ACL" --&gt; C1
+    B2 -- "ACL" --&gt; C2
+    B3 -- "自动转 MCP/HTTP" --&gt; C3
+    C3 -. "透传 user_id&lt;br/&gt;→ 后端功能/数据权限" .-&gt; C3
+           </div>
+
+            <h3>1.1 核心职责（对齐 PRD 7.2.4、7.3.1）</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>能力</th>
+                            <th>PRD 要求</th>
+                            <th>本版范围</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>外部连接器注册</td>
+                            <td>MCP Server / HTTP API / 内部系统 API 注册、连通性测试、鉴权配置</td>
+                            <td><span class="badge badge-must">必须支持</span>（本模块核心）</td>
+                        </tr>
+                        <tr>
+                            <td>Serverless 工具部署</td>
+                            <td>上传 Python/Java 代码 zip → sandbox/Docker → 暴露 MCP 或 HTTP API</td>
+                            <td><span class="badge badge-new">v2.0 新增</span><span class="badge badge-must">必含</span></td>
+                        </tr>
+                        <tr>
+                            <td>工具权限与降级</td>
+                            <td>工具级权限、降级路径、错误提示</td>
+                            <td><span class="badge badge-must">必须支持</span>，并扩展为基于 user_id 的细粒度管控</td>
+                        </tr>
+                        <tr>
+                            <td>用户身份贯通</td>
+                            <td>平台默认将 user_id 注入每次工具调用，透传到后端 MCP/API</td>
+                            <td><span class="badge badge-new">v2.0 新增</span><span class="badge badge-must">必含</span></td>
+                        </tr>
+                        <tr>
+                            <td>稳定性治理</td>
+                            <td>JSON buffer、临时文件清理、大文件上传</td>
+                            <td><span class="badge badge-must">必须支持</span>（在网关层统一拦截）</td>
+                        </tr>
+                        <tr>
+                            <td>调用统计</td>
+                            <td>次数、成功率、延迟、token 消耗</td>
+                            <td><span class="badge badge-must">必须支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>/command 搜索、技能分类、插件搜索</td>
+                            <td>KR4</td>
+                            <td><span class="badge badge-must">不在本模块</span>（由技能插件中心承载），Tools 仅暴露工具清单供其消费</td>
+                        </tr>
+                        <tr>
+                            <td>技能沉淀、插件安装</td>
+                            <td>7.2.4</td>
+                            <td><span class="badge badge-must">不在本模块</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>1.2 设计取舍（关键决策）</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>决策点</th>
+                            <th>选择</th>
+                            <th>理由</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Tools 范围边界</td>
+                            <td><strong>只含 MCP Server 与 HTTP API</strong></td>
+                            <td>Skills/Plugins/Commands 的注册、发现、编排由对应模块承载；Tools 专注"外部能力"全生命周期，避免职责重叠</td>
+                        </tr>
+                        <tr>
+                            <td>工具协议统一</td>
+                            <td><strong>MCP 为标准协议，HTTP API 走声明式映射</strong></td>
+                            <td>MCP 与 Claude Agent SDK <code>mcp_servers</code> 原生对接；HTTP API 走工具映射表（<code>HTTPToolMapping</code>）统一为工具</td>
+                        </tr>
+                        <tr>
+                            <td>部署形态</td>
+                            <td><strong>三类来源</strong>：①外部托管 MCP/API（直连）②用户上传代码 → Serverless 沙箱 ③平台内置内部系统 API</td>
+                            <td>满足"既能复用既有能力，也能 0→1 快速生成"的现场需求</td>
+                        </tr>
+                        <tr>
+                            <td>Serverless 运行时</td>
+                            <td><strong>sandbox + Docker 双形态</strong>，可动态扩容、主从重启</td>
+                            <td>Sandbox 适合轻量短任务（默认 ≤60s），Docker 适合长驻服务；二者统一通过 <code>CodeRuntime</code> 抽象</td>
+                        </tr>
+                        <tr>
+                            <td>容器化运行时</td>
+                            <td><strong>每个 tool 一个独立 sandbox/Docker 实例</strong>，主备至少 1+1</td>
+                            <td>故障隔离 + 平滑重启；性能不足时按 HPA 规则横向扩容实例数</td>
+                        </tr>
+                        <tr>
+                            <td>用户身份贯通</td>
+                            <td><strong>user_id 透传到 MCP/API 后端</strong></td>
+                            <td>平台在调用网关层统一注入（Header + Payload）；后端按 user_id 实施功能/数据权限</td>
+                        </tr>
+                        <tr>
+                            <td>授权模型</td>
+                            <td><strong>团队/角色/空间三维 ACL + user_id 细粒度过滤</strong></td>
+                            <td>既有三维 ACL 控制"是否可用"，user_id 透传控制"使用时可做什么、看哪些数据"</td>
+                        </tr>
+                        <tr>
+                            <td>降级策略</td>
+                            <td><strong>工具级降级声明 + 平台级 fallback</strong></td>
+                            <td>工具注册时声明降级路径（cache/alternative_tool/retry/error_message），调用失败时平台自动切换</td>
+                        </tr>
+                        <tr>
+                            <td>连通性测试</td>
+                            <td><strong>注册时强制 + 周期巡检 + 调用前快速探活</strong></td>
+                            <td>三级探活保证 Agent 不会因工具不可用而卡死</td>
+                        </tr>
+                        <tr>
+                            <td>稳定性治理</td>
+                            <td><strong>平台层统一拦截</strong></td>
+                            <td>JSON buffer 溢出、临时文件泄漏、大文件上传等问题在工具调用网关层统一治理</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 2. 总体架构 -->
+        <section class="doc-section" id="section-2">
+            <h2 data-num="2">总体架构</h2>
+
+            <h3>2.1 架构分层</h3>
+            <div class="mermaid">
+flowchart TB
+    subgraph UI["交互层:工具管理 Web UI"]
+        U1["工具接入管理(管理端)&lt;br/&gt;注册/配置/鉴权/测试/授权/用户权限预览"]
+        U2["Serverless 部署中心&lt;br/&gt;代码包上传/运行时/规格/扩容/调用日志"]
+        U3["工具权限面板&lt;br/&gt;工具级权限/降级路径/user_id 透传"]
+        U4["调用监控&lt;br/&gt;统计/调用链/失败与降级"]
+    end
+    subgraph SVC["服务层: Tools Platform Service (FastAPI)"]
+        S1["ConnectorRegistry&lt;br/&gt;元数据 CRUD/版本管理"]
+        S2["ConnectorManager&lt;br/&gt;注册→测试→上线→巡检→下线"]
+        S3["CodeSandbox Runtime&lt;br/&gt;上传→构建→启动→注册→扩容→重启→销毁"]
+        S4["AuthGateway&lt;br/&gt;ACL 鉴权 + user_id 注入"]
+        S5["ToolExecutor&lt;br/&gt;协议适配/超时/重试/降级/拦截/透传"]
+        S6["HealthChecker&lt;br/&gt;三级探活"]
+        S7["MetricsCollector&lt;br/&gt;统计/扩容/调用画像"]
+    end
+    subgraph RUN["运行层"]
+        R1["MCP Server 进程池&lt;br/&gt;(外部 + 沙箱内置)"]
+        R2["HTTP API 网关&lt;br/&gt;(外部 + 沙箱内置)"]
+        R3["Sandbox Worker 池&lt;br/&gt;(firecracker/gVisor)"]
+        R4["Docker Worker 池&lt;br/&gt;(长驻服务)"]
+        R5["HPA Controller&lt;br/&gt;CPU/QPS/并发"]
+    end
+    subgraph STO["存储层"]
+        D1["Postgres&lt;br/&gt;connectors/tools/acl/&lt;br/&gt;grants/sandbox/call_logs/metrics"]
+        D2["向量库(pgvector/Chroma)&lt;br/&gt;技能/插件 embedding"]
+        D3["对象存储(MinIO/S3)&lt;br/&gt;代码包/构建产物/大文件"]
+        D4["Redis&lt;br/&gt;调用缓存/降级/状态/ACL"]
+        D5["Container Registry&lt;br/&gt;沙箱/Docker 镜像"]
+    end
+    UI -- "REST/WebSocket" --&gt; SVC
+    SVC --&gt; RUN
+    SVC --&gt; STO
+    RUN --&gt; STO
+            </div>
+
+            <h3>2.2 组件职责</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>职责</th>
+                            <th>长任务</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>ConnectorRegistry</code></td>
+                            <td>MCP Server / HTTP API / 内部 API 元数据 CRUD、<br>版本管理；<strong>不</strong>承担 skills/plugins 的注册</td>
+                            <td>否</td>
+                        </tr>
+                        <tr>
+                            <td><code>ConnectorManager</code></td>
+                            <td>连接器生命周期：注册→连通性测试→上线→周期巡检→下线；<br>维护 <code>ConnectorProvider</code> 实例池</td>
+                            <td>是（测试/巡检异步）</td>
+                        </tr>
+                        <tr>
+                            <td><code>CodeSandbox Runtime</code></td>
+                            <td><span class="badge badge-new">v2.0 新增</span>：代码包上传→构建镜像→启动 sandbox/Docker→<br>自动注册为 MCP/HTTP 工具；横向扩缩容；主备重启</td>
+                            <td>是（构建、扩容异步）</td>
+                        </tr>
+                        <tr>
+                            <td><code>AuthGateway</code></td>
+                            <td>工具调用前 ACL 校验：用户所属团队/角色/空间 + <br>user_id 工具级显式授权 + user_id 透传封装</td>
+                            <td>否</td>
+                        </tr>
+                        <tr>
+                            <td><code>ToolExecutor</code></td>
+                            <td>统一调用网关：MCP 协议适配、HTTP 超时/重试、降级 fallback、<br>稳定性拦截、<strong>user_id 透传</strong></td>
+                            <td>否（同步调用）</td>
+                        </tr>
+                        <tr>
+                            <td><code>HealthChecker</code></td>
+                            <td>三级探活：注册时强制测试、周期巡检、调用前快速探活</td>
+                            <td>是（巡检异步）</td>
+                        </tr>
+                        <tr>
+                            <td><code>MetricsCollector</code></td>
+                            <td>工具调用次数、成功率、延迟、token 消耗、用户级调用画像</td>
+                            <td>否</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>2.3 数据流（端到端）</h3>
+            <div class="mermaid">
+flowchart TB
+    subgraph REG["外部连接器注册流程(管理端)"]
+        R1["1) 注册&lt;br/&gt;填写 ConnectorSpec"] --&gt; R2["2) 测试&lt;br/&gt;HealthChecker 连通性"]
+        R2 --&gt; R3["3) 上线&lt;br/&gt;持久化/ACL/索引"]
+        R3 --&gt; R4["4) 巡检&lt;br/&gt;周期巡检/异常告警"]
+    end
+    subgraph DEP["Serverless 工具部署流程(管理端)"]
+        D1["1) 上传&lt;br/&gt;zip + manifest.yaml"] --&gt; D2["2) 构建&lt;br/&gt;ImageBuilder"]
+        D2 --&gt; D3["3) 启动&lt;br/&gt;N 个 sandbox/Docker"]
+        D3 --&gt; D4["4) 注册&lt;br/&gt;kind=USER_CODE"]
+        D4 --&gt; D5["5) 扩容&lt;br/&gt;HPA Controller"]
+        D5 --&gt; D6["6) 重启&lt;br/&gt;主从心跳/告警"]
+    end
+    subgraph DIS["工具发现流程(消费端)"]
+        F1["1) Agent 启动&lt;br/&gt;按 user_id 过滤 ACL"] --&gt; F2["2) 编译工具集&lt;br/&gt;ClaudeAgentOptions"]
+        F2 --&gt; F3["3) 详情查看&lt;br/&gt;元数据/降级/权限"]
+    end
+    subgraph INV["工具调用流程(Agent 运行时)"]
+        I1["1) 绑定&lt;br/&gt;ACL 过滤"] --&gt; I2["2) 鉴权&lt;br/&gt;user_id 二次校验"]
+        I2 --&gt; I3["3) 注入&lt;br/&gt;user_id 多通道"]
+        I3 --&gt; I4["4) 调用&lt;br/&gt;协议适配执行"]
+        I4 --&gt; I5["5) 容错&lt;br/&gt;降级/统计"]
+    end
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 3. 连接器注册中心 -->
+        <section class="doc-section" id="section-3">
+            <h2 data-num="3">连接器注册中心</h2>
+            <p>对齐 KR13 + 7.1.1 工具接入管理</p>
+
+            <h3>3.1 统一连接器模型</h3>
+            <p>所有 Tools 范围的外部能力来源用统一的 <code>ConnectorSpec</code> 描述，按 <code>kind</code> 区分三类 Provider：</p>
+
+<pre><code>from dataclasses import dataclass, field
+from enum import Enum
+
+class ConnectorKind(str, Enum):
+    MCP_SERVER  = "mcp_server"    # 外部 MCP Server（stdio / Streamable HTTP）
+    HTTP_API    = "http_api"      # 外部 HTTP API（OpenAPI / 自定义）
+    USER_CODE   = "user_code"     # 用户上传代码 → sandbox/Docker 托管（MCP 或 HTTP）
+    INTERNAL    = "internal"      # 平台内部系统 API（数据/知识/文件）
+
+class ConnectorStatus(str, Enum):
+    REGISTERED = "registered"
+    ACTIVE     = "active"
+    DEGRADED   = "degraded"
+    OFFLINE    = "offline"
+
+class AuthConfig:
+    kind: str                     # none | api_key | bearer | oauth2 | basic | mTLS
+    credentials_ref: str = ""     # 凭证引用（加密存储，不存明文）
+    headers: dict = field(default_factory=dict)
+    oauth_config: dict | None = None
+
+class UserPermission:
+    """工具级用户授权：user_id 维度的显式授权，叠加在团队/角色 ACL 之上。"""
+    grant_user_ids: list[str] = field(default_factory=list)  # 显式授予用户
+    deny_user_ids: list[str]  = field(default_factory=list)  # 显式拒绝用户（优先级最高）
+    pass_user_id: bool = True          # 是否透传 user_id 到后端（默认 True）
+    pass_user_id_via: str = "header"   # header | metadata | payload | all
+
+class FallbackPolicy:
+    strategy: str                # cache | alternative_tool | retry | error_message
+    cache_ttl: int = 300
+    alternative_tool: str = ""
+    error_message: str = ""
+    max_retries: int = 2
+
+class ConnectorSpec:
+    connector_id: str
+    name: str
+    kind: ConnectorKind
+    description: str = ""
+    endpoint: str = ""            # MCP: stdio command / SSE URL; HTTP: base URL; UserCode: 内部路由
+    auth: AuthConfig = field(default_factory=lambda: AuthConfig(kind="none"))
+    tools: list[str] = field(default_factory=list)         # 该连接器暴露的工具名列表
+    health_check: dict = field(default_factory=dict)        # 探活配置
+    fallback: FallbackPolicy | None = None
+    user_permission: UserPermission = field(default_factory=UserPermission)
+    tags: list[str] = field(default_factory=list)
+    team_id: str = ""
+    space_id: str = ""
+    status: ConnectorStatus = ConnectorStatus.REGISTERED
+    version: str = "1.0"
+    created_at: str = ""
+    updated_at: str = ""</code></pre>
+
+            <div class="callout">
+                <strong>与 v1.0 的差异</strong>：<code>kind</code> 新增 <code>USER_CODE</code>（对应 §4 Serverless 部署）；<code>ConnectorSpec</code> 新增 <code>user_permission</code> 字段（user_id 显式授权 + 透传配置）。
+            </div>
+
+            <h3>3.2 ConnectorProvider 抽象</h3>
+            <p>四类连接器用统一接口抽象，按 Provider 实现差异化接入：</p>
+
+<pre><code>class ConnectorProvider(ABC):
+    @abstractmethod
+    async def connect(self, spec: ConnectorSpec) -> bool: ...
+    @abstractmethod
+    async def health_check(self, spec: ConnectorSpec) -> dict: ...
+    @abstractmethod
+    async def invoke(self, spec: ConnectorSpec, tool_name: str, args: dict,
+                     context: ToolInvokeContext) -> dict:
+        """调用连接器上的指定工具；context 内含 user_id 等身份信息。"""
+    @abstractmethod
+    async def list_tools(self, spec: ConnectorSpec) -> list[dict]: ...
+
+class MCPServerProvider(ConnectorProvider):
+    """外部 MCP Server 接入：stdio 和 Streamable HTTP。"""
+class HTTPAPIProvider(ConnectorProvider):
+    """外部 HTTP API 接入：RESTful 调用 + 鉴权头注入 + user_id 注入。"""
+class UserCodeProvider(ConnectorProvider):
+    """用户上传代码：经 CodeSandbox Runtime 暴露为 MCP/HTTP。"""
+class InternalProvider(ConnectorProvider):
+    """平台内部 API：数据/知识/文件等。"""
+
+@dataclass
+class ToolInvokeContext:
+    user_id: str
+    team_id: str
+    role: str
+    space_id: str
+    request_id: str
+    trace_id: str
+    extra: dict = field(default_factory=dict)</code></pre>
+
+            <div class="callout">
+                <code>invoke()</code> 多了一个 <code>context</code> 参数，Provider 实现时按需读取 <code>user_id</code> 注入到下游请求（HTTP Header / MCP metadata / JSON payload）。
+            </div>
+
+            <h3>3.3 HTTP API 注册详解</h3>
+            <p>HTTP API 接入需要将 REST 端点映射为工具声明：</p>
+
+<pre><code>@dataclass
+class HTTPToolMapping:
+    tool_name: str
+    method: str                  # GET | POST | PUT | DELETE
+    path_template: str           # 如 "/api/v1/search?q={query}"
+    param_mapping: dict          # 工具参数 → HTTP 参数映射
+    response_transform: str | None = None  # JSONPath / jq 表达式
+    pass_user_id: dict | None = None       # user_id 透传方式：{header: "X-User-Id"} / {query: "uid"}</code></pre>
+
+            <p>注册时管理员配置 endpoint + 鉴权 + 工具映射表 + user_id 透传位置，HealthChecker 按映射逐一测试可达性。</p>
+        </section>
+
+        <hr>
+
+        <!-- 4. Serverless 代码沙箱运行时 -->
+        <section class="doc-section" id="section-4">
+            <h2 data-num="4">Serverless 代码沙箱运行时</h2>
+            <span class="badge badge-v2">v2.0 新增</span> <span class="badge badge-new">PRD V0.1 增强</span>
+
+            <h3>4.1 目标与价值</h3>
+            <p>允许 FDE 或 AI CoE 把一段 Python/Java 代码打成 zip 上传，平台自动构建并跑在 sandbox 或 Docker 中，并把该代码按声明暴露为 MCP 工具或 HTTP API 工具，<strong>自动注册到连接器注册中心</strong>。性能不足时可横向扩容，主从 sandbox 支持重启，零运维即可为 Agent 提供"专属工具"。</p>
+
+            <h3>4.2 部署流程（端到端）</h3>
+            <div class="mermaid">
+sequenceDiagram
+    participant FDE as FDE / AI CoE
+    participant PLAT as Tools Platform
+    participant BLD as CodeSandbox Builder
+    participant REG as Container Registry
+    participant RUNTIME as Runtime Hosts
+    FDE->&gt;PLAT: 1) 上传 zip (Python/Java)
+    PLAT-&gt;PLAT: 接收并校验(大小/语言/manifest)
+    FDE-&gt;PLAT: 2) 填写运行时配置&lt;br/&gt;(sandbox/docker, 入口, 端口, 依赖, 规格)
+    PLAT-&gt;PLAT: 解析 manifest.yaml
+    FDE-&gt;PLAT: 3) 触发构建
+    PLAT-&gt;BLD: 启动构建流水线
+    BLD-&gt;BLD: 选基础镜像 / 解压 / 装依赖
+    BLD-&gt;BLD: 注入启动脚本(/__tools/list)
+    BLD-&gt;REG: 构建镜像 → 推送
+    PLAT-&gt;RUNTIME: 4) HPA Controller 拉起 base_replicas 实例
+    RUNTIME--&gt;&gt;PLAT: 5) 实例上报 /__tools/list
+    PLAT-&gt;PLAT: 校验端点可达 + 握手
+    PLAT-&gt;PLAT: 写入 ConnectorSpec(kind=USER_CODE)
+    PLAT-&gt;RUNTIME: 6) HPA 检测超阈值 → 扩容 N 实例
+    PLAT-&gt;RUNTIME: 7) 主从心跳失败 → 重启从实例
+    Note over FDE,RUNTIME: 8) 下线: 销毁实例 + 注销 ConnectorSpec
+            </div>
+
+            <h3>4.3 运行时配置（用户上传的 manifest.yaml）</h3>
+<pre><code># manifest.yaml（与代码包一起上传）
+name: presale-pdf-splitter
+version: 1.0.0
+language: python             # python | java
+runtime: sandbox             # sandbox | docker
+expose_as: mcp               # mcp | http_api
+entry: app:run               # 启动入口；sandbox 用 module:callable，docker 用 gunicorn 风格
+requirements: requirements.txt
+port: 8080
+health_check:
+  path: /healthz
+  interval_seconds: 30
+scaling:
+  base_replicas: 1
+  min_replicas: 1
+  max_replicas: 5
+  hpa:
+    cpu_percent: 70
+    qps_per_instance: 50
+    concurrent_per_instance: 20
+ha:
+  master_slave: true         # 1 主 N 从；主异常时从切换为主
+  restart_on_failure: true
+  max_restarts_per_hour: 5
+user_permission:
+  pass_user_id: true
+  pass_via: header           # header | metadata | payload
+  header_name: X-User-Id
+fallback:
+  strategy: error_message
+  error_message: "工具暂时不可用，已为您记录工单"</code></pre>
+
+            <h3>4.4 CodeSandbox Runtime 组件</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>职责</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>PackageReceiver</code></td>
+                            <td>接收 zip 上传，校验大小（默认 ≤200MB）、格式、是否包含 <code>manifest.yaml</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>ImageBuilder</code></td>
+                            <td>选基础镜像 → 解压 → 装依赖 → 注入启动脚本 → 构建镜像 → 推送到 Container Registry</td>
+                        </tr>
+                        <tr>
+                            <td><code>InstanceOrchestrator</code></td>
+                            <td>维护 sandbox/Docker 实例生命周期：拉起、销毁、滚动升级</td>
+                        </tr>
+                        <tr>
+                            <td><code>ToolAutoRegistrar</code></td>
+                            <td>实例启动后调用 <code>__tools/list</code>，把返回的工具清单注册为 <code>ConnectorSpec(kind=USER_CODE)</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>HPAController</code></td>
+                            <td>基于 CPU/QPS/并发指标触发扩容；冷却 60s；上限 <code>max_replicas</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>MasterSlaveController</code></td>
+                            <td>1 主 N 从 + 心跳；主异常时从切主并触发重启；连续失败 3 次告警</td>
+                        </tr>
+                        <tr>
+                            <td><code>SandboxPool</code></td>
+                            <td>预热 sandbox 模板（基于 firecracker/gVisor），实例启动延迟 ≤500ms</td>
+                        </tr>
+                        <tr>
+                            <td><code>DockerPool</code></td>
+                            <td>长驻 Docker 池，用于 HTTP/MCP HTTP 暴露的工具</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>4.5 自动注册的 ConnectorSpec</h3>
+            <p>代码包启动后，平台把其暴露的工具清单自动注册为：</p>
+
+<pre><code>ConnectorSpec(
+    connector_id = f"usercode-{package_id}",
+    name = package_name,
+    kind = ConnectorKind.USER_CODE,
+    endpoint = f"internal://usercode/{package_id}",  # 平台内部路由
+    auth = AuthConfig(kind="none"),
+    tools = ["split_pdf", "merge_pdf"],               # 来自 /__tools/list
+    user_permission = UserPermission(pass_user_id=True, pass_user_id_via="header"),
+    fallback = FallbackPolicy(strategy="error_message", error_message="..."),
+    team_id = owner_team,
+    space_id = owner_space,
+    status = ConnectorStatus.ACTIVE,
+)</code></pre>
+
+            <div class="callout">
+                管理员可在工具接入管理页调整授权范围、user_id 透传方式与降级策略。
+            </div>
+
+            <h3>4.6 扩缩容与高可用</h3>
+            <div class="mermaid">
+flowchart TB
+    HPA["HPA Controller"] --&gt; M["master-1&lt;br/&gt;(MCP/HTTP)"]
+    HPA --&gt; S1["slave-1&lt;br/&gt;(MCP/HTTP)"]
+    HPA --&gt; S2["slave-2&lt;br/&gt;(MCP/HTTP)"]
+    HPA --&gt; S3["slave-3&lt;br/&gt;(MCP/HTTP)"]
+    M -- "心跳/健康检查" --&gt; HB{{"健康检查"}}
+    S1 -- "心跳/健康检查" --&gt; HB
+    S2 -- "心跳/健康检查" --&gt; HB
+    S3 -- "心跳/健康检查" --&gt; HB
+    HB -- "master 异常" --&gt; A1["提升从为主&lt;br/&gt;+ 重启旧主"]
+    HB -- "slave 异常" --&gt; A2["销毁并补新实例"]
+            </div>
+
+            <ul>
+                <li><strong>横向扩容</strong>：HPA 监控 <code>cpu_percent / qps / concurrent</code> 三个指标，命中阈值且持续 60s → 增加 1 个实例，直到 <code>max_replicas</code>。</li>
+                <li><strong>缩容</strong>：指标持续低于阈值 5min → 减少 1 个实例，直到 <code>min_replicas</code>。</li>
+                <li><strong>主从重启</strong>：主实例心跳失败 → 选健康从实例切主 → 销毁旧主并拉新实例作为新从。</li>
+                <li><strong>故障熔断</strong>：单实例 1h 内重启超过 <code>max_restarts_per_hour</code> → 标记 <code>offline</code> 并通知管理员。</li>
+            </ul>
+
+            <h3>4.7 资源隔离与安全</h3>
+            <ul>
+                <li>每个 tool 一个独立 sandbox/Docker，<strong>网络策略仅放行平台网关与白名单下游</strong>。</li>
+                <li>默认禁止 egress；管理员可在 manifest 中显式声明白名单域名。</li>
+                <li>上传 zip 限制 ≤200MB，构建超时 10min，启动超时 60s。</li>
+                <li>支持 mTLS 出向调用（满足客户内网部署要求）。</li>
+                <li>启动后立即执行 HealthChecker 连通性测试，未通过不注册到 ConnectorRegistry。</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <!-- 5. 工具调用网关 -->
+        <section class="doc-section" id="section-5">
+            <h2 data-num="5">工具调用网关（ToolExecutor）</h2>
+
+            <h3>5.1 统一调用流水线（含 user_id 贯通）</h3>
+            <div class="mermaid">
+flowchart TB
+    A["Agent 发起 tools/call"] --&gt; B["AuthGateway.check&lt;br/&gt;(user_id, team_id, role, space_id, tool_name)"]
+    B --&gt; B1["1) 校验 user_id 在&lt;br/&gt;user_permission.grant/deny"]
+    B --&gt; B2["2) 校验团队/角色/空间 ACL"]
+    B --&gt; B3["3) 通过则放行&lt;br/&gt;拒绝 → permission_denied"]
+    B --&gt; C["ConnectorManager.resolve(tool_name)"]
+    C --&gt; C1["未找到 → 工具不存在"]
+    C --&gt; D["HealthChecker.quick_probe&lt;br/&gt;(缓存 TTL 内跳过)"]
+    D --&gt; D1["不可用 → 走降级路径"]
+    D --&gt; E["ToolInvokeContext 构建&lt;br/&gt;{user_id, team_id, role, space_id,&lt;br/&gt;request_id, trace_id}"]
+    E --&gt; F["ToolExecutor.execute&lt;br/&gt;(connector, tool, args, context)"]
+    F --&gt; F1["MCPServerProvider.invoke&lt;br/&gt;→ MCP metadata"]
+    F --&gt; F2["HTTPAPIProvider.invoke&lt;br/&gt;→ Header/Query/Body"]
+    F --&gt; F3["UserCodeProvider.invoke&lt;br/&gt;→ sandbox/Docker"]
+    F --&gt; F4["InternalProvider.invoke&lt;br/&gt;→ 内部服务"]
+    F --&gt; G["StabilityInterceptor.post_process"]
+    G --&gt; G1["JSON buffer 截断 >256KB"]
+    G --&gt; G2["临时文件 TTL 清理"]
+    G --&gt; G3["大文件转 file_ref"]
+    G --&gt; G4["超时/并发限流兜底"]
+    G --&gt; H["MetricsCollector.record&lt;br/&gt;(tool, user_id, latency, success)"]
+    H --&gt; I["返回结果给 Agent"]
+            </div>
+
+            <h3>5.2 user_id 透传规范</h3>
+            <p><strong>协议适配层</strong>（Provider 必做）：</p>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>协议类型</th>
+                            <th>透传位置</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>MCP（stdio）</td>
+                            <td>MCP request <code>metadata</code> 字段 <code>user_id</code></td>
+                            <td>通过<code>_meta</code> 携带</td>
+                        </tr>
+                        <tr>
+                            <td>MCP（Streamable HTTP）</td>
+                            <td>HTTP Header<code>X-User-Id</code> + SSE event metadata</td>
+                            <td>双向注入</td>
+                        </tr>
+                        <tr>
+                            <td>HTTP API</td>
+                            <td>按 <code>HTTPToolMapping.pass_user_id</code> 配置</td>
+                            <td>支持 header/query/cookie/body</td>
+                        </tr>
+                        <tr>
+                            <td>UserCode Sandbox</td>
+                            <td>HTTP Header <code>X-User-Id</code> + JSON 字段 <code>user_id</code></td>
+                            <td>启动脚本默认透传</td>
+                        </tr>
+                        <tr>
+                            <td>Internal API</td>
+                            <td>gRPC metadata / HTTP Header / 上下文对象</td>
+                            <td>按内部服务约定</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p><strong>后端实现规范</strong>（写给工具后端开发者）：</p>
+
+<pre><code># MCP Server (Python, FastMCP) 示例
+from fastmcp import FastMCP, Context
+mcp = FastMCP("presale-pdf")
+
+@mcp.tool()
+async def split_pdf(file_id: str, ctx: Context) -> dict:
+    user_id = ctx.request_context.meta.get("user_id")     # 平台自动注入
+    # 按 user_id 鉴权与数据隔离
+    if not has_access(user_id, file_id):
+        return {"error": "permission_denied"}
+    return do_split(file_id)</code></pre>
+
+<pre><code>// MCP Server (Java) 示例
+@Tool(name = "query_invoice")
+public Invoice queryInvoice(String invoiceId, @Meta(userId = "user_id") String userId) {
+    // userId 由平台通过 MCP metadata 注入
+    return invoiceService.queryByUser(userId, invoiceId);
+}</code></pre>
+
+<pre><code># HTTP API 后端示例（FastAPI）
+from fastapi import FastAPI, Header
+app = FastAPI()
+
+@app.post("/api/v1/search")
+async def search(body: SearchReq, x_user_id: str = Header(alias="X-User-Id")):
+    # X-User-Id 由平台在网关层注入
+    return search_service.search(x_user_id, body.query)</code></pre>
+
+            <h3>5.3 降级策略</h3>
+            <p>与 v1.0 一致：工具注册时声明 <code>FallbackPolicy</code>，调用失败时平台自动按 <code>cache / alternative_tool / retry / error_message</code> 切换。</p>
+
+            <h3>5.4 稳定性拦截器（StabilityInterceptor）</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>治理项</th>
+                            <th>拦截策略</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>JSON buffer 溢出</td>
+                            <td>响应体超 256KB 截断 + 写对象存储返回 <code>file_ref</code></td>
+                        </tr>
+                        <tr>
+                            <td>临时文件清理</td>
+                            <td>工具产生的临时文件登记到 <code>temp_files</code>，TTL 到期后清理</td>
+                        </tr>
+                        <tr>
+                            <td>大文件上传</td>
+                            <td>&gt;10MB 自动分片 + 进度上报；下载类返回引用而非内联</td>
+                        </tr>
+                        <tr>
+                            <td>超时控制</td>
+                            <td>每工具可配超时（默认 30s）</td>
+                        </tr>
+                        <tr>
+                            <td>并发限流</td>
+                            <td>单工具并发上限（默认 10），超限排队或拒绝</td>
+                        </tr>
+                        <tr>
+                            <td>UserCode 沙箱熔断</td>
+                            <td>单实例 1h 重启超限 → 标记 <code>offline</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 6. 授权与权限 -->
+        <section class="doc-section" id="section-6">
+            <h2 data-num="6">授权与权限（AuthGateway + user_id 贯通）</h2>
+
+            <h3>6.1 三维 ACL + user_id 细粒度授权</h3>
+            <p>工具授权模型在 v1.0 三维 ACL（团队/角色/空间）之上叠加 <strong>user_id 显式授权</strong>：</p>
+
+<pre><code>@dataclass
+class ToolACL:
+    tool_name: str                  # 或 connector_id:* 表示连接器下全部工具
+    allowed_teams: list[str]
+    allowed_roles: list[str]
+    denied_teams: list[str]
+    space_scope: str = "any"        # any | own_space | specific
+    requires_approval: bool = False
+
+@dataclass
+class UserToolGrant:
+    """user_id 维度的工具级显式授权，叠加在 ToolACL 之上。"""
+    tool_name: str
+    user_id: str
+    effect: str                     # "allow" | "deny"
+    expires_at: str = ""            # 可选过期时间
+    scope: dict = field(default_factory=dict)  # 可选数据范围（如 dept_ids、file_scopes）</code></pre>
+
+            <h3>6.2 鉴权流程</h3>
+            <div class="mermaid">
+flowchart TB
+    A["Agent 调用工具(携带 user_id)"] --&gt; B["AuthGateway.check&lt;br/&gt;(user_id, team_id, role, space_id, tool_name)"]
+    B --&gt; C1{"1) user_tool_grants&lt;br/&gt;deny 命中?"}
+    C1 -- "是" --&gt; RJ["拒绝 → permission_denied"]
+    C1 -- "否" --&gt; C2{"2) user_tool_grants&lt;br/&gt;allow 命中?"}
+    C2 -- "是" --&gt; OK1["放行 + scope 限制"]
+    C2 -- "否" --&gt; C3{"3) tool_acl&lt;br/&gt;denied_teams?"}
+    C3 -- "是" --&gt; RJ
+    C3 -- "否" --&gt; C4{"4) tool_acl&lt;br/&gt;allowed_teams 不匹配?"}
+    C4 -- "是" --&gt; RJ
+    C4 -- "否" --&gt; C5{"5) tool_acl&lt;br/&gt;allowed_roles 不匹配?"}
+    C5 -- "是" --&gt; RJ
+    C5 -- "否" --&gt; C6{"6) space_scope=own_space&lt;br/&gt;空间不一致?"}
+    C6 -- "是" --&gt; RJ
+    C6 -- "否" --&gt; C7{"7) requires_approval?"}
+    C7 -- "是" --&gt; PEN["标记 pending"]
+    C7 -- "否" --&gt; OK2["通过 → 注入 user_id&lt;br/&gt;到 ToolInvokeContext&lt;br/&gt;→ ToolExecutor"]
+    OK1 --&gt; OK2
+            </div>
+
+            <h3>6.3 user_id 权限分级（功能权限）</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>权限级别</th>
+                            <th>工具示例</th>
+                            <th>user_id 管控</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge badge-new">公开</span></td>
+                            <td>内部查询、文件读取</td>
+                            <td>不需要 user_id，或仅做审计</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-new">用户授权</span></td>
+                            <td>外部 API、用户私有工具</td>
+                            <td>按 <code>user_tool_grants</code> 控制；user_id 透传给后端做数据隔离</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-new">受限</span></td>
+                            <td>WebSearch、WebFetch、browse</td>
+                            <td>需管理员开启 + user_id 限流（防滥用）</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-new">审批</span></td>
+                            <td>数据导出、外部写入</td>
+                            <td>需审批；user_id 绑定审批人，事后审计</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>6.4 后端按 user_id 实施数据权限</h3>
+            <div class="callout">
+                <strong>这一节是给工具后端开发者的契约。</strong>
+                <p>平台只负责把 user_id 透传过来，<strong>真正的数据权限在后端实现</strong>。后端必须按 user_id 实施：</p>
+            </div>
+
+<pre><code>def query_orders(user_id: str, **kwargs):
+    user = user_service.get(user_id)
+    visible_orders = order_repo.find(
+        owner_id=user.id,
+        department_id__in=user.accessible_departments,  # 用户可见部门
+        data_scope__in=user.data_scopes,                # 用户数据范围
+    )
+    return visible_orders</code></pre>
+
+            <p>平台提供 <code>UserContext SDK</code>（Python/Java）供后端获取 user_id 及关联属性（团队、角色、部门、空间），避免每个工具重复解析。</p>
+        </section>
+
+        <hr>
+
+        <!-- 7. 工具与消费端的契约 -->
+        <section class="doc-section" id="section-7">
+            <h2 data-num="7">工具与消费端的契约</h2>
+
+            <h3>7.1 给技能插件中心（KR4 消费端）</h3>
+            <p>技能插件中心需要 Tools 提供"当前用户可调用的工具清单 + 元数据"用于：</p>
+            <ul>
+                <li>技能描述中引用工具。</li>
+                <li><code>/command</code> 搜索时把工具作为候选项展示。</li>
+                <li>插件页签展示工具元数据。</li>
+            </ul>
+            <p>接口契约（由 ConnectorRegistry 暴露）：</p>
+
+<pre><code>class ToolCatalogAPI:
+    def list_tools_for_user(user_id: str, team_id: str, space_id: str) -> list[ToolMeta]:
+        """返回当前 user_id 可调用的工具清单（含 MCP 工具与 HTTP API 工具）。"""
+
+    def get_tool_meta(tool_name: str) -> ToolMeta:
+        """返回工具元数据：描述、参数 schema、user_id 透传方式、降级路径。"""</code></pre>
+
+            <h3>7.2 给多智能体团队系统（MATS）</h3>
+            <p>MATS 的 <code>compile_tool_set()</code> 调用本模块的 <code>ConnectorRegistry.list_tools_for_user()</code>，把工具集编译为 <code>ClaudeAgentOptions.mcp_servers</code> + <code>allowed_tools</code>。</p>
+
+            <h3>7.3 与数据/知识工作台的集成</h3>
+            <p>数据工作台的查询、ETL、MinerU 解析能力；知识工作台的 RAG、图谱、本体能力；文件管理的读写能力 —— 全部以 <code>ConnectorKind.INTERNAL</code> 注册为 Tools，Agent 通过统一工具调用访问。</p>
+        </section>
+
+        <hr>
+
+        <!-- 8. 连通性测试 -->
+        <section class="doc-section" id="section-8">
+            <h2 data-num="8">连通性测试（HealthChecker）</h2>
+
+            <h3>8.1 三级探活策略</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>级别</th>
+                            <th>触发时机</th>
+                            <th>深度</th>
+                            <th>超时</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge badge-new">注册测试</span></td>
+                            <td>连接器注册 / UserCode 实例启动时</td>
+                            <td>完整握手（MCP initialize / HTTP 全端点 /<code>__tools/list</code>）</td>
+                            <td>30s</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-new">周期巡检</span></td>
+                            <td>可配置间隔（默认 5min）</td>
+                            <td>轻量探针（MCP ping / HTTP HEAD）</td>
+                            <td>10s</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-new">调用前探活</span></td>
+                            <td>Agent 调用工具前</td>
+                            <td>快速探活（缓存 TTL 60s 内跳过）</td>
+                            <td>5s</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>8.2 健康状态机</h3>
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --&gt; registered
+    registered --&gt; active : 测试通过
+    registered --&gt; registered : 测试失败(等待修复重测)
+    active --&gt; degraded : 巡检失败
+    degraded --&gt; offline : 连续 3 次失败
+    degraded --&gt; active : 恢复
+    offline --&gt; [*]
+            </div>
+
+            <h3>8.3 UserCode 实例的特殊探活</h3>
+            <ul>
+                <li><strong>启动时</strong>：除 <code>/healthz</code> 外，还要验证 <code>__tools/list</code> 能返回非空清单。</li>
+                <li><strong>巡检时</strong>：从主实例拉清单做 diff；从实例只做存活探活。</li>
+                <li><strong>重启时</strong>：拉新实例 → 验证工具清单一致 → 切换流量。</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <!-- 9. 模型与参数配置 -->
+        <section class="doc-section" id="section-9">
+            <h2 data-num="9">模型与参数配置</h2>
+            <p>每个工具可配置与模型相关的运行参数：</p>
+
+<pre><code>@dataclass
+class ToolModelConfig:
+    preferred_model: str = ""
+    temperature: float = 0.7
+    thinking_level: str = "medium"   # low | medium | high
+    max_tokens: int = 4096
+    timeout_seconds: int = 30
+    concurrent_limit: int = 10</code></pre>
+
+            <p>Agent 绑定工具时，参数按优先级合并：<strong>Agent 级配置 &gt; 工具默认配置 &gt; 平台默认值</strong>。</p>
+        </section>
+
+        <hr>
+
+        <!-- 10. 技术栈与持久化 -->
+        <section class="doc-section" id="section-10">
+            <h2 data-num="10">技术栈与持久化</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>层</th>
+                            <th>选型</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>服务</td>
+                            <td>FastAPI + asyncio</td>
+                            <td>与数据/知识工作台同栈</td>
+                        </tr>
+                        <tr>
+                            <td>工具协议</td>
+                            <td>MCP（Model Context Protocol）</td>
+                            <td>统一工具协议</td>
+                        </tr>
+                        <tr>
+                            <td>注册元数据</td>
+                            <td>Postgres</td>
+                            <td>connectors / tools / tool_acl / user_tool_grants / sandbox_instances / call_logs / metrics</td>
+                        </tr>
+                        <tr>
+                            <td>缓存</td>
+                            <td>Redis</td>
+                            <td>工具调用缓存、降级结果、连通性状态、user_id → ACL 缓存</td>
+                        </tr>
+                        <tr>
+                            <td>对象存储</td>
+                            <td>MinIO / S3</td>
+                            <td>代码包、构建产物、配置模板、调用大文件</td>
+                        </tr>
+                        <tr>
+                            <td>容器镜像</td>
+                            <td>Harbor / Docker Registry</td>
+                            <td>沙箱/Docker 镜像</td>
+                        </tr>
+                        <tr>
+                            <td>沙箱运行时</td>
+                            <td>firecracker / gVisor</td>
+                            <td>轻量隔离，毫秒级启动</td>
+                        </tr>
+                        <tr>
+                            <td>长驻运行时</td>
+                            <td>Docker / Kubernetes</td>
+                            <td>HTTP API / MCP HTTP 暴露的工具</td>
+                        </tr>
+                        <tr>
+                            <td>HPA</td>
+                            <td>KEDA / 自研 Controller</td>
+                            <td>基于 CPU/QPS/并发的扩缩容</td>
+                        </tr>
+                        <tr>
+                            <td>实时通道</td>
+                            <td>WebSocket</td>
+                            <td>连通性结果、调用日志、扩容事件</td>
+                        </tr>
+                        <tr>
+                            <td>Agent 集成</td>
+                            <td>Claude Agent SDK <code>mcp_servers</code> / <code>allowed_tools</code></td>
+                            <td>工具集注入</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p><strong>部署形态</strong>：私有化场景全栈自托管（Postgres + Redis + MinIO + Container Registry + K8s）；快速验证场景可用 Supabase 云 + 云 Redis + 轻量 K8s 发行版（K3s）。</p>
+        </section>
+
+        <hr>
+
+        <!-- 11. 与相邻模块的边界 -->
+        <section class="doc-section" id="section-11">
+            <h2 data-num="11">与相邻模块的边界</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模块</th>
+                            <th>边界</th>
+                            <th>接口</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>技能插件中心</td>
+                            <td>工具平台<strong>提供</strong>工具清单与元数据（消费用），技能插件<strong>不</strong>通过本平台注册；本平台<strong>不</strong>承担 skills/plugins 的注册/发现</td>
+                            <td><code>ToolCatalogAPI.list_tools_for_user()</code> / <code>get_tool_meta()</code></td>
+                        </tr>
+                        <tr>
+                            <td>多智能体团队系统（MATS）</td>
+                            <td>工具平台<strong>提供</strong> <code>compile_tool_set()</code> 与 <code>ToolExecutor.invoke()</code>，MATS <strong>消费</strong>工具集</td>
+                            <td>同上</td>
+                        </tr>
+                        <tr>
+                            <td>数据工作台</td>
+                            <td>数据能力注册为 INTERNAL 连接器</td>
+                            <td>Internal ConnectorProvider</td>
+                        </tr>
+                        <tr>
+                            <td>知识工作台</td>
+                            <td>知识能力注册为 INTERNAL 连接器</td>
+                            <td>Internal ConnectorProvider</td>
+                        </tr>
+                        <tr>
+                            <td>文件管理</td>
+                            <td>文件操作注册为 INTERNAL 连接器</td>
+                            <td>Internal ConnectorProvider</td>
+                        </tr>
+                        <tr>
+                            <td>权限与成员管理</td>
+                            <td>工具平台<strong>复用</strong>平台用户/团队/空间模型；<code>user_tool_grants</code> 由权限服务管理</td>
+                            <td><code>AuthGateway</code> 调权限服务校验</td>
+                        </tr>
+                        <tr>
+                            <td>运营统计后台</td>
+                            <td>工具平台上报调用次数、成功率、延迟、用户级调用画像、扩容事件</td>
+                            <td><code>MetricsCollector</code> 写统计事件</td>
+                        </tr>
+                        <tr>
+                            <td>项目资产库</td>
+                            <td>工具配置、ConnectorSpec 可作为项目资产快照的一部分</td>
+                            <td>资产导出/导入 JSON</td>
+                        </tr>
+                        <tr>
+                            <td>Serverless 部署中心</td>
+                            <td>属于本平台的子模块（§4）</td>
+                            <td>CodeSandbox Runtime 内部 API</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 12. MVP 范围与实施阶段 -->
+        <section class="doc-section" id="section-12">
+            <h2 data-num="12">MVP 范围与实施阶段</h2>
+
+            <h3>12.1 MVP 必含（对齐 KR6 + KR13 + V0.1/V0.2）</h3>
+            <ol>
+                <li><strong>连接器注册中心</strong>：MCP Server（stdio/HTTP）、HTTP API、内部 API 注册、配置、鉴权存储。</li>
+                <li><strong>Serverless 工具部署</strong>（v2.0）：Python 包上传 → sandbox 构建 → MCP/HTTP 暴露 → 自动注册 → HPA 扩容。</li>
+                <li><strong>代码包主从重启</strong>：1 主 N 从 + 心跳 + 异常切换。</li>
+                <li><strong>user_id 贯通</strong>：AuthGateway 注入 user_id → Provider 透传到 MCP/HTTP 后端 → 后端按 user_id 鉴权。</li>
+                <li><strong>user_id 工具级显式授权</strong>：<code>user_tool_grants</code> 表 + 鉴权流程改造。</li>
+                <li><strong>连通性测试</strong>：注册时强制测试 + 周期巡检（5min）+ 调用前快速探活（60s）。</li>
+                <li><strong>工具调用网关</strong>：统一 MCP 协议适配 + AuthGateway 鉴权 + 超时/重试 + user_id 注入。</li>
+                <li><strong>降级策略</strong>：cache / alternative_tool / retry / error_message。</li>
+                <li><strong>稳定性拦截</strong>：JSON buffer 限流 + 临时文件 TTL + 大文件引用化。</li>
+                <li><strong>团队/角色/空间 ACL</strong>：三维 ACL 保留并叠加 user_id。</li>
+                <li><strong>调用统计</strong>：次数、成功率、延迟 + 用户级画像。</li>
+            </ol>
+
+            <h3>12.2 MVP 暂不含</h3>
+            <ul>
+                <li>Serverless 多语言高级特性（GPU 沙箱、自定义网络、Sidecar 注入等）。</li>
+                <li>工具市场/跨平台工具共享。</li>
+                <li>工具级细粒度网络隔离（先做平台级白名单）。</li>
+                <li>工具级版本管理与回滚（首版仅记录版本号）。</li>
+                <li>Skills/Plugins/Commands 的注册与发现（由对应模块承载）。</li>
+            </ul>
+
+            <h3>12.3 并行实施 lanes</h3>
+            <div class="mermaid">
+flowchart LR
+    A["Lane A&lt;br/&gt;ConnectorRegistry&lt;br/&gt;+ ConnectorSpec(USER_CODE, user_permission)&lt;br/&gt;+ Postgres"] --&gt; D["Lane D&lt;br/&gt;UserCodeProvider +&lt;br/&gt;ToolAutoRegistrar&lt;br/&gt;+ 启动清单上报"]
+    A --&gt; E["Lane E&lt;br/&gt;AuthGateway 扩展&lt;br/&gt;(user_tool_grants +&lt;br/&gt;user_id 注入)"]
+    B["Lane B&lt;br/&gt;MCPServerProvider /&lt;br/&gt;HTTPAPIProvider /&lt;br/&gt;InternalProvider 扩展"] --&gt; F["Lane F&lt;br/&gt;ToolExecutor +&lt;br/&gt;StabilityInterceptor&lt;br/&gt;+ 降级"]
+    C["Lane C&lt;br/&gt;CodeSandbox Runtime&lt;br/&gt;(PackageReceiver +&lt;br/&gt;ImageBuilder +&lt;br/&gt;SandboxPool) + 镜像仓库"] --&gt; D
+    C --&gt; G["Lane G&lt;br/&gt;HPA Controller +&lt;br/&gt;MasterSlaveController&lt;br/&gt;+ 重启熔断"]
+    E --&gt; F
+    F --&gt; H["Lane H&lt;br/&gt;工具接入管理 UI +&lt;br/&gt;Serverless 部署中心 UI +&lt;br/&gt;监控 UI(E2E 串联)"]
+    G --&gt; H
+    H --&gt; I["Lane I&lt;br/&gt;UserContext SDK&lt;br/&gt;(Python/Java) +&lt;br/&gt;后端接入指引"]
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 13. 风险与应对 -->
+        <section class="doc-section" id="section-13">
+            <h2 data-num="13">风险与应对</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>风险</th>
+                            <th>表现</th>
+                            <th>应对</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>MCP Server 协议兼容性</td>
+                            <td>不同 MCP 实现握手/工具发现行为不一致</td>
+                            <td>Provider 层做协议版本适配；注册时强制完整握手</td>
+                        </tr>
+                        <tr>
+                            <td>外部连接器不稳定</td>
+                            <td>客户现场网络限制、API 限流、服务宕机</td>
+                            <td>三级探活 + 降级策略 + 友好错误提示</td>
+                        </tr>
+                        <tr>
+                            <td>沙箱逃逸/资源滥用</td>
+                            <td>上传恶意代码消耗资源或逃逸</td>
+                            <td>firecracker/gVisor 隔离 + 网络白名单 + 资源配额 + 构建产物签名</td>
+                        </tr>
+                        <tr>
+                            <td>构建失败/启动慢</td>
+                            <td>依赖装不上、镜像大、首次拉起超时</td>
+                            <td>基础镜像预热 + 构建缓存 + 启动超时熔断 + 实例规格选择</td>
+                        </tr>
+                        <tr>
+                            <td>扩缩容抖动</td>
+                            <td>HPA 误判导致频繁扩缩</td>
+                            <td>冷却时间 60s + 双指标确认 + 缩容延迟 5min</td>
+                        </tr>
+                        <tr>
+                            <td>主从切换丢请求</td>
+                            <td>主异常瞬间有请求被路由到已死实例</td>
+                            <td>优雅下线（先摘流量再销毁）+ 客户端重试 + 幂等设计</td>
+                        </tr>
+                        <tr>
+                            <td>后端忽略 user_id</td>
+                            <td>后端未按 user_id 鉴权导致越权</td>
+                            <td>后端接入指引 + UserContext SDK + 平台定期对账（抽样审计）</td>
+                        </tr>
+                        <tr>
+                            <td>user_id 透传被剥离</td>
+                            <td>第三方代理剥离 Header 导致后端拿不到</td>
+                            <td>同时多通道注入（Header + metadata + payload） + 平台白盒测试</td>
+                        </tr>
+                        <tr>
+                            <td>工具数量膨胀</td>
+                            <td>Agent 工具列表过长选择困难</td>
+                            <td>按 user_id 过滤 + 分类浏览 + 语义搜索排序</td>
+                        </tr>
+                        <tr>
+                            <td>鉴权配置错误</td>
+                            <td>工具越权访问或误拒</td>
+                            <td>ACL 变更需管理员确认；拒绝时返回 available_tools 辅助排查</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 14. 测试策略 -->
+        <section class="doc-section" id="section-14">
+            <h2 data-num="14">测试策略</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模块</th>
+                            <th>必测</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>ConnectorRegistry</code></td>
+                            <td>四类 kind 的 CRUD、user_permission 字段读写、版本管理</td>
+                        </tr>
+                        <tr>
+                            <td><code>MCPServerProvider</code></td>
+                            <td>stdio / Streamable HTTP 握手、<code>metadata.user_id</code> 注入、工具调用</td>
+                        </tr>
+                        <tr>
+                            <td><code>HTTPAPIProvider</code></td>
+                            <td>鉴权注入、user_id 注入（header/query/body）、工具映射、超时</td>
+                        </tr>
+                        <tr>
+                            <td><code>UserCodeProvider</code></td>
+                            <td>路由到 sandbox/Docker、user_id 注入、HPA 触发、缩容</td>
+                        </tr>
+                        <tr>
+                            <td><code>CodeSandbox Runtime</code></td>
+                            <td>上传校验、镜像构建、启动清单上报、扩缩容、主从切换、重启熔断</td>
+                        </tr>
+                        <tr>
+                            <td><code>AuthGateway</code></td>
+                            <td>团队/角色/空间 ACL 放行与拒绝、user_tool_grants.allow/deny、deny 优先</td>
+                        </tr>
+                        <tr>
+                            <td><code>ToolExecutor</code></td>
+                            <td>user_id 注入（多通道）、降级策略、稳定性拦截、并发限流、调用统计</td>
+                        </tr>
+                        <tr>
+                            <td><code>HealthChecker</code></td>
+                            <td>注册测试、巡检状态流转、调用前探活缓存、UserCode 实例健康</td>
+                        </tr>
+                        <tr>
+                            <td>E2E</td>
+                            <td>注册外部 MCP → ACL 配置（含 user_id 授权） → Agent 绑定 → 调用 → 后端按 user_id 鉴权 → 降级 → 统计；注册 UserCode → 上传 zip → 构建 → 启动 → 扩容 → 重启 → 灰度下线</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- 15. 结论 -->
+        <section class="doc-section" id="section-15">
+            <h2 data-num="15">结论</h2>
+            <p>工具管理平台 v2.0 在 v1.0 "统一注册→发现→授权→调用→治理"主干上完成三处关键升级：<strong>收窄范围</strong>（只管 MCP/API，不与技能插件中心职责重叠）、<strong>新增 Serverless 部署</strong>（Python/Java 代码包 → sandbox/Docker → 自动注册为 MCP/HTTP 工具，可扩缩容、可主从重启）、<strong>用户身份贯通</strong>（user_id 由 AuthGateway 注入，Provider 多通道透传到 MCP/API 后端，后端按 user_id 实施功能/数据权限，叠加 user_id 工具级显式授权）。</p>
+
+            <p>关键工程取舍：MCP 作为统一工具协议与 Claude Agent SDK 零适配；<code>UserCodeProvider</code> 与外部 Provider 共用 <code>invoke(context)</code> 接口，user_id 透传在同一处治理；firecracker/gVisor + Docker 双运行时覆盖轻量短任务与长驻服务；HPA + MasterSlave + 重启熔断让 0 运维成为可能；<code>UserContext SDK</code> 让后端按 user_id 鉴权变成 5 行代码。</p>
+
+            <p>它为 Agent 提供"<strong>可发现、可授权、可调用、可容错、可审计</strong>"的能力底座 —— 加上 v2.0 的 Serverless 与 user_id 贯通后，进一步提供"<strong>可自助生成、用户级可控</strong>"的能力扩张机制，直接支撑 KR4、KR6、KR13 与 V0.1/V0.2/V1.0。建议按 §12 lanes 先跑通外部 MCP/API 的注册→ACL→user_id 注入闭环，再叠加 Serverless 沙箱部署与 HPA/主从，最后接入 <code>UserContext SDK</code> 与后端对账审计。</p>
+        </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#e6f0fa',
+                primaryTextColor: '#4a5568',
+                primaryBorderColor: '#3182ce',
+                lineColor: '#2c5282',
+                secondaryColor: '#ebf8ff',
+                tertiaryColor: '#f7fafc',
+                clusterBkg: '#ffffff',
+                clusterBorder: '#cbd5e0',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif'
+            },
+            flowchart: {
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 16
+            },
+            sequence: {
+                actorMargin: 50,
+                messageMargin: 40
+            }
+        });
+
+        // Scroll spy for sidebar navigation
+        const sections = document.querySelectorAll('.doc-section[id]');
+        const navLinks = document.querySelectorAll('.sidebar nav a');
+
+        function updateActiveNav() {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 100;
+                if (window.scrollY >= sectionTop) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', updateActiveNav);
+        updateActiveNav();
+    </script>
+</body>
+</html>

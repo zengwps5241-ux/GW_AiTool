@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>goktech-agent 工具管理平台（Tools Platform）产品需求文档（PRD）</title>
+<style>
+  :root {
+    --primary: #1f6feb;
+    --primary-light: #ddf4ff;
+    --primary-dark: #0969da;
+    --text: #1f2328;
+    --text-muted: #59636e;
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --sidebar-bg: #f6f8fa;
+    --border: #d0d7de;
+    --code-bg: #f0f3f6;
+    --blockquote-border: #d0d7de;
+    --blockquote-bg: #f6f8fa;
+    --table-stripe: #f6f8fa;
+    --node-blue: linear-gradient(135deg, #ddf4ff 0%, #b6e3ff 100%);
+    --node-green: linear-gradient(135deg, #dafbe1 0%, #aceebb 100%);
+    --node-orange: linear-gradient(135deg, #fff8c5 0%, #fae17d 100%);
+    --node-purple: linear-gradient(135deg, #fbefff 0%, #d8b9ff 100%);
+    --node-pink: linear-gradient(135deg, #ffebe5 0%, #ffb3a0 100%);
+    --node-gray: linear-gradient(135deg, #eaeef2 0%, #d0d7de 100%);
+    --node-error: linear-gradient(135deg, #ffebe5 0%, #ffaba8 100%);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+    font-size: 15px;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ========== 左侧目录 ========== */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 16px;
+  }
+
+  .sidebar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px;
+    padding: 0 8px;
+  }
+
+  .sidebar-nav { list-style: none; padding: 0; margin: 0; }
+
+  .sidebar-nav li { margin: 0; }
+
+  .sidebar-nav a {
+    display: block;
+    padding: 6px 12px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .sidebar-nav a:hover {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+  }
+
+  .sidebar-nav a.active {
+    background: var(--primary-light);
+    border-left-color: var(--primary);
+    color: var(--primary-dark);
+    font-weight: 600;
+  }
+
+  .sidebar-nav .sub-link a {
+    padding: 4px 12px 4px 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ========== 右侧内容 ========== */
+  .content {
+    flex: 1;
+    max-width: 960px;
+    padding: 32px 48px 80px;
+    min-width: 0;
+  }
+
+  .doc-header { margin-bottom: 16px; }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 12px;
+    margin: 0 0 16px;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    scroll-margin-top: 16px;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 28px 0 12px;
+    color: var(--text);
+    scroll-margin-top: 16px;
+  }
+
+  h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 20px 0 8px;
+    color: var(--text);
+  }
+
+  p { margin: 10px 0; }
+  strong { font-weight: 600; color: var(--text); }
+  ul, ol { margin: 10px 0; padding-left: 28px; }
+  li { margin: 6px 0; }
+
+  blockquote {
+    margin: 16px 0;
+    padding: 10px 16px;
+    border-left: 4px solid var(--blockquote-border);
+    background: var(--blockquote-bg);
+    color: var(--text-muted);
+    border-radius: 0 4px 4px 0;
+  }
+  blockquote p { margin: 4px 0; }
+
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #1f2328;
+  }
+
+  pre {
+    background: #f6f8fa;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 14px 0;
+  }
+  pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #1f2328;
+    white-space: pre;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  table th, table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table th { background: var(--bg-alt); font-weight: 600; }
+  table tbody tr:nth-child(even) { background: var(--table-stripe); }
+
+  /* ========== 流程可视化 ========== */
+  .flow-section {
+    margin: 20px 0;
+    padding: 16px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .flow-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary-dark);
+    margin: 0 0 12px;
+    padding: 0;
+  }
+
+  .flow-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .flow-node {
+    width: 100%;
+    max-width: 520px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--node-blue);
+    border: 1px solid rgba(31, 111, 235, 0.3);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    text-align: center;
+  }
+
+  .flow-node.green  { background: var(--node-green);  border-color: rgba(46, 160, 67, 0.3); }
+  .flow-node.orange { background: var(--node-orange); border-color: rgba(191, 135, 0, 0.3); }
+  .flow-node.purple { background: var(--node-purple); border-color: rgba(139, 92, 246, 0.3); }
+  .flow-node.pink   { background: var(--node-pink);   border-color: rgba(255, 88, 67, 0.3); }
+  .flow-node.gray   { background: var(--node-gray);   border-color: rgba(110, 118, 129, 0.3); }
+  .flow-node.error  { background: var(--node-error);  border-color: rgba(207, 34, 46, 0.4); }
+
+  .flow-node-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .flow-node-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .flow-arrow {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .flow-arrow::after {
+    content: "▼";
+    font-size: 14px;
+  }
+
+  .flow-branches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .flow-branch {
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .flow-branch-title {
+    font-weight: 600;
+    color: var(--primary-dark);
+  }
+
+  .flow-branch-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .flow-list {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 16px;
+    background: white;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+  }
+
+  .flow-list-item {
+    font-size: 13px;
+    padding: 2px 0;
+  }
+
+  .flow-decision {
+    background: var(--node-orange);
+    border-color: rgba(191, 135, 0, 0.4);
+  }
+
+  .flow-result-ok  { background: var(--node-green); border-color: rgba(46, 160, 67, 0.4); }
+  .flow-result-deny { background: var(--node-error); border-color: rgba(207, 34, 46, 0.4); }
+
+  /* ========== 响应式 ========== */
+  @media (max-width: 768px) {
+    body { flex-direction: column; }
+    .sidebar {
+      position: relative;
+      width: 100%;
+      height: auto;
+      max-height: 280px;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .content { padding: 24px 20px 60px; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-title">目录</div>
+  <ul class="sidebar-nav">
+    <li><a href="#section-1">1. Executive Summary</a></li>
+    <li><a href="#section-2">2. Background &amp; Context</a></li>
+    <li><a href="#section-3">3. Objectives &amp; Success Metrics</a></li>
+    <li><a href="#section-4">4. Target Users &amp; Segments</a></li>
+    <li><a href="#section-5">5. User Stories &amp; Requirements</a></li>
+    <li><a href="#section-6">6. Solution Overview</a></li>
+    <li><a href="#section-7">7. Open Questions</a></li>
+    <li><a href="#section-8">8. Timeline &amp; Phasing</a></li>
+    <li><a href="#section-appendix-a">附录 A:术语表</a></li>
+    <li><a href="#section-appendix-b">附录 B:与父 PRD 的关系</a></li>
+  </ul>
+</aside>
+
+<main class="content">
+
+  <div class="doc-header">
+    <h1>goktech-agent 工具管理平台（Tools Platform）产品需求文档（PRD）</h1>
+  </div>
+  <blockquote>
+    <p>模块版本：v2.0</p>
+    <p>日期：2026-06-09</p>
+    <p>定位：goktech-agent 平台"工具"主线的子 PRD</p>
+    <p>父文档：《goktech-agent 产品需求文档（PRD）》（同目录 <code>goktech-agents-prd.md</code>）</p>
+    <p>关联技术方案：《tools-platform-tech-design.md》（同目录）</p>
+    <p>关联模块：多智能体团队系统、数据工作台、知识工作台、技能插件中心、权限与成员管理</p>
+  </blockquote>
+
+  <section id="section-1" class="prd-section">
+    <h2>1. Executive Summary</h2>
+    <p>工具管理平台是 goktech-agent 平台的"工具"主线模块，承载 Agent 可调用的<strong>外部能力来源</strong>（MCP Server、HTTP API、用户上传代码生成的托管工具）的统一注册、托管、授权、调用和治理。它不承载 Skills/Plugins/Commands 的注册与编排（由技能插件中心承载），也不承载数据/知识/文件等内部能力的业务实现（由对应工作台承载，以 <code>INTERNAL</code> 连接器方式接入本平台）。</p>
+    <p>v2.0 在 v1.0 的"统一注册→发现→授权→调用→治理"主干上完成三处关键升级：<strong>收窄边界</strong>（只管 MCP/API，避免与技能插件中心职责重叠）、<strong>新增 Serverless 沙箱</strong>（上传 Python/Java 代码包即生成可托管工具）、<strong>用户身份贯通</strong>（<code>user_id</code> 由平台注入并透传到后端，后端按 <code>user_id</code> 实施功能/数据权限）。</p>
+  </section>
+
+  <section id="section-2" class="prd-section">
+    <h2>2. Background &amp; Context</h2>
+
+    <h3>2.1 父 PRD 中的工具主线</h3>
+    <p>父 PRD §7.2.4 明确要求平台承载"工具、技能与插件"，对应 6 个 Key Result 中与本模块相关的三条：</p>
+    <ul>
+      <li><strong>KR4</strong> — 首版支持技能、插件和 command 搜索（<strong>消费端</strong>由技能插件中心承载，本模块提供工具清单作为数据源）</li>
+      <li><strong>KR6</strong> — 首版支持基础权限治理（<strong>工具级</strong>权限由本模块与权限与成员管理联合承载）</li>
+      <li><strong>KR13</strong> — 首版支持外部连接器接入管理（<strong>注册端</strong>由本模块承载）</li>
+    </ul>
+    <p>父 PRD 7.1.1 中对应的页面是"<strong>工具接入管理</strong>"——管理员入口，负责 MCP Server / HTTP API / 内部 API 的注册、连通性测试和访问授权。父 PRD §7.3.1 工具能力要求：</p>
+    <blockquote>
+      "工具能力：支持 command、skills、plugins、工具权限和动态业务工具。"
+    </blockquote>
+    <p>父 PRD §7.3.2 非功能要求中与本模块强相关：</p>
+    <ul>
+      <li><strong>稳定性</strong> — 大文件上传、JSON buffer、临时文件清理等已知问题必须纳入治理</li>
+      <li><strong>可运营性</strong> — 平台应统计用户、Agent、skills、plugins、token 和任务成功率</li>
+      <li><strong>可扩展性</strong> — 预留企微协同、GraphRAG、多 Agent 编排和动态业务工具扩展空间</li>
+    </ul>
+
+    <h3>2.2 当前痛点（来自父 PRD §3.1 与 7.1.1）</h3>
+    <ul>
+      <li>工具/技能/插件分散在个人手中，团队查找、复用和授权缺少统一入口。</li>
+      <li>FDE 在客户现场需要快速接入新工具/新 API，但缺乏标准化的注册、连通性测试和授权流程。</li>
+      <li>客户资料进入平台前需要严格的权限边界，工具调用必须可审计、可降级、可熔断。</li>
+      <li>"动态业务工具"在父 PRD §7.2.4 中被列为后续增强项，FDE 现场需要"上传代码包即生成可托管工具"的能力。</li>
+    </ul>
+
+    <h3>2.3 v1.0 → v2.0 范围变化</h3>
+    <table>
+      <thead>
+        <tr><th>维度</th><th>v1.0</th><th>v2.0（本 PRD）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>范围</td><td>工具+技能+插件 混合</td><td><strong>只含 MCP Server + HTTP API</strong>（含 <code>INTERNAL</code> 内部能力注册）</td></tr>
+        <tr><td>部署</td><td>仅外部托管 MCP/API</td><td><strong>三类来源</strong>：①外部托管 MCP/API ②用户上传代码 → Serverless 沙箱 ③平台内置内部 API</td></tr>
+        <tr><td>身份</td><td>工具级权限</td><td><strong>三维 ACL + user_id 细粒度授权</strong>（user_id 透传到后端）</td></tr>
+        <tr><td>动态工具</td><td>后续增强</td><td><strong>v2.0 必含</strong>：Python/Java 代码包 → sandbox/Docker → 自动注册为 MCP/HTTP</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.4 价值定位</h3>
+    <table>
+      <thead>
+        <tr><th>角色</th><th>价值</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>FDE</strong></td><td>复用既有 MCP/API 不再"装本地跑";上传一段代码即生成可托管工具;在客户现场不再被工具可用性卡住</td></tr>
+        <tr><td><strong>AI CoE</strong></td><td>把 MCP/API 接入沉淀为平台资产;统一治理 user_id 鉴权契约;工具调用画像反哺平台运营</td></tr>
+        <tr><td><strong>BU 交付</strong></td><td>接收标准工具配置与权限策略;复用 MVP 期间的 Serverless 工具;降低跨项目工具迁移成本</td></tr>
+        <tr><td><strong>业务用户</strong></td><td>不直接使用本平台,但通过 Agent 间接使用托管工具时获得"可预期、可降级、可审计"的体验</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-3" class="prd-section">
+    <h2>3. Objectives &amp; Success Metrics</h2>
+
+    <h3>3.1 模块目标（Goal）</h3>
+    <p>为 goktech-agent 平台提供<strong>统一、可治理、可扩展的外部能力底座</strong>——既支撑 FDE 在客户现场快速接入并托管工具,也支撑 AI CoE 通过统一鉴权契约和调用画像实现平台级治理。模块成功与否的判定标准是:Agent 调用任何外部能力时,都能在 ACL、user_id、降级、统计这四个维度被一致地约束。</p>
+
+    <h3>3.2 与父 PRD KRs 的映射</h3>
+    <table>
+      <thead>
+        <tr><th>父 PRD KR</th><th>本模块对应能力</th><th>本模块责任</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>KR4</strong> 技能/插件/command 搜索</td><td>暴露 <code>ToolCatalogAPI.list_tools_for_user()</code> 供技能插件中心消费</td><td><strong>提供数据源</strong>,不实现搜索 UI</td></tr>
+        <tr><td><strong>KR6</strong> 基础权限治理</td><td>工具级 ACL（团队/角色/空间）+ user_id 显式授权</td><td><strong>核心责任</strong></td></tr>
+        <tr><td><strong>KR13</strong> 外部连接器接入管理</td><td>ConnectorRegistry、连通性测试、按团队/角色授权</td><td><strong>核心责任</strong></td></tr>
+        <tr><td>父 PRD §7.3.2 稳定性</td><td>JSON buffer、临时文件、大文件上传在网关层统一拦截</td><td><strong>核心责任</strong></td></tr>
+        <tr><td>父 PRD §7.3.2 可运营性</td><td>调用次数/成功率/延迟/token/用户级画像统计</td><td><strong>核心责任</strong></td></tr>
+        <tr><td>父 PRD §7.2.4 动态业务工具</td><td>Serverless 代码沙箱运行时</td><td><strong>v2.0 新增,核心责任</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 成功指标（Metrics）</h3>
+    <blockquote>
+      <p>父 PRD 中"试点期支撑至少 1 个 AI 实训营和 1-2 个 FDE MVP"是平台级 KR;本表为<strong>本模块级</strong>指标。</p>
+    </blockquote>
+    <table>
+      <thead>
+        <tr><th>指标</th><th>当前基线</th><th>目标</th><th>测量方式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>接入外部 MCP/API 数</td><td>0</td><td>试点期 ≥ 5 个</td><td><code>connectors</code> 表按 <code>kind</code> 统计</td></tr>
+        <tr><td>Serverless 工具上线数</td><td>0</td><td>试点期 ≥ 3 个</td><td><code>connectors</code> 表按 <code>kind=user_code</code> 统计</td></tr>
+        <tr><td>Agent 工具调用成功率</td><td>N/A</td><td>≥ 95%（含降级）</td><td><code>call_logs.success / call_logs.total</code></td></tr>
+        <tr><td>工具调用平均延迟（P95）</td><td>N/A</td><td>MCP ≤ 5s、HTTP API ≤ 3s</td><td><code>call_logs.latency</code></td></tr>
+        <tr><td>ACL 误拒率</td><td>N/A</td><td>≤ 1%（含 user_id 授权）</td><td><code>call_logs.status=permission_denied / total</code></td></tr>
+        <tr><td>连通性测试覆盖率</td><td>0</td><td>100%（注册/巡检/调用前三级）</td><td><code>health_checks</code> 表</td></tr>
+        <tr><td>调用画像完整度</td><td>0</td><td>100% 调用带 user_id + team_id + space_id</td><td><code>call_logs</code> 字段非空率</td></tr>
+        <tr><td>Sandbox 实例自动恢复率</td><td>N/A</td><td>≥ 99%（主从切换 + 重启）</td><td><code>sandbox_instances.restart_count</code></td></tr>
+        <tr><td>工具配置可复用率（首版）</td><td>0</td><td>至少 1 次跨团队 Fork 包含工具配置</td><td>项目资产库关联统计</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.4 Non-Goals（明确不做）</h3>
+    <table>
+      <thead>
+        <tr><th>不做</th><th>原因</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Skills/Plugins/Commands 的注册、发现、编排</td><td>父 PRD §7.2.4 明确由技能插件中心承载;v2.0 收窄范围</td></tr>
+        <tr><td>工具市场/跨平台工具共享</td><td>首版聚焦"接入 + 治理",后续版本评估</td></tr>
+        <tr><td>GPU 沙箱、自定义网络、Sidecar 注入</td><td>Serverless MVP 暂不含,列入 v1.0 后续</td></tr>
+        <tr><td>工具级细粒度网络隔离（先做平台级白名单）</td><td>降低 MVP 复杂度</td></tr>
+        <tr><td>工具级版本管理与回滚（首版仅记录版本号）</td><td>首版用 <code>version</code> 字段,版本管理功能推迟</td></tr>
+        <tr><td>工具级细粒度 UI（仅暴露管理员入口）</td><td>工具调用 UI 由 Agent 业务视图承载,本模块只提供管理端</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-4" class="prd-section">
+    <h2>4. Target Users &amp; Segments</h2>
+
+    <h3>4.1 用户角色矩阵</h3>
+    <table>
+      <thead>
+        <tr><th>角色</th><th>主要任务</th><th>与本模块的接触面</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>平台管理员 / AI CoE</strong></td><td>注册 MCP/API、配置 ACL、审批受限工具、监控调用画像</td><td>高频——使用"工具接入管理"和"调用监控"</td></tr>
+        <tr><td><strong>FDE Delta</strong></td><td>上传代码包、调试工具调用、为客户配置工具白名单</td><td>中频——使用"Serverless 部署中心"和"工具权限面板"</td></tr>
+        <tr><td><strong>FDE Echo</strong></td><td>在客户试用期间查看工具可用性和失败原因</td><td>低频——使用"调用监控"和降级提示</td></tr>
+        <tr><td><strong>数据 / 知识角色</strong></td><td>将工作台能力注册为 <code>INTERNAL</code> 连接器</td><td>中频——通过内部 API 注册</td></tr>
+        <tr><td><strong>BU 交付</strong></td><td>Fork 团队快照时连带复用工具配置</td><td>低频——通过项目资产库消费</td></tr>
+        <tr><td><strong>业务用户</strong></td><td>不直接接触本平台</td><td>无——通过 Agent 业务视图间接使用</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 用户规模与频次假设</h3>
+    <ul>
+      <li><strong>试点期</strong>：1-2 个 AI 实训营 + 1-2 个 FDE MVP，预计 5-10 个管理员账号、20-30 个 FDE 账号。</li>
+      <li><strong>运营期</strong>：每个项目组 1 个管理员、N 个 FDE；Serverless 工具按项目组沉淀。</li>
+      <li><strong>调用频次</strong>：每个活跃 FDE 每天 50-200 次工具调用；Serverless 工具按 Agent 任务触发。</li>
+    </ul>
+
+    <h3>4.3 使用场景约束</h3>
+    <ul>
+      <li><strong>客户现场交付</strong>：必须重视 ACL、空间隔离、user_id 透传、审计日志。</li>
+      <li><strong>快速验证</strong>：首版不追求大而全，优先支持高频、刚需、可验收的能力。</li>
+      <li><strong>可复用</strong>：工具配置、ConnectorSpec 应能作为项目资产快照的一部分被 Fork。</li>
+      <li><strong>非技术用户</strong>：本模块管理端面向技术用户（管理员/FDE），业务用户只通过 Agent 间接受益。</li>
+    </ul>
+  </section>
+
+  <section id="section-5" class="prd-section">
+    <h2>5. User Stories &amp; Requirements</h2>
+
+    <h3>5.1 P0 — Must Have（对齐父 PRD V0.1 + V0.2 MVP 必含）</h3>
+    <table>
+      <thead>
+        <tr><th>#</th><th>用户故事</th><th>验收标准</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P0-1</strong></td><td>作为平台管理员,我希望在工具接入管理页注册一个外部 MCP Server（stdio 或 Streamable HTTP）,填写鉴权信息后立即完成连通性测试</td><td>注册时强制测试,失败可重试;测试通过后状态 <code>active</code>;连通性测试覆盖 MCP <code>initialize</code> 握手</td></tr>
+        <tr><td><strong>P0-2</strong></td><td>作为平台管理员,我希望注册一个外部 HTTP API,通过填写工具映射表(method/path/参数映射/响应转换)将其声明为 Agent 可调用的工具</td><td>映射表按 <code>HTTPToolMapping</code> 校验;HealthChecker 逐一测试可达性;失败时定位到具体端点</td></tr>
+        <tr><td><strong>P0-3</strong></td><td>作为平台管理员,我希望为每个工具配置三维 ACL(团队/角色/空间)和 user_id 显式授权(grant/deny),并能预览某 user_id 是否能调用某工具</td><td><code>deny</code> 优先于 <code>allow</code>;<code>space_scope=own_space</code> 时校验空间一致性;预览页返回 allow/deny 判定及原因</td></tr>
+        <tr><td><strong>P0-4</strong></td><td>作为 FDE Delta,我希望上传一个 Python(或 Java)zip 代码包,填写 manifest.yaml 后由平台自动构建并启动 sandbox/Docker 实例,把代码暴露为 MCP 或 HTTP 工具</td><td>上传限制 ≤200MB;构建超时 10min;启动超时 60s;启动后自动注册 <code>ConnectorSpec(kind=USER_CODE)</code>;1 主 N 从 + 心跳</td></tr>
+        <tr><td><strong>P0-5</strong></td><td>作为 Agent 运行时,我在调用任何工具前都经过 AuthGateway 鉴权,user_id 被注入到 ToolInvokeContext 并透传到后端 MCP/HTTP 请求(Header + metadata + payload 多通道)</td><td>鉴权失败返回 <code>permission_denied</code>;后端按 user_id 实施数据隔离(通过 UserContext SDK)</td></tr>
+        <tr><td><strong>P0-6</strong></td><td>作为平台管理员,我希望为每个工具配置降级策略(cache/alternative_tool/retry/error_message),调用失败时平台自动切换</td><td>降级策略在 <code>ConnectorSpec.fallback</code> 中声明;调用失败按策略顺序尝试</td></tr>
+        <tr><td><strong>P0-7</strong></td><td>作为平台管理员,我希望 ToolExecutor 在调用层统一拦截 JSON buffer 溢出(&gt;256KB)、临时文件 TTL、大文件上传(&gt;10MB),保障系统稳定</td><td>拦截器在 <code>StabilityInterceptor</code> 统一实现;超限返回 <code>file_ref</code> 而非内联</td></tr>
+        <tr><td><strong>P0-8</strong></td><td>作为平台管理员,我希望三级探活机制保证 Agent 不会因工具不可用而卡死:注册时强制测试 + 周期巡检(默认 5min) + 调用前快速探活(60s 缓存)</td><td>健康状态机:registered → active → degraded → offline;连续 3 次失败降级为 offline</td></tr>
+        <tr><td><strong>P0-9</strong></td><td>作为平台管理员,我希望调用监控页能查看每个工具的调用次数、成功率、延迟、用户级调用画像(token 消耗)</td><td><code>MetricsCollector</code> 记录完整;支持按 tool/user/team/space 维度筛选</td></tr>
+        <tr><td><strong>P0-10</strong></td><td>作为技能插件中心(MATS 等消费端),我希望调用 <code>ToolCatalogAPI.list_tools_for_user(user_id, team_id, space_id)</code> 获取当前用户可调用的工具清单(含元数据、参数 schema、user_id 透传方式、降级路径)</td><td>接口契约稳定;返回的 <code>ToolMeta</code> 含描述、参数、降级、权限元信息</td></tr>
+        <tr><td><strong>P0-11</strong></td><td>作为数据/知识/文件工作台,我希望将内部能力注册为 <code>INTERNAL</code> 连接器,Agent 通过统一工具调用访问</td><td>InternalProvider 实现差异;鉴权遵循同一 AuthGateway</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.2 P1 — Should Have（对齐父 PRD V0.2 增强项）</h3>
+    <table>
+      <thead>
+        <tr><th>#</th><th>用户故事</th><th>验收标准</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P1-1</strong></td><td>作为平台管理员,我希望为工具配置超时(默认 30s)和单工具并发上限(默认 10),超限排队或拒绝</td><td>超时和并发在 <code>ToolModelConfig</code> 中可配</td></tr>
+        <tr><td><strong>P1-2</strong></td><td>作为 FDE Delta,我希望 HPA Controller 基于 CPU/QPS/并发自动扩缩容(冷却 60s,缩容延迟 5min,上限 <code>max_replicas</code>)</td><td>扩容命中阈值持续 60s 触发;缩容持续 5min 触发;故障熔断:1h 重启超 <code>max_restarts_per_hour</code> 标 <code>offline</code></td></tr>
+        <tr><td><strong>P1-3</strong></td><td>作为后端开发者,我希望通过 <code>UserContext SDK</code>(Python/Java)获取 user_id 及关联属性(团队、角色、部门、空间),避免每个工具重复解析</td><td>SDK 5 行代码即可获取 user_id;与平台 <code>user_id</code> 透传契约一致</td></tr>
+        <tr><td><strong>P1-4</strong></td><td>作为平台管理员,我希望工具配置可作为项目资产快照的一部分被 Fork,跨团队复用</td><td>快照导出/导入 JSON 包含 <code>ConnectorSpec</code>(脱敏凭证)</td></tr>
+        <tr><td><strong>P1-5</strong></td><td>作为平台管理员,我希望 Serverless 工具支持 mTLS 出向调用(满足客户内网部署要求)</td><td>manifest 中显式声明;网络策略仅放行白名单下游</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.3 P2 — Nice to Have / 后续版本</h3>
+    <table>
+      <thead>
+        <tr><th>#</th><th>用户故事</th><th>验收标准</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P2-1</strong></td><td>工具市场 / 跨平台工具共享</td><td>后续版本评估</td></tr>
+        <tr><td><strong>P2-2</strong></td><td>工具级版本管理与回滚</td><td>首版仅记录 <code>version</code> 字段,后续完善</td></tr>
+        <tr><td><strong>P2-3</strong></td><td>工具级细粒度网络隔离</td><td>先做平台级白名单,后续工具级</td></tr>
+        <tr><td><strong>P2-4</strong></td><td>Serverless GPU 沙箱、自定义网络、Sidecar 注入</td><td>列入 v1.0 后续</td></tr>
+        <tr><td><strong>P2-5</strong></td><td>工具语义搜索 / 智能推荐</td><td>Agent 工具列表过长时,语义搜索排序</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.4 跨模块契约（必须与其他模块对齐）</h3>
+    <table>
+      <thead>
+        <tr><th>上游/下游</th><th>契约</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>技能插件中心(KR4)</td><td>提供 <code>ToolCatalogAPI.list_tools_for_user()</code> + <code>get_tool_meta()</code>;技能描述中引用工具;<code>/command</code> 搜索时把工具作为候选项</td></tr>
+        <tr><td>多智能体团队(MATS)</td><td>提供 <code>compile_tool_set()</code> 编译为 <code>ClaudeAgentOptions.mcp_servers</code> + <code>allowed_tools</code></td></tr>
+        <tr><td>权限与成员管理(KR6)</td><td>复用平台 user/team/space 模型;<code>user_tool_grants</code> 由权限服务管理,AuthGateway 调用校验</td></tr>
+        <tr><td>运营统计后台</td><td>上报调用次数/成功率/延迟/用户级调用画像/扩容事件</td></tr>
+        <tr><td>项目资产库</td><td>工具配置/ConnectorSpec 可作为快照一部分;导出导入 JSON</td></tr>
+        <tr><td>数据/知识/文件工作台</td><td>内部能力以 <code>INTERNAL</code> 连接器注册,Agent 通过统一工具调用访问</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-6" class="prd-section">
+    <h2>6. Solution Overview</h2>
+
+    <h3>6.1 高层方案（与 tech design §2 一致）</h3>
+    <p><strong>范围</strong>：本模块只承载 <strong>MCP Server + HTTP API</strong> 两类外部能力来源，以及 v2.0 新增的 <strong>用户上传代码 → Serverless 沙箱</strong> 托管。Skills/Plugins/Commands 由技能插件中心承载，数据/知识/文件能力以 <code>INTERNAL</code> 连接器方式接入本平台。</p>
+    <p><strong>三大设计决策</strong>（摘自 tech design §1.2）：</p>
+    <ol>
+      <li><strong>MCP 为标准协议</strong> — 与 Claude Agent SDK <code>mcp_servers</code> 原生对接，零适配成本。</li>
+      <li><strong>三类工具来源</strong> — ①外部托管 MCP/API ②用户上传代码 → Serverless 沙箱 ③平台内置 <code>INTERNAL</code> API。</li>
+      <li><strong>user_id 贯通</strong> — 平台调用网关层统一注入（Header + metadata + payload 多通道），后端按 user_id 实施功能/数据权限。</li>
+    </ol>
+
+    <h3>6.2 端到端流程（消费侧）</h3>
+
+    <div class="flow-section">
+      <div class="flow-section-title">A. Agent 启动阶段</div>
+      <div class="flow-row">
+        <div class="flow-node blue">
+          <div class="flow-node-title">Agent 启动</div>
+          <div class="flow-node-desc">加载配置,准备工具集</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node">
+          <div class="flow-node-title">按 user_id 过滤 ACL</div>
+          <div class="flow-node-desc">从三维 ACL + user_tool_grants 筛选可见工具</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node green">
+          <div class="flow-node-title">编译工具集</div>
+          <div class="flow-node-desc"><code>ClaudeAgentOptions.mcp_servers</code> + <code>allowed_tools</code></div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node gray">
+          <div class="flow-node-title">详情查看（按需）</div>
+          <div class="flow-node-desc">元数据 / 降级路径 / 权限</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <div class="flow-section-title">B. AuthGateway 鉴权（7 步判定,任一拒绝即返回 permission_denied）</div>
+      <div class="flow-row">
+        <div class="flow-node">
+          <div class="flow-node-title">AuthGateway.check</div>
+          <div class="flow-node-desc">入参: <code>user_id, team_id, role, space_id, tool_name</code></div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-list">
+          <div class="flow-list-item">1) <code>user_tool_grants.deny</code> 命中? → <strong>拒绝</strong></div>
+          <div class="flow-list-item">2) <code>user_tool_grants.allow</code> 命中? → 放行 + scope 限制</div>
+          <div class="flow-list-item">3) <code>tool_acl.denied_teams</code>? → <strong>拒绝</strong></div>
+          <div class="flow-list-item">4) <code>tool_acl.allowed_teams</code> 不匹配? → <strong>拒绝</strong></div>
+          <div class="flow-list-item">5) <code>tool_acl.allowed_roles</code> 不匹配? → <strong>拒绝</strong></div>
+          <div class="flow-list-item">6) <code>space_scope=own_space</code> 空间不一致? → <strong>拒绝</strong></div>
+          <div class="flow-list-item">7) <code>requires_approval</code>? → 标记 pending</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node result-ok">
+          <div class="flow-node-title">放行 + 注入 user_id</div>
+          <div class="flow-node-desc">构造 <code>ToolInvokeContext</code> 进入执行阶段</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <div class="flow-section-title">C. 调用执行 + 后处理</div>
+      <div class="flow-row">
+        <div class="flow-node">
+          <div class="flow-node-title">ConnectorManager.resolve(tool_name)</div>
+          <div class="flow-node-desc">未找到 → 工具不存在</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node orange">
+          <div class="flow-node-title">HealthChecker.quick_probe</div>
+          <div class="flow-node-desc">缓存 60s 内跳过;不可用走降级路径</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node purple">
+          <div class="flow-node-title">ToolInvokeContext</div>
+          <div class="flow-node-desc"><code>{user_id, team_id, role, space_id, request_id, trace_id}</code></div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node">
+          <div class="flow-node-title">ToolExecutor.execute</div>
+          <div class="flow-node-desc">按 ConnectorKind 路由到对应 Provider</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-branches">
+          <div class="flow-branch">
+            <div class="flow-branch-title">MCPServerProvider</div>
+            <div class="flow-branch-desc">→ MCP metadata.user_id</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-branch-title">HTTPAPIProvider</div>
+            <div class="flow-branch-desc">→ Header / Query / Body</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-branch-title">UserCodeProvider</div>
+            <div class="flow-branch-desc">→ sandbox / Docker</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-branch-title">InternalProvider</div>
+            <div class="flow-branch-desc">→ 内部服务</div>
+          </div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node pink">
+          <div class="flow-node-title">StabilityInterceptor</div>
+          <div class="flow-node-desc">JSON buffer / 临时文件 / 大文件 / 超时 / 并发</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node green">
+          <div class="flow-node-title">MetricsCollector.record</div>
+          <div class="flow-node-desc">tool, user_id, latency, success</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node gray">
+          <div class="flow-node-title">返回结果给 Agent</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>6.3 管理端流程（注册 + 部署）</h3>
+    <p><strong>外部连接器注册</strong>：</p>
+    <div class="flow-section">
+      <div class="flow-section-title">外部连接器注册流程</div>
+      <div class="flow-row">
+        <div class="flow-node">
+          <div class="flow-node-title">填写 ConnectorSpec</div>
+          <div class="flow-node-desc">name, kind, endpoint, auth, tools, ...</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node orange">
+          <div class="flow-node-title">HealthChecker 完整握手测试</div>
+          <div class="flow-node-desc">MCP initialize / HTTP 全端点 / <code>__tools/list</code></div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node green">
+          <div class="flow-node-title">持久化 / ACL / 索引</div>
+          <div class="flow-node-desc">状态 → ACTIVE</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node gray">
+          <div class="flow-node-title">周期巡检 (5min)</div>
+          <div class="flow-node-desc">异常告警 + 状态机流转</div>
+        </div>
+      </div>
+    </div>
+
+    <p><strong>Serverless 工具部署</strong>：</p>
+    <div class="flow-section">
+      <div class="flow-section-title">Serverless 工具部署流程</div>
+      <div class="flow-row">
+        <div class="flow-node">
+          <div class="flow-node-title">上传 zip + manifest.yaml</div>
+          <div class="flow-node-desc">Python / Java 代码包</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node orange">
+          <div class="flow-node-title">PackageReceiver 校验</div>
+          <div class="flow-node-desc">≤200MB / 语言 / manifest 完整性</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node purple">
+          <div class="flow-node-title">ImageBuilder 构建</div>
+          <div class="flow-node-desc">选基础镜像 → 解压 → 装依赖 → 注入启动脚本</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node">
+          <div class="flow-node-title">InstanceOrchestrator 拉起</div>
+          <div class="flow-node-desc"><code>base_replicas</code> 个 sandbox / Docker 实例</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node">
+          <div class="flow-node-title">上报 <code>/__tools/list</code></div>
+          <div class="flow-node-desc">实例暴露的工具清单</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node orange">
+          <div class="flow-node-title">端点可达 + 握手校验</div>
+          <div class="flow-node-desc">HealthChecker 验证</div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node green">
+          <div class="flow-node-title">写入 ConnectorSpec</div>
+          <div class="flow-node-desc"><code>kind=USER_CODE</code></div>
+        </div>
+        <div class="flow-arrow"></div>
+        <div class="flow-node pink">
+          <div class="flow-node-title">HPA + MasterSlave 治理</div>
+          <div class="flow-node-desc">CPU/QPS/并发扩缩容 + 1 主 N 从 + 心跳切换</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>6.4 关键能力清单(与验收对应)</h3>
+    <table>
+      <thead>
+        <tr><th>能力</th><th>来源</th><th>对应 P0</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>外部 MCP Server 注册</td><td>tech design §3</td><td>P0-1</td></tr>
+        <tr><td>外部 HTTP API 注册 + 工具映射</td><td>tech design §3.3</td><td>P0-2</td></tr>
+        <tr><td>三维 ACL + user_id 授权</td><td>tech design §6</td><td>P0-3</td></tr>
+        <tr><td>Serverless 工具部署</td><td>tech design §4</td><td>P0-4</td></tr>
+        <tr><td>user_id 多通道透传</td><td>tech design §5.2</td><td>P0-5</td></tr>
+        <tr><td>降级策略</td><td>tech design §5.3</td><td>P0-6</td></tr>
+        <tr><td>稳定性拦截</td><td>tech design §5.4</td><td>P0-7</td></tr>
+        <tr><td>三级探活</td><td>tech design §8</td><td>P0-8</td></tr>
+        <tr><td>调用统计与画像</td><td>tech design §10 / §11</td><td>P0-9</td></tr>
+        <tr><td>工具清单 API</td><td>tech design §7.1</td><td>P0-10</td></tr>
+        <tr><td>INTERNAL 连接器</td><td>tech design §3.2 / §7.3</td><td>P0-11</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.5 与相邻模块的边界(摘自 tech design §11,作为产品边界)</h3>
+    <table>
+      <thead>
+        <tr><th>模块</th><th>边界</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>技能插件中心</td><td>工具平台<strong>提供</strong>工具清单与元数据(消费用)，技能插件<strong>不</strong>通过本平台注册</td></tr>
+        <tr><td>多智能体团队(MATS)</td><td>工具平台<strong>提供</strong> <code>compile_tool_set()</code> 与 <code>ToolExecutor.invoke()</code>，MATS <strong>消费</strong></td></tr>
+        <tr><td>数据/知识/文件工作台</td><td>内部能力注册为 <code>INTERNAL</code> 连接器</td></tr>
+        <tr><td>权限与成员管理</td><td>工具平台<strong>复用</strong>平台用户/团队/空间模型；<code>user_tool_grants</code> 由权限服务管理</td></tr>
+        <tr><td>运营统计后台</td><td>工具平台上报调用画像</td></tr>
+        <tr><td>项目资产库</td><td>工具配置可作为快照一部分</td></tr>
+        <tr><td>Serverless 部署中心</td><td>属于本平台的子模块</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-7" class="prd-section">
+    <h2>7. Open Questions</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>问题</th><th>负责人</th><th>截止时间</th><th>备注</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Serverless 沙箱默认上限:单实例 CPU/内存配额?最大 zip 大小 200MB 是否调整?</td><td>平台架构师</td><td>MVP 设计冻结前</td><td>影响成本与稳定性</td></tr>
+        <tr><td>2</td><td>工具配置 Fork 时凭证如何处理(明文/加密/重注入)?</td><td>平台架构师 + 安全</td><td>MVP 设计冻结前</td><td>跨团队复用安全边界</td></tr>
+        <tr><td>3</td><td><code>user_id</code> 透传到第三方 MCP/API 时,如何应对"被代理剥离"场景?</td><td>平台架构师</td><td>V0.2 上线前</td><td>tech design §13 已列风险</td></tr>
+        <tr><td>4</td><td>调用前快速探活缓存 60s 是否需要按工具可配?</td><td>FDE 负责人</td><td>V0.2 设计评审</td><td>影响可用性 vs 调用延迟</td></tr>
+        <tr><td>5</td><td>Serverless 工具的 egress 网络白名单默认值?</td><td>平台架构师</td><td>V0.2 设计评审</td><td>客户现场网络限制差异大</td></tr>
+        <tr><td>6</td><td>内部 API(<code>INTERNAL</code> 连接器)是否需要单独的"内部注册"管理端 UI,还是复用同一表单?</td><td>产品负责人</td><td>V0.2 设计冻结前</td><td>内部能力的可见性边界</td></tr>
+        <tr><td>7</td><td>调用监控页是否需要"实时"通道(WebSocket)还是仅 T+1 统计?</td><td>FDE 负责人</td><td>V0.2 设计评审</td><td>tech design §10 选了 WebSocket</td></tr>
+        <tr><td>8</td><td>工具配置接入项目资产快照后,Fork 时是否需要"工具可用性预检"?</td><td>产品负责人</td><td>V1.0 设计冻结前</td><td>影响复用体验</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-8" class="prd-section">
+    <h2>8. Timeline &amp; Phasing</h2>
+
+    <h3>8.1 版本策略(与父 PRD 8.x 对齐)</h3>
+    <p>本模块沿用父 PRD 三阶段策略,本表为<strong>本模块</strong>在每个阶段的具体范围。</p>
+
+    <h3>8.2 V0.1 阶段(本模块范围)</h3>
+    <ul>
+      <li>范围:<strong>连接器注册中心</strong>(MCP Server + HTTP API + 内部 API)的元数据 CRUD、鉴权存储、连通性测试。</li>
+      <li>不包含:Serverless 沙箱、user_id 工具级显式授权(只保留三维 ACL)、HPA 高级特性。</li>
+      <li>验收对齐父 PRD 9 节相关项:工具接入(管理员能注册 MCP/API 并完成连通性测试)。</li>
+    </ul>
+
+    <h3>8.3 V0.2 阶段(本模块范围,MVP 主战场)</h3>
+    <blockquote>
+      <p>对应父 PRD §12.3 实施 lanes 中 A / B / C / D / E / F / G / H / I。</p>
+    </blockquote>
+    <table>
+      <thead>
+        <tr><th>实施 Lane</th><th>内容</th><th>对应 P0</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Lane A</strong></td><td>ConnectorRegistry + ConnectorSpec(USER_CODE、user_permission 字段) + Postgres 表</td><td>P0-1 / P0-2 / P0-11</td></tr>
+        <tr><td><strong>Lane B</strong></td><td>MCPServerProvider / HTTPAPIProvider / InternalProvider 扩展(含 user_id 透传)</td><td>P0-5 / P0-11</td></tr>
+        <tr><td><strong>Lane C</strong></td><td>CodeSandbox Runtime(PackageReceiver + ImageBuilder + SandboxPool) + 镜像仓库</td><td>P0-4</td></tr>
+        <tr><td><strong>Lane D</strong></td><td>UserCodeProvider + ToolAutoRegistrar + 启动清单上报</td><td>P0-4</td></tr>
+        <tr><td><strong>Lane E</strong></td><td>AuthGateway 扩展(user_tool_grants + user_id 注入)</td><td>P0-3 / P0-5</td></tr>
+        <tr><td><strong>Lane F</strong></td><td>ToolExecutor + StabilityInterceptor + 降级策略</td><td>P0-6 / P0-7</td></tr>
+        <tr><td><strong>Lane G</strong></td><td>HPA Controller + MasterSlaveController + 重启熔断 + 三级探活</td><td>P0-4 / P0-8</td></tr>
+        <tr><td><strong>Lane H</strong></td><td>工具接入管理 UI + Serverless 部署中心 UI + 调用监控 UI(E2E 串联)</td><td>P0-1~P0-4 全部</td></tr>
+        <tr><td><strong>Lane I</strong></td><td>UserContext SDK(Python/Java) + 后端接入指引</td><td>P1-3</td></tr>
+      </tbody>
+    </table>
+    <p><strong>V0.2 验收对齐</strong>:</p>
+    <ul>
+      <li>管理员能注册 MCP/API 并完成连通性测试(父 PRD 9.工具接入)</li>
+      <li>工具级权限 + user_id 显式授权(父 PRD 9.权限管理)</li>
+      <li>Serverless 工具能上传→构建→启动→扩缩容→重启(本 P0-4)</li>
+      <li>调用统计 + 用户级画像(本 P0-9)</li>
+    </ul>
+
+    <h3>8.4 V1.0 阶段(本模块范围)</h3>
+    <ul>
+      <li>Serverless 多语言高级特性(GPU 沙箱、自定义网络、Sidecar 注入)。</li>
+      <li>工具配置作为项目资产快照的一部分(Fork 复用,本 P1-4)。</li>
+      <li>mTLS 出向调用(本 P1-5)。</li>
+      <li>工具语义搜索 / 智能推荐(本 P2-5)。</li>
+    </ul>
+
+    <h3>8.5 后续版本方向</h3>
+    <ul>
+      <li>工具市场 / 跨平台工具共享(本 P2-1)。</li>
+      <li>工具级版本管理与回滚(本 P2-2)。</li>
+      <li>工具级细粒度网络隔离(本 P2-3)。</li>
+      <li>更完善的工具级运营分析与成本分析。</li>
+    </ul>
+  </section>
+
+  <section id="section-appendix-a" class="prd-section">
+    <h2>附录 A:术语表</h2>
+    <table>
+      <thead>
+        <tr><th>术语</th><th>含义</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Tools</strong></td><td>本模块范围,特指 MCP Server + HTTP API + Serverless 沙箱托管工具 + INTERNAL 内部能力</td></tr>
+        <tr><td><strong>MCP</strong></td><td>Model Context Protocol,与 Claude Agent SDK 原生对接的工具协议</td></tr>
+        <tr><td><strong>Skills / Plugins / Commands</strong></td><td>不在本模块范围,由技能插件中心承载</td></tr>
+        <tr><td><strong>ConnectorSpec</strong></td><td>工具的统一元数据描述(name/kind/endpoint/auth/tools/fallback/user_permission 等)</td></tr>
+        <tr><td><strong>ConnectorKind</strong></td><td>mcp_server / http_api / user_code / internal</td></tr>
+        <tr><td><strong>user_id 贯通</strong></td><td>平台调用网关层统一注入 user_id 并多通道透传到 MCP/HTTP 后端,后端按 user_id 实施功能/数据权限</td></tr>
+        <tr><td><strong>三维 ACL</strong></td><td>团队(allowed_teams / denied_teams) / 角色(allowed_roles) / 空间(space_scope)</td></tr>
+        <tr><td><strong>user_tool_grants</strong></td><td>user_id 维度的工具级显式授权,叠加在三维 ACL 之上(deny 优先于 allow)</td></tr>
+        <tr><td><strong>FallbackPolicy</strong></td><td>工具降级策略:cache / alternative_tool / retry / error_message</td></tr>
+        <tr><td><strong>HPA</strong></td><td>Horizontal Pod Autoscaler,基于 CPU/QPS/并发的横向扩缩容</td></tr>
+        <tr><td><strong>MasterSlave</strong></td><td>1 主 N 从沙箱架构,主异常时从切主</td></tr>
+        <tr><td><strong>StabilityInterceptor</strong></td><td>ToolExecutor 网关层的稳定性治理(JSON buffer / 临时文件 / 大文件 / 超时 / 并发)</td></tr>
+        <tr><td><strong>UserContext SDK</strong></td><td>供后端开发者获取 user_id 及关联属性的 SDK(Python/Java)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="section-appendix-b" class="prd-section">
+    <h2>附录 B:与父 PRD 的关系</h2>
+    <ul>
+      <li><strong>本 PRD 不重复父 PRD §1-§7.3.2 的内容</strong>,仅在 §2 中引用必要上下文。</li>
+      <li><strong>本 PRD 的 KR / 指标 / 验收均对齐父 PRD</strong>,并细化到本模块级。</li>
+      <li><strong>本 PRD 的 Non-Goals 必须与父 PRD Non-Goals 一致</strong>(技能插件、数据/知识业务实现等不在本模块)。</li>
+      <li><strong>本 PRD 的版本阶段(V0.1 / V0.2 / V1.0)与父 PRD §8 版本阶段一一对应</strong>。</li>
+    </ul>
+  </section>
+
+</main>
+
+<script>
+  (function() {
+    var sections = document.querySelectorAll('.content section[id]');
+    var navLinks = document.querySelectorAll('.sidebar-nav a');
+
+    function setActive(id) {
+      navLinks.forEach(function(a) {
+        if (a.getAttribute('href') === '#' + id) {
+          a.classList.add('active');
+        } else {
+          a.classList.remove('active');
+        }
+      });
+    }
+
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function(entries) {
+        var visible = entries
+          .filter(function(e) { return e.isIntersecting; })
+          .sort(function(a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+        if (visible.length > 0) {
+          setActive(visible[0].target.id);
+        }
+      }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+      sections.forEach(function(s) { observer.observe(s); });
+    }
+
+    // 初始化:如果页面载入时第一个章节可见,激活对应目录
+    var first = document.querySelector('.content section[id]');
+    if (first) setActive(first.id);
+  })();
+</script>
+
+</body>
+</html>

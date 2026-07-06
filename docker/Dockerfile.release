@@ -1,0 +1,72 @@
+# syntax=docker/dockerfile:1.7
+
+ARG BACKEND_BASE_IMAGE=gokagent-backend:base
+
+# ========== Stage 1: 构建前端 ==========
+FROM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm config set registry https://registry.npmmirror.com \
+ && npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# ========== Stage 2: 使用 Nuitka 编译后端 ==========
+FROM ${BACKEND_BASE_IMAGE} AS nuitka-builder
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    build-essential \
+    ccache \
+    patchelf \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/backend
+
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --no-dev --frozen
+
+RUN uv pip install --python .venv/bin/python \
+    nuitka \
+    ordered-set \
+    zstandard
+
+COPY backend/app ./app
+
+RUN .venv/bin/python -m nuitka \
+    --mode=package \
+    --include-package=app \
+    --nofollow-imports \
+    --no-pyi-file \
+    --remove-output \
+    --output-dir=/tmp/nuitka \
+    app
+
+# release 镜像只复制编译产物;这里显式确认不会把业务 Python 源码带入后续阶段。
+RUN test -f /tmp/nuitka/app*.so
+
+
+# ========== Stage 3: 客户交付运行镜像 ==========
+FROM ${BACKEND_BASE_IMAGE} AS release-runtime
+
+RUN npm install -g @supabase/supabase-js
+
+WORKDIR /app
+
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+WORKDIR /app/backend
+
+COPY --from=nuitka-builder /app/backend/.venv ./.venv
+COPY --from=nuitka-builder /tmp/nuitka/app*.so ./
+
+# app.main 会通过 __file__ 推导 frontend 目录;软链兼容 Nuitka 运行目录。
+RUN ln -sfn /app/frontend /app/backend/frontend
+
+EXPOSE 8000
+
+CMD ["/app/backend/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio", "--http", "h11", "--lifespan", "on", "--proxy-headers", "--forwarded-allow-ips", "*"]

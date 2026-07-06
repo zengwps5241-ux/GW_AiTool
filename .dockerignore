@@ -1,0 +1,35 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.gitignore
+frontend/legacy/
+frontend/tsconfig*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+
+# Backend Python
+backend/.venv/
+backend/__pycache__/
+backend/**/*.egg-info/
+backend/.pytest_cache/
+backend/data/
+backend/.env
+backend/tests/
+
+# Runtime data (宿主机持久化，不打包进镜像)
+user_workspaces/
+claude_data/
+agent_workspaces/
+
+# Other
+.claude/
+.playwright-mcp/
+docs/

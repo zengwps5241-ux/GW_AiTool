@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>goktech-agents 知识工作台 · 技术方案 v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0891b2;
+            --primary-dark: #0e7490;
+            --secondary: #7c3aed;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, sans-serif;
+            background: #f1f5f9;
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        code, pre { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #0c4a6e 0%, #0891b2 50%, #7c3aed 100%);
+            color: white;
+            padding: 80px 40px 60px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(124, 58, 237, 0.3) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(245, 158, 11, 0.2) 0%, transparent 40%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero-badges { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+
+        .hero-badge {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .hero h1 {
+            font-size: 44px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #fff 0%, #a5f3fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            max-width: 800px;
+        }
+
+        .hero-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 40px;
+            max-width: 900px;
+        }
+
+        .hero-meta-item {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .hero-meta-label {
+            font-size: 12px;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .hero-meta-value { font-size: 15px; font-weight: 500; }
+
+        /* Layout */
+        .layout { display: flex; max-width: 1400px; margin: 0 auto; gap: 0; }
+
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: white;
+            border-right: 1px solid var(--border);
+            height: calc(100vh - 20px);
+            position: sticky;
+            top: 20px;
+            padding: 24px 16px;
+            overflow-y: auto;
+            border-radius: 16px 0 0 16px;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .sidebar-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-light);
+            margin-bottom: 16px;
+            padding-left: 12px;
+            font-weight: 600;
+        }
+
+        .nav-list { list-style: none; }
+        .nav-item { margin-bottom: 2px; }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 9px 12px;
+            color: var(--text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 13.5px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .nav-link:hover { background: #f1f5f9; color: var(--primary); }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+
+        .nav-number {
+            width: 22px;
+            height: 22px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            margin-right: 10px;
+            color: var(--text-light);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .nav-link.active .nav-number {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+        }
+
+        .main-content { flex: 1; min-width: 0; padding: 40px 20px; }
+
+        /* Section */
+        .section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .section-number {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+            margin-right: 16px;
+        }
+
+        .section-title { font-size: 26px; font-weight: 700; }
+
+        h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 32px 0 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        h3::before {
+            content: '';
+            width: 4px;
+            height: 22px;
+            background: var(--accent);
+            border-radius: 2px;
+            margin-right: 10px;
+        }
+
+        h4 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 12px;
+            color: var(--primary);
+        }
+
+        p { margin-bottom: 12px; color: #334155; }
+
+        /* Position diagram */
+        .position-flow {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            gap: 12px;
+            align-items: stretch;
+            margin: 24px 0;
+        }
+
+        .position-stage {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid var(--info);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .position-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 12px;
+        }
+
+        .position-name { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+        .position-items { font-size: 13px; color: var(--text-light); }
+        .position-items div { padding: 3px 0; }
+
+        .position-stage.highlight {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-color: var(--accent);
+            border-width: 3px;
+            transform: scale(1.05);
+            box-shadow: 0 8px 24px rgba(245, 158, 11, 0.2);
+        }
+
+        .position-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        /* Architecture */
+        .arch-diagram {
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            border-radius: 16px;
+            padding: 32px;
+            margin: 24px 0;
+            border: 1px solid var(--border);
+        }
+
+        .arch-layer {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+
+        .arch-layer:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(8, 145, 178, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .arch-layer-title { display: flex; align-items: center; margin-bottom: 12px; }
+
+        .arch-layer-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .arch-layer-name { font-size: 16px; font-weight: 700; }
+
+        .arch-layer-tag {
+            margin-left: auto;
+            font-size: 12px;
+            padding: 4px 10px;
+            background: #cffafe;
+            color: var(--primary-dark);
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .arch-components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .arch-component {
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            border-left: 3px solid var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .arch-arrow {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 18px;
+            margin: -8px 0;
+        }
+
+        /* Tables */
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin: 16px 0;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+        th {
+            background: linear-gradient(135deg, #f8fafc 0%, #ecfeff 100%);
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f8fafc; }
+
+        /* Code */
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 20px 24px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 16px 0;
+            border: 1px solid #334155;
+        }
+
+        pre .comment { color: #64748b; font-style: italic; }
+        pre .keyword { color: #c084fc; }
+        pre .string { color: #86efac; }
+        pre .function { color: #60a5fa; }
+        pre .decorator { color: #fbbf24; }
+        pre .class { color: #f472b6; }
+        pre .number { color: #fb923c; }
+
+        code:not(pre code) {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--primary);
+        }
+
+        /* Tags */
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 6px;
+        }
+
+        .tag-primary { background: #cffafe; color: var(--primary-dark); }
+        .tag-success { background: #d1fae5; color: #065f46; }
+        .tag-warning { background: #fef3c7; color: #92400e; }
+        .tag-danger { background: #fee2e2; color: #991b1b; }
+        .tag-info { background: #cffafe; color: #155e75; }
+        .tag-purple { background: #ede9fe; color: #5b21b6; }
+        .tag-accent { background: #fed7aa; color: #9a3412; }
+
+        /* Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .card {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(8, 145, 178, 0.1);
+        }
+
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            color: white;
+            font-size: 22px;
+        }
+
+        .card-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+        .card-desc { font-size: 13px; color: var(--text-light); }
+
+        /* Flow */
+        .flow { margin: 24px 0; }
+
+        .flow-step {
+            display: flex;
+            align-items: stretch;
+            margin-bottom: 4px;
+        }
+
+        .flow-num {
+            width: 36px;
+            min-width: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            margin-right: 16px;
+            flex-shrink: 0;
+            height: 36px;
+        }
+
+        .flow-content {
+            flex: 1;
+            background: #f8fafc;
+            padding: 14px 18px;
+            border-radius: 10px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .flow-content strong {
+            color: var(--primary-dark);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .flow-arrow {
+            text-align: center;
+            color: var(--primary);
+            font-size: 20px;
+            margin: 4px 0 4px 8px;
+        }
+
+        /* Highlights */
+        .highlight {
+            background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+            border-left: 4px solid var(--primary);
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 16px 0;
+        }
+
+        .decision {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid var(--warning);
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 16px 0;
+        }
+
+        .danger-note {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-left: 4px solid var(--danger);
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 16px 0;
+        }
+
+        /* Lifecycle */
+        .lifecycle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 28px 20px;
+            background: linear-gradient(135deg, #f0f9ff 0%, #ede9fe 100%);
+            border-radius: 16px;
+            margin: 20px 0;
+        }
+
+        .lc-state {
+            padding: 12px 18px;
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary-dark);
+            font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .lc-arrow { color: var(--primary); font-size: 22px; font-weight: 700; }
+
+        .lc-state.building { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: var(--accent); color: #92400e; }
+        .lc-state.active { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-color: var(--success); color: #065f46; }
+        .lc-state.updating { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-color: var(--info); color: #1e40af; }
+        .lc-state.archived { background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); border-color: #6b7280; color: #374151; }
+
+        /* Lanes */
+        .lanes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .lane {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+        }
+
+        .lane-id {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .lane-name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+        .lane-desc { font-size: 12px; color: var(--text-light); }
+
+        .lane-deps {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: var(--accent);
+            color: white;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Graph viz */
+        .graph-viz {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #ecfeff 100%);
+            border-radius: 16px;
+            margin: 20px 0;
+            position: relative;
+            min-height: 280px;
+        }
+
+        .graph-node {
+            position: absolute;
+            width: 90px;
+            height: 90px;
+            background: white;
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--primary-dark);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .graph-node.central {
+            width: 110px;
+            height: 110px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-color: var(--secondary);
+            font-size: 14px;
+        }
+
+        .graph-edge {
+            position: absolute;
+            font-size: 11px;
+            color: var(--text-light);
+            font-family: 'JetBrains Mono', monospace;
+            background: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        /* Tech stack visual */
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .tech-card {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .tech-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+
+        .tech-layer { font-size: 12px; color: var(--text-light); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .tech-name { font-weight: 700; font-size: 15px; color: var(--primary-dark); margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
+        .tech-desc { font-size: 12px; color: var(--text-light); }
+
+        /* Conclusion */
+        .conclusion {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 16px;
+            margin: 24px 0;
+        }
+
+        .conclusion h3 { color: white; font-size: 22px; margin-bottom: 16px; }
+        .conclusion h3::before { background: white; }
+        .conclusion p { color: rgba(255,255,255,0.95); }
+
+        @media (max-width: 1024px) {
+            .layout { display: block; }
+            .sidebar {
+                position: relative;
+                width: 100%;
+                min-width: 0;
+                height: auto;
+                top: 0;
+                border-radius: 16px;
+                margin: 20px 20px 0;
+                max-height: 300px;
+            }
+            .main-content { padding: 20px; }
+        }
+
+        @media (max-width: 768px) {
+            .section { padding: 24px; }
+            .hero { padding: 40px 20px; }
+            .hero h1 { font-size: 28px; }
+            .position-flow { grid-template-columns: 1fr; }
+            .position-arrow { transform: rotate(90deg); }
+        }
+    </style>
+</head>
+<body>
+
+<header class="hero">
+    <div class="hero-content">
+        <div class="hero-badges">
+            <span class="hero-badge">📐 技术方案 v1.0</span>
+            <span class="hero-badge">🧠 Knowledge Platform</span>
+            <span class="hero-badge">📚 RAG + Graph + Ontology</span>
+            <span class="hero-badge">🔬 Eval-Driven</span>
+        </div>
+        <h1>知识工作台技术方案</h1>
+        <p class="hero-subtitle">在结构化数据之上构建 Agent 可理解、可检索、可评测的知识表示层 — RAG 知识库 + 知识图谱 + 本体 schema + 评测闭环</p>
+
+        <div class="hero-meta">
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">版本</div>
+                <div class="hero-meta-value">v1.0</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">日期</div>
+                <div class="hero-meta-value">2026-05-31</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">定位</div>
+                <div class="hero-meta-value">售前/方案级</div>
+            </div>
+            <div class="hero-meta-item">
+                <div class="hero-meta-label">覆盖 KR</div>
+                <div class="hero-meta-value">KR2 (RAG 知识库和基础评测)</div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="sidebar">
+        <div class="sidebar-title">📑 目录导航</div>
+        <ul class="nav-list">
+            <li class="nav-item"><a href="#sec1" class="nav-link"><span class="nav-number">1</span>概述</a></li>
+            <li class="nav-item"><a href="#sec2" class="nav-link"><span class="nav-number">2</span>总体架构</a></li>
+            <li class="nav-item"><a href="#sec3" class="nav-link"><span class="nav-number">3</span>RAG 知识库</a></li>
+            <li class="nav-item"><a href="#sec4" class="nav-link"><span class="nav-number">4</span>RAG 评测面板</a></li>
+            <li class="nav-item"><a href="#sec5" class="nav-link"><span class="nav-number">5</span>知识图谱工作台</a></li>
+            <li class="nav-item"><a href="#sec6" class="nav-link"><span class="nav-number">6</span>本体工作台</a></li>
+            <li class="nav-item"><a href="#sec7" class="nav-link"><span class="nav-number">7</span>知识库生命周期</a></li>
+            <li class="nav-item"><a href="#sec8" class="nav-link"><span class="nav-number">8</span>技术栈</a></li>
+            <li class="nav-item"><a href="#sec9" class="nav-link"><span class="nav-number">9</span>模块边界</a></li>
+            <li class="nav-item"><a href="#sec10" class="nav-link"><span class="nav-number">10</span>MVP 实施</a></li>
+            <li class="nav-item"><a href="#sec11" class="nav-link"><span class="nav-number">11</span>风险与应对</a></li>
+            <li class="nav-item"><a href="#sec12" class="nav-link"><span class="nav-number">12</span>测试策略</a></li>
+            <li class="nav-item"><a href="#sec13" class="nav-link"><span class="nav-number">13</span>结论</a></li>
+        </ul>
+    </aside>
+
+    <div class="main-content">
+
+    <!-- 1. 概述 -->
+    <section id="sec1" class="section">
+        <div class="section-header">
+            <span class="section-number">1</span>
+            <h2 class="section-title">概述</h2>
+        </div>
+
+        <p>知识工作台是 goktech-agent 平台「知识」主线的承载页面，职责是<strong>在数据工作台产出的结构化数据与 Markdown 产物之上，构建 Agent 可理解、可检索、可评测的知识表示层</strong>。它处在平台数据流的中间层：</p>
+
+        <h3>1.0 平台数据流定位</h3>
+        <div class="position-flow">
+            <div class="position-stage">
+                <div class="position-icon">📊</div>
+                <div class="position-name">数据工作台</div>
+                <div class="position-items">
+                    <div>• 结构化表</div>
+                    <div>• Markdown</div>
+                    <div>• 文件</div>
+                </div>
+            </div>
+            <div class="position-arrow">▶</div>
+            <div class="position-stage highlight">
+                <div class="position-icon">🧠</div>
+                <div class="position-name">知识工作台</div>
+                <div class="position-items">
+                    <div>• RAG 知识库</div>
+                    <div>• 知识图谱</div>
+                    <div>• 本体 schema</div>
+                </div>
+            </div>
+            <div class="position-arrow">▶</div>
+            <div class="position-stage">
+                <div class="position-icon">🤖</div>
+                <div class="position-name">Agent</div>
+                <div class="position-items">
+                    <div>• 消费检索结果</div>
+                    <div>• 图谱查询结果</div>
+                    <div>• 本体标签过滤</div>
+                </div>
+            </div>
+        </div>
+
+        <h3>1.1 核心职责（对齐 PRD 7.2.2）</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>能力</th>
+                        <th>PRD 要求</th>
+                        <th>首版范围</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">RAG 知识库</span></td>
+                        <td>文档切片、向量化、检索、引用溯源</td>
+                        <td><span class="tag tag-success">必须支持</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">RAG 评测面板</span></td>
+                        <td>检索效果检查和样本评测</td>
+                        <td><span class="tag tag-warning">基础评测</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">知识图谱工作台</span></td>
+                        <td>实体、关系、标签和图谱查询</td>
+                        <td><span class="tag tag-warning">基础能力</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-primary">本体工作台</span></td>
+                        <td>本体 schema、业务标签、GraphRAG 预留</td>
+                        <td><span class="tag tag-warning">基础 schema 管理</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>1.2 设计取舍（关键决策）</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:22%">决策点</th>
+                        <th style="width:35%">选择</th>
+                        <th>理由</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">向量存储</span></td>
+                        <td><strong>专用向量库</strong>（Milvus / Qdrant）</td>
+                        <td>独立部署，检索性能与扩展性强于 pgvector；支持混合检索与过滤；私有化场景可自托管</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">图存储</span></td>
+                        <td><strong>专用图数据库</strong>（Neo4j）</td>
+                        <td>实体关系多跳查询、图遍历、路径分析是图谱核心需求，Postgres 表模拟难以支撑后续扩展</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">嵌入模型</span></td>
+                        <td><strong>EmbeddingProvider 可配置抽象</strong></td>
+                        <td>首版接本地/私有化部署的嵌入模型保资料不出域，预留云 API 切换口，与 MinerU 的自托管决策一致</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">切片策略</span></td>
+                        <td><strong>固定策略 + 可调参数</strong></td>
+                        <td>首版不给用户暴露复杂策略选择；按文档类型预设切片参数，知识角色可在评测面板对比效果再调整</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">知识库组织</span></td>
+                        <td>1 项目 = N 知识库，1 知识库 = 1 组文档 + 1 套切片/检索配置</td>
+                        <td>对齐 PRD 中"团队空间→项目"的层级；知识库可自由组合数据工作台产出的 Markdown 与结构化表</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-accent">GraphRAG</span></td>
+                        <td><strong>本体工作台预留 schema 建模</strong>，图谱查询首版开箱，GraphRAG 留 V1.0</td>
+                        <td>对齐 PRD"首版支持基础 schema 管理，后续版本 GraphRAG 深化"</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 2. 总体架构 -->
+    <section id="sec2" class="section">
+        <div class="section-header">
+            <span class="section-number">2</span>
+            <h2 class="section-title">总体架构</h2>
+        </div>
+
+        <h3>2.1 架构分层</h3>
+
+        <div class="arch-diagram">
+            <!-- 交互层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">🌐</div>
+                    <span class="arch-layer-name">交互层</span>
+                    <span class="arch-layer-tag">知识工作台 Web UI</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">RAG 知识库面板</div>
+                    <div class="arch-component">评测面板</div>
+                    <div class="arch-component">图谱工作台</div>
+                    <div class="arch-component">本体工作台</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓ REST / WebSocket（检索结果、评测进度流式推）</div>
+
+            <!-- 服务层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">⚙️</div>
+                    <span class="arch-layer-name">服务层</span>
+                    <span class="arch-layer-tag">Knowledge Platform Service (FastAPI)</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">RAGService</div>
+                    <div class="arch-component">GraphService</div>
+                    <div class="arch-component">OntologyService</div>
+                    <div class="arch-component">EvalService</div>
+                    <div class="arch-component">ChunkingService</div>
+                    <div class="arch-component">EmbeddingProvider</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓</div>
+
+            <!-- 运行层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">⚡</div>
+                    <span class="arch-layer-name">运行层</span>
+                    <span class="arch-layer-tag">异步 Worker</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">切片 Worker</div>
+                    <div class="arch-component">向量化 Worker</div>
+                    <div class="arch-component">实体抽取 Worker（异步长任务）</div>
+                    <div class="arch-component">JobRunner（复用数据工作台）</div>
+                </div>
+            </div>
+
+            <div class="arch-arrow">↓</div>
+
+            <!-- 存储层 -->
+            <div class="arch-layer">
+                <div class="arch-layer-title">
+                    <div class="arch-layer-icon">💾</div>
+                    <span class="arch-layer-name">存储层</span>
+                    <span class="arch-layer-tag">多存储协同</span>
+                </div>
+                <div class="arch-components">
+                    <div class="arch-component">专用向量库（Milvus/Qdrant）</div>
+                    <div class="arch-component">专用图数据库（Neo4j）</div>
+                    <div class="arch-component">Postgres（元数据/配置）</div>
+                    <div class="arch-component">对象存储（MinIO/S3）</div>
+                </div>
+            </div>
+        </div>
+
+        <h3>2.2 组件职责</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>组件</th>
+                        <th>职责</th>
+                        <th>长任务</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>RAGService</code></td>
+                        <td>知识库 CRUD、检索（向量+关键词混合）、引用溯源、检索结果聚合</td>
+                        <td><span class="tag tag-success">否（检索同步）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>ChunkingService</code></td>
+                        <td>按文档类型分策略切片（Markdown 标题层级切、表格行级切、代码块整段切），保留上下文窗口重叠</td>
+                        <td><span class="tag tag-warning">是（入库异步）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>EmbeddingProvider</code></td>
+                        <td>文本→向量，抽象接口可切换（本地 BGE/M3E 或云端 API）</td>
+                        <td><span class="tag tag-warning">是（批量向量化异步）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>VectorStore</code></td>
+                        <td>chunk 写入/更新/删除、向量相似度检索、元数据过滤、混合检索</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>GraphService</code></td>
+                        <td>实体/关系抽取（调 LLM），写入 Neo4j，提供 Cypher 查询接口</td>
+                        <td><span class="tag tag-warning">是（抽取异步）</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>OntologyService</code></td>
+                        <td>schema 定义（实体类型/属性/关系类型）、业务标签体系管理、GraphRAG 映射预留</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                    <tr>
+                        <td><code>EvalService</code></td>
+                        <td>评测样本管理（问题-预期文档对）、批量跑测、准确率/召回/MRR 计算、版本对比</td>
+                        <td><span class="tag tag-success">否</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>2.3 数据流（端到端）</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content">
+                    <strong>选来源</strong>知识角色选择数据工作台产出的 Markdown 文件或结构化表，创建/加入知识库
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content">
+                    <strong>切片</strong>ChunkingService 按文档类型分策略切片（Markdown 标题、表格行、代码块），保留重叠上下文
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content">
+                    <strong>向量化</strong>EmbeddingProvider 批量向量化 → VectorStore 写入 chunk + 元数据
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content">
+                    <strong>实体抽取</strong>GraphService 调 LLM 抽取实体/关系 → Neo4j 写入节点与边
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-content">
+                    <strong>检索就绪</strong>知识库状态变为 active，Agent 可绑定消费
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">6</div>
+                <div class="flow-content">
+                    <strong>评测</strong>EvalService 跑评测样本，计算检索指标，对比不同切片/检索策略
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight">
+            <strong>⚙️ 全程：</strong>与数据工作台共享 JobRunner 调度异步长任务（切片/向量化/抽取/批量评测）。
+        </div>
+    </section>
+
+    <!-- 3. RAG 知识库 -->
+    <section id="sec3" class="section">
+        <div class="section-header">
+            <span class="section-number">3</span>
+            <h2 class="section-title">RAG 知识库</h2>
+        </div>
+
+        <h3>3.1 知识库模型</h3>
+<pre><span class="keyword">from</span> dataclasses <span class="keyword">import</span> dataclass, field
+<span class="keyword">from</span> enum <span class="keyword">import</span> <span class="class">Enum</span>
+
+<span class="keyword">class</span> <span class="class">KBStatus</span>(str, <span class="class">Enum</span>):
+    BUILDING = <span class="string">"building"</span>; ACTIVE = <span class="string">"active"</span>; UPDATING = <span class="string">"updating"</span>; ARCHIVED = <span class="string">"archived"</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">KnowledgeBase</span>:
+    kb_id: str
+    team_id: str
+    space_id: str
+    name: str
+    description: str = <span class="string">""</span>
+    sources: <span class="class">list</span>[str] = field(default_factory=<span class="class">list</span>)  <span class="comment"># Markdown/文件/表引用</span>
+    chunk_config: dict = field(default_factory=dict)    <span class="comment"># 切片大小、重叠、策略</span>
+    embedding_model: str = <span class="string">"bge-large-zh"</span>               <span class="comment"># 使用的嵌入模型标识</span>
+    status: <span class="class">KBStatus</span> = <span class="class">KBStatus</span>.BUILDING
+    doc_count: <span class="class">int</span> = <span class="number">0</span>; chunk_count: <span class="class">int</span> = <span class="number">0</span>
+    created_at: str = <span class="string">""</span>; updated_at: str = <span class="string">""</span></pre>
+
+        <h3>3.2 切片引擎（ChunkingService）</h3>
+        <p>按文档类型选策略，不对用户暴露复杂度，知识角色可在评测面板对比效果后调整参数：</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>文档类型</th>
+                        <th>策略</th>
+                        <th>参数</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">Markdown</span><br>（数据工作台解析产物）</td>
+                        <td><strong>标题层级切</strong>：按 H1→H2→H3 层级分块，每块保留标题路径作为上下文前缀</td>
+                        <td><code>chunk_size=1024, overlap=128</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">表格</span><br>（数据工作台结构化产物）</td>
+                        <td><strong>行级切</strong>：按固定行数分块，保留表头行作为每块的列名前缀</td>
+                        <td><code>rows_per_chunk=50, header_sticky=true</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">代码块</span></td>
+                        <td><strong>整段切</strong>：一个代码块 = 一个 chunk，不破坏语法</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">混合文档</span></td>
+                        <td>先按元素类型分组，再各自套对应策略</td>
+                        <td>—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <ul style="margin-top:16px">
+            <li><strong>上下文窗口重叠</strong>：相邻 chunk 保留 128 token 重叠，避免关键信息落边界。</li>
+            <li><strong>元数据携带</strong>：每个 chunk 记录 <code>{source_doc, page/section, chunk_index, doc_type, team_id}</code> 支持元数据过滤检索。</li>
+            <li><strong>异步</strong>：切片与向量化走 JobRunner 长任务，知识库状态 <code>building → active</code>。</li>
+        </ul>
+
+        <h3>3.3 嵌入模型（EmbeddingProvider 可配置抽象）</h3>
+<pre><span class="keyword">from</span> dataclasses <span class="keyword">import</span> dataclass
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">EmbeddingResult</span>:
+    vectors: <span class="class">list</span>[<span class="class">list</span>[<span class="class">float</span>]]; dim: <span class="class">int</span>; tokens_used: <span class="class">int</span>
+
+<span class="keyword">class</span> <span class="class">EmbeddingProvider</span>:
+    <span class="keyword">async def</span> <span class="function">embed</span>(self, texts: <span class="class">list</span>[str]) -&gt; <span class="class">EmbeddingResult</span>: ...
+    <span class="keyword">async def</span> <span class="function">embed_query</span>(self, text: str) -&gt; <span class="class">list</span>[<span class="class">float</span>]: ...
+
+<span class="keyword">class</span> <span class="class">LocalBGEProvider</span>(<span class="class">EmbeddingProvider</span>):
+    <span class="string">"""本地部署 BGE-large-zh / M3E，资料不出域；GPU Worker 做批量推理。"""</span>
+    ...
+
+<span class="keyword">class</span> <span class="class">CloudEmbeddingProvider</span>(<span class="class">EmbeddingProvider</span>):
+    <span class="string">"""预留：调用云端嵌入 API，快速验证场景使用。"""</span>
+    ...</pre>
+
+        <div class="decision">
+            <strong>💡 切换规则：</strong>由部署配置 <code>EMBEDDING_PROVIDER=local|cloud</code> 决定。离线批量用 <code>embed()</code>，在线检索用 <code>embed_query()</code>。
+        </div>
+
+        <h3>3.4 检索与引用溯源</h3>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">🔀</div>
+                <div class="card-title">混合检索</div>
+                <div class="card-desc">向量相似度（语义）+ BM25 关键词（精确匹配），加权融合排序</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🏷️</div>
+                <div class="card-title">元数据过滤</div>
+                <div class="card-desc">按 <code>team_id</code>、<code>source_doc</code>、<code>doc_type</code> 缩小检索域</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📎</div>
+                <div class="card-title">引用溯源</div>
+                <div class="card-desc">每个结果返回 <code>{source_doc, section, chunk_text, score}</code>，Agent 对话中以引用卡片展示</div>
+            </div>
+        </div>
+
+        <div class="highlight">
+            <strong>📌 检索接口：</strong><code>RAGService.search(kb_id, query, top_k=10, filters={})</code> → <code>list[ChunkResult]</code>
+        </div>
+    </section>
+
+    <!-- 4. RAG 评测面板 -->
+    <section id="sec4" class="section">
+        <div class="section-header">
+            <span class="section-number">4</span>
+            <h2 class="section-title">RAG 评测面板</h2>
+        </div>
+
+        <h3>4.1 评测样本与跑测</h3>
+        <p>对齐 KR2「检索效果检查」。评测样本 = 问题 + 预期相关文档 + 人工标注等级：</p>
+
+<pre><span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">EvalSample</span>:
+    sample_id: str; kb_id: str
+    question: str
+    expected_docs: <span class="class">list</span>[str]     <span class="comment"># 预期 chunk ID 列表</span>
+    relevance_levels: dict[str, <span class="class">int</span>]  <span class="comment"># chunk_id → 0~3 分级（不相关/部分/相关/高相关）</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">EvalRun</span>:
+    run_id: str; kb_id: str
+    config: dict                  <span class="comment"># chunk_size/overlap/embedding_model/top_k</span>
+    metrics: dict                 <span class="comment"># precision / recall / MRR / NDCG</span>
+    created_at: str</pre>
+
+        <h3>4.2 评测流程</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content">
+                    <strong>评测样本集</strong>由知识角色准备，含问题、预期相关 chunk、relevance 标注
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content">
+                    <strong>逐样本检索</strong>对每个样本调 RAGService 检索 top_k 结果
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content">
+                    <strong>计算指标</strong>基于检索结果与 relevance 标注，计算命中与排序指标
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-content">
+                    <strong>EvalRun 结果</strong>保存为一次跑测记录，含 config 与 metrics
+                </div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-content">
+                    <strong>对比视图</strong>不同配置 (run_id) 指标并排展示，辅助调优
+                </div>
+            </div>
+        </div>
+
+        <ul>
+            <li><span class="tag tag-warning">批量跑测</span>：提交评测样本集，JobRunner 分布式跑，进度 WebSocket 推送</li>
+            <li><span class="tag tag-success">效果对比</span>：两次 EvalRun 的 precision/recall/MRR/NDCG 并排展示，帮知识角色选择更优的切片/检索参数</li>
+            <li><span class="tag tag-primary">样本管理</span>：新建/导入/编辑评测样本，按知识库分组，支持标注 relevance_level</li>
+        </ul>
+    </section>
+
+    <!-- 5. 知识图谱工作台 -->
+    <section id="sec5" class="section">
+        <div class="section-header">
+            <span class="section-number">5</span>
+            <h2 class="section-title">知识图谱工作台</h2>
+        </div>
+
+        <h3>5.1 实体/关系模型</h3>
+        <p>首版图谱 = 实体节点 + 关系边 + 属性 + 标签，存储于 Neo4j：</p>
+
+        <div class="highlight">
+<pre style="margin:0;background:transparent;border:none;padding:0"><code>(:Entity {id, name, type, properties, source_doc, team_id})
+  -[:RELATES_TO {type, properties, source_doc}]→
+(:Entity ...)</code></pre>
+        </div>
+
+        <div class="graph-viz">
+            <svg style="position:absolute;width:100%;height:100%;top:0;left:0;pointer-events:none;" viewBox="0 0 600 280" preserveAspectRatio="none">
+                <line x1="300" y1="140" x2="120" y2="80" stroke="#0891b2" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="140" x2="480" y2="80" stroke="#0891b2" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="140" x2="120" y2="200" stroke="#0891b2" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+                <line x1="300" y1="140" x2="480" y2="200" stroke="#0891b2" stroke-width="2" stroke-dasharray="4" opacity="0.5"/>
+            </svg>
+            <div class="graph-node" style="top: 40px; left: 80px;">设备</div>
+            <div class="graph-node" style="top: 40px; right: 80px;">工单</div>
+            <div class="graph-node central" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">客户</div>
+            <div class="graph-node" style="bottom: 40px; left: 80px;">合同</div>
+            <div class="graph-node" style="bottom: 40px; right: 80px;">产品</div>
+            <div class="graph-edge" style="top: 80px; left: 200px;">归属</div>
+            <div class="graph-edge" style="top: 200px; left: 200px;">签订</div>
+            <div class="graph-edge" style="top: 80px; right: 200px;">关联</div>
+            <div class="graph-edge" style="top: 200px; right: 200px;">采购</div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>元素</th>
+                        <th>说明</th>
+                        <th>示例</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">Entity</span></td>
+                        <td>业务实体节点</td>
+                        <td>客户、设备、工单、合同</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">属性</span></td>
+                        <td>实体上的 key-value</td>
+                        <td>设备型号、安装日期</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">关系</span></td>
+                        <td>有向边 + 类型</td>
+                        <td><code>设备 -[:归属]→ 客户</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">标签</span></td>
+                        <td>实体的业务分类标签</td>
+                        <td><code>#VIP客户</code> <code>#核心设备</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>5.2 实体抽取（异步，调 LLM）</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-content"><strong>输入</strong>Markdown / 结构化表</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-content"><strong>LLM 抽取</strong>实体抽取 prompt → 输出结构化实体/关系 JSON</div>
+            </div>
+            <div class="flow-arrow">▼</div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-content"><strong>Neo4j 写入</strong>批量写入节点与边</div>
+            </div>
+        </div>
+
+        <ul>
+            <li><span class="tag tag-success">去重</span>：同名同类型实体按 <code>name+type</code> 唯一键合并，属性追加</li>
+            <li><span class="tag tag-warning">人工校对</span>：图谱面板提供实体/关系列表视图，知识角色可编辑、合并、删除</li>
+            <li><span class="tag tag-primary">查询</span>：图谱面板提供可视化 Cypher 查询与结果浏览，支持按实体类型/关系类型/标签筛选</li>
+        </ul>
+
+        <h3>5.3 知识图谱与 RAG 的协同</h3>
+        <ul>
+            <li><strong>检索增强</strong>：Agent 检索时，RAGService 可选地将查询实体链接到图谱，返回实体关联的一跳邻居实体信息作为附加上下文</li>
+            <li><strong>引用溯源</strong>：每个实体/关系带 <code>source_doc</code> 字段，可回链到原始文档</li>
+        </ul>
+    </section>
+
+    <!-- 6. 本体工作台 -->
+    <section id="sec6" class="section">
+        <div class="section-header">
+            <span class="section-number">6</span>
+            <h2 class="section-title">本体工作台</h2>
+        </div>
+
+        <h3>6.1 Schema 管理</h3>
+        <p>对齐 PRD「本体 schema、业务标签和 GraphRAG 预留」。本体 = 实体类型定义 + 关系类型定义 + 业务标签体系：</p>
+
+<pre><span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">EntityType</span>:
+    type_id: str; name: str; description: str
+    properties: dict[str, str]   <span class="comment"># 属性名 → 类型(text/int/date/entity_ref)</span>
+    labels: <span class="class">list</span>[str]            <span class="comment"># 业务标签</span>
+
+<span class="decorator">@dataclass</span>
+<span class="keyword">class</span> <span class="class">RelationType</span>:
+    type_id: str; name: str; description: str
+    source_type: str; target_type: str
+    properties: dict[str, str]</pre>
+
+        <div class="highlight">
+            <strong>📌 用途：</strong>知识角色在本体工作台定义"该项目领域有哪些实体类型、哪些关系类型、哪些业务标签"，实体抽取时以此为 schema 约束，<strong>提升抽取质量</strong>。
+        </div>
+
+        <h3>6.2 GraphRAG 预留</h3>
+        <p>首版完成 schema 建模与基础图谱查询。V1.0 GraphRAG 深化路径：</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">社区发现与摘要</div>
+                <div class="card-desc">基于本体 schema 做社区发现与摘要</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">💉</div>
+                <div class="card-title">图谱上下文注入</div>
+                <div class="card-desc">图谱遍历的邻居上下文 → LLM prompt</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🔀</div>
+                <div class="card-title">图谱 + 向量混合</div>
+                <div class="card-desc">图谱 + 向量混合检索</div>
+            </div>
+        </div>
+
+        <div class="decision">
+            <strong>💡 预留字段：</strong><code>OntologyService</code> 预留 <code>graphrag_mapping</code> 字段，记录 schema 到图算法的映射配置。
+        </div>
+    </section>
+
+    <!-- 7. 知识库生命周期 -->
+    <section id="sec7" class="section">
+        <div class="section-header">
+            <span class="section-number">7</span>
+            <h2 class="section-title">知识库生命周期</h2>
+        </div>
+
+        <div class="lifecycle">
+            <span class="lc-state building">building</span>
+            <span class="lc-arrow">→</span>
+            <span class="lc-state active">active</span>
+            <span class="lc-arrow">→</span>
+            <span class="lc-state updating">updating</span>
+            <span class="lc-arrow">→</span>
+            <span class="lc-state archived">archived</span>
+        </div>
+
+        <h3>各阶段说明</h3>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">🆕</div>
+                <div class="card-title">创建</div>
+                <div class="card-desc">选择文档来源（Markdown/表），配置切片/嵌入参数</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">⏳</div>
+                <div class="card-title">building</div>
+                <div class="card-desc">切片 Worker → 向量化 Worker → 实体抽取 Worker，JobRunner 调度，进度可观测</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">✅</div>
+                <div class="card-title">active</div>
+                <div class="card-desc">Agent 可绑定，检索可用</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🔄</div>
+                <div class="card-title">updating</div>
+                <div class="card-desc">增量添加文档，仅处理新增部分</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📦</div>
+                <div class="card-title">archived</div>
+                <div class="card-desc">归档，不可检索，保留数据</div>
+            </div>
+        </div>
+
+        <ul style="margin-top:16px">
+            <li><strong>更新</strong>：增量添加文档时，仅对新文档做切片/向量化/抽取，已有数据不动</li>
+            <li><strong>删除</strong>：级联清理 VectorStore chunks + Neo4j 实体/关系 + Postgres 元数据</li>
+        </ul>
+    </section>
+
+    <!-- 8. 技术栈 -->
+    <section id="sec8" class="section">
+        <div class="section-header">
+            <span class="section-number">8</span>
+            <h2 class="section-title">技术栈与持久化</h2>
+        </div>
+
+        <div class="tech-grid">
+            <div class="tech-card">
+                <div class="tech-layer">服务</div>
+                <div class="tech-name">FastAPI + asyncio</div>
+                <div class="tech-desc">与数据工作台同栈</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">向量库</div>
+                <div class="tech-name">Milvus / Qdrant</div>
+                <div class="tech-desc">独立部署，混合检索，私有化可自托管</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">图数据库</div>
+                <div class="tech-name">Neo4j</div>
+                <div class="tech-desc">实体/关系存储、Cypher 查询、图遍历</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">嵌入模型</div>
+                <div class="tech-name">BGE-large-zh / M3E</div>
+                <div class="tech-desc">本地自托管，可切云端 API</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">任务调度</div>
+                <div class="tech-name">JobRunner</div>
+                <div class="tech-desc">复用数据工作台，异步长任务</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">元数据/评测</div>
+                <div class="tech-name">Postgres</div>
+                <div class="tech-desc">kb_meta / chunks / eval_samples / ontology_schema</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">对象存储</div>
+                <div class="tech-name">MinIO / S3</div>
+                <div class="tech-desc">原始文档引用、切片缓存</div>
+            </div>
+            <div class="tech-card">
+                <div class="tech-layer">LLM 抽取</div>
+                <div class="tech-name">Claude API / 本地</div>
+                <div class="tech-desc">实体/关系抽取 prompt，结构化 JSON 输出</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 9. 模块边界 -->
+    <section id="sec9" class="section">
+        <div class="section-header">
+            <span class="section-number">9</span>
+            <h2 class="section-title">与相邻模块的边界</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>模块</th>
+                        <th>边界</th>
+                        <th>接口</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">数据工作台</span></td>
+                        <td>知识工作台<strong>消费</strong>其 Markdown 产物与结构化表，不负责解析/ETL</td>
+                        <td>读取 <code>ParseResult.markdown_ref</code>、<code>table_meta</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">Agent 中心 / 多任务对话</span></td>
+                        <td>Agent 绑定知识库后调用检索接口</td>
+                        <td><code>RAGService.search(kb_id, query)</code>、<code>GraphService.query_entity(entity_id)</code></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">团队空间 / 项目资产库</span></td>
+                        <td>知识库配置、评测样本、本体 schema 可作为项目资产快照发布复用</td>
+                        <td>资产导出/导入 JSON</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">权限与成员管理</span></td>
+                        <td>知识工作台复用平台权限模型</td>
+                        <td>知识库/图谱/本体按 <code>team_id</code> 隔离</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 10. MVP 实施 -->
+    <section id="sec10" class="section">
+        <div class="section-header">
+            <span class="section-number">10</span>
+            <h2 class="section-title">MVP 范围与实施阶段</h2>
+        </div>
+
+        <h3>10.1 MVP 必含（对齐 KR2 + V0.1/V0.2）</h3>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-icon">1</div>
+                <div class="card-title">RAG 知识库</div>
+                <div class="card-desc">知识库 CRUD、选择数据工作台 Markdown 作为来源</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">2</div>
+                <div class="card-title">ChunkingService</div>
+                <div class="card-desc">Markdown 标题层级切 + 表格行级切 + 上下文重叠</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">3</div>
+                <div class="card-title">EmbeddingProvider</div>
+                <div class="card-desc">本地 BGE/M3E 批量向量化 + 向量检索</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">4</div>
+                <div class="card-title">混合检索</div>
+                <div class="card-desc">向量 + BM25 关键词，元数据过滤，引用溯源</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">5</div>
+                <div class="card-title">评测面板</div>
+                <div class="card-desc">评测样本管理、批量跑测、precision/recall/MRR 指标、跑测对比</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">6</div>
+                <div class="card-title">知识图谱基础</div>
+                <div class="card-desc">实体/关系 LLM 抽取 + Neo4j 写入 + Cypher 基础查询 + 人工校对</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">7</div>
+                <div class="card-title">本体工作台基础</div>
+                <div class="card-desc">EntityType/RelationType schema 定义与编辑</div>
+            </div>
+        </div>
+
+        <h3>10.2 MVP 暂不含</h3>
+        <ul>
+            <li><span class="tag tag-danger">×</span> GraphRAG（社区摘要、图谱增强 Agent 上下文、图向量混合检索）</li>
+            <li><span class="tag tag-danger">×</span> 自动实体类型推断（首版需知识角色在 ontology 手动定义 schema）</li>
+            <li><span class="tag tag-danger">×</span> 跨知识库联邦检索</li>
+            <li><span class="tag tag-danger">×</span> 知识库增量自动同步（后续定时任务）</li>
+            <li><span class="tag tag-danger">×</span> 复杂可视化图谱探索（首版表格式列表 + 基础节点关系图）</li>
+        </ul>
+
+        <h3>10.3 并行实施 lanes</h3>
+        <div class="lanes">
+            <div class="lane">
+                <span class="lane-id">Lane A</span>
+                <div class="lane-name">VectorStore + EmbeddingProvider</div>
+                <div class="lane-desc">本地嵌入模型部署</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane B</span>
+                <div class="lane-name">Neo4j + GraphService 基础</div>
+                <div class="lane-desc">部署 + 基础写入/查询</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane C</span>
+                <div class="lane-name">ChunkingService</div>
+                <div class="lane-desc">多策略切片</div>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane D</span>
+                <div class="lane-name">RAGService</div>
+                <div class="lane-desc">知识库 CRUD + 混合检索 + 溯源</div>
+                <span class="lane-deps">After A+C</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane E</span>
+                <div class="lane-name">LLM 实体/关系抽取</div>
+                <div class="lane-desc">图谱去重/人工校对</div>
+                <span class="lane-deps">After B</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane F</span>
+                <div class="lane-name">EvalService</div>
+                <div class="lane-desc">评测面板</div>
+                <span class="lane-deps">After D</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane G</span>
+                <div class="lane-name">OntologyService</div>
+                <div class="lane-desc">schema 管理</div>
+                <span class="lane-deps">同期</span>
+            </div>
+            <div class="lane">
+                <span class="lane-id">Lane H</span>
+                <div class="lane-name">知识工作台 UI</div>
+                <div class="lane-desc">E2E 串联</div>
+                <span class="lane-deps">最后</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- 11. 风险与应对 -->
+    <section id="sec11" class="section">
+        <div class="section-header">
+            <span class="section-number">11</span>
+            <h2 class="section-title">风险与应对</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:25%">风险</th>
+                        <th style="width:30%">表现</th>
+                        <th>应对</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-warning">切片策略不适配</span></td>
+                        <td>业务文档检索效果差（对应 PRD 假设）</td>
+                        <td>评测面板做策略对比；支持调整 <code>chunk_size/overlap</code> 再跑测验证</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">嵌入模型效果不稳</span></td>
+                        <td>领域文本召回低</td>
+                        <td>EmbeddingProvider 可切换，评测面板量化对比不同模型效果</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-danger">LLM 实体抽取幻觉</span></td>
+                        <td>错误实体/关系污染图谱</td>
+                        <td>人工校对入口（实体/关系列表可编辑）；仅从已校验的 Markdown 源抽取</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">Neo4j 运维成本</span></td>
+                        <td>多一个独立组件部署</td>
+                        <td>首版社区版单节点足够；预留 Postgres fallback（表模拟）</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">私有化部署</span></td>
+                        <td>向量库与图库多组件运维复杂</td>
+                        <td>提供 Docker Compose 一键部署；Qdrant 单二进制轻量、Neo4j 社区版容器</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">批量向量化耗时长</span></td>
+                        <td>大知识库构建慢</td>
+                        <td>JobRunner 并发多 Worker；GPU 加速本地嵌入推理</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 12. 测试策略 -->
+    <section id="sec12" class="section">
+        <div class="section-header">
+            <span class="section-number">12</span>
+            <h2 class="section-title">测试策略</h2>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>模块</th>
+                        <th>必测</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="tag tag-primary">ChunkingService</span></td>
+                        <td>Markdown 标题层级切边界、表格行级切表头保活、上下文重叠正确</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">EmbeddingProvider</span></td>
+                        <td>本地/云端切换、批量与查询向量一致性、维度正确</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-info">RAGService</span></td>
+                        <td>混合检索排序、元数据过滤、引用溯源完整性</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-purple">GraphService</span></td>
+                        <td>实体去重合并、关系方向正确、Cypher 查询结果、人工编辑生效</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-warning">OntologyService</span></td>
+                        <td>Schema CRUD、类型校验、GraphRAG 映射预留</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-accent">EvalService</span></td>
+                        <td>样本 CRUD、批量跑测结果正确、指标计算、多版本对比</td>
+                    </tr>
+                    <tr>
+                        <td><span class="tag tag-success">E2E</span></td>
+                        <td>§2.3 全流程：选来源→切片→向量化→实体抽取→检索→评测→溯源，含知识库更新与归档</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 13. 结论 -->
+    <section id="sec13" class="section">
+        <div class="section-header">
+            <span class="section-number">13</span>
+            <h2 class="section-title">结论</h2>
+        </div>
+
+        <div class="conclusion">
+            <h3>🎯 核心要点</h3>
+            <p>知识工作台以「<strong>RAG（切片→向量化→混合检索→溯源）+ 知识图谱（实体抽取→Neo4j→Cypher 查询）+ 本体 schema → 评测闭环</strong>」为主干，落点在 <strong>FastAPI 服务 + 专用向量库（Milvus/Qdrant）+ Neo4j + 可配置嵌入抽象</strong>（本地 BGE/M3E 为主，预留云 API）。</p>
+
+            <h4 style="color:white;margin-top:20px">关键工程取舍</h4>
+            <ul style="margin: 12px 0; padding-left: 24px; color: rgba(255,255,255,0.95);">
+                <li>嵌入模型与 MinerU 对齐可配置抽象<strong>保资料不出域</strong></li>
+                <li>切片策略对用户隐藏，但评测面板给知识角色放<strong>对比调试口</strong></li>
+                <li>图谱 LLM 抽取 + 人工校对<strong>保质量</strong></li>
+                <li>本体 schema 做<strong>GraphRAG 预留</strong></li>
+            </ul>
+
+            <p style="margin-top:16px">它为 Agent 提供"<strong>语义检索 + 结构化图谱查询 + 可评测可迭代</strong>"的知识底座，直接支撑 KR2 与 V0.1/V0.2。</p>
+            <p style="margin-top:8px"><strong>建议按 §10 的 lanes 先跑通 RAG+评测 MVP 闭环</strong>，再叠加图谱与本体，最后接入 GraphRAG 深化。</p>
+        </div>
+    </section>
+
+    <footer style="text-align:center;padding:40px 0;color:var(--text-light);font-size:13px;">
+        <p>goktech-agents · 知识工作台技术方案 v1.0 · 2026-05-31</p>
+    </footer>
+
+    </div><!-- /main-content -->
+</div><!-- /layout -->
+
+<script>
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href').substring(1);
+            const target = document.getElementById(targetId);
+            if (target) {
+                const offset = 20;
+                const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+
+    const sections = document.querySelectorAll('.section');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    function updateActiveNav() {
+        let current = sections[0]?.getAttribute('id');
+        sections.forEach(section => {
+            const rect = section.getBoundingClientRect();
+            if (rect.top <= 150) {
+                current = section.getAttribute('id');
+            }
+        });
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + current) {
+                link.classList.add('active');
+            }
+        });
+    }
+
+    window.addEventListener('scroll', updateActiveNav);
+    updateActiveNav();
+</script>
+
+</body>
+</html>

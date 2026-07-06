@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>团队空间原型 V4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAF7F0;
+      --bg-2: #F4EFE3;
+      --bg-3: #EDE6D4;
+      --surface: #FFFCF5;
+      --surface-2: #FBF6E8;
+      --ink: #1F1B17;
+      --ink-2: #4A4339;
+      --ink-3: #7A7263;
+      --ink-4: #B5AC97;
+      --line: #E5DCC4;
+      --line-2: #D7CCAE;
+      --accent: #B85C3C;
+      --accent-2: #9A4A2E;
+      --accent-soft: #F1DCD0;
+      --success: #5C8A56;
+      --success-soft: #E2EAD6;
+      --warn: #C68A3E;
+      --warn-soft: #F2E2C0;
+      --danger: #B0473C;
+      --danger-soft: #F1D6CF;
+      --info: #4A7593;
+      --info-soft: #D7E2EB;
+
+      --radius-sm: 6px;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+
+      --shadow-sm: 0 1px 0 rgba(31, 27, 23, 0.04);
+      --shadow: 0 1px 2px rgba(31, 27, 23, 0.04), 0 4px 12px rgba(31, 27, 23, 0.04);
+      --shadow-lg: 0 12px 32px rgba(31, 27, 23, 0.08);
+      --shadow-card: 0 2px 8px rgba(31, 27, 23, 0.06), 0 1px 2px rgba(31, 27, 23, 0.04);
+      --shadow-card-hover: 0 8px 24px rgba(31, 27, 23, 0.10), 0 2px 6px rgba(31, 27, 23, 0.06);
+
+      --serif: "Source Serif 4", "Noto Serif SC", "Songti SC", Georgia, serif;
+      --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+      --sidebar-w: 200px;
+      --topbar-h: 56px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #1A1714;
+      --bg-2: #221E1A;
+      --bg-3: #2A251F;
+      --surface: #1F1B17;
+      --surface-2: #25201B;
+      --ink: #F2EBDC;
+      --ink-2: #C9C0AB;
+      --ink-3: #8E8472;
+      --ink-4: #5C5447;
+      --line: #322C24;
+      --line-2: #443B30;
+      --accent: #D9744F;
+      --accent-2: #B85C3C;
+      --accent-soft: #3A2620;
+      --success: #7AAA72;
+      --success-soft: #28342A;
+      --warn: #DCA85C;
+      --warn-soft: #3A2F1E;
+      --danger: #D26358;
+      --danger-soft: #3A2622;
+      --info: #6F9CB8;
+      --info-soft: #1F2C36;
+
+      --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+      --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.2);
+      --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color 220ms ease, color 220ms ease;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--serif);
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    /* ===== 布局骨架 ===== */
+    .app-shell {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== 侧边栏 ===== */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--bg-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 220ms ease;
+    }
+
+    .sidebar-brand {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-title {
+      font-family: var(--serif);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 2px;
+      padding-left: 28px;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow-y: auto;
+    }
+
+    .nav-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav-group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 120ms ease;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .nav-group-header:hover {
+      background: var(--bg-3);
+      color: var(--ink);
+    }
+
+    .nav-group-header svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    .nav-group-header .chevron {
+      margin-left: auto;
+      width: 14px;
+      height: 14px;
+      opacity: 0.5;
+      transition: transform 200ms ease;
+    }
+
+    .nav-group.expanded .chevron {
+      transform: rotate(90deg);
+    }
+
+    .nav-submenu {
+      display: none;
+      flex-direction: column;
+      gap: 1px;
+      padding: 2px 0 4px 8px;
+      margin-left: 8px;
+      border-left: 1.5px solid var(--line);
+    }
+
+    .nav-group.expanded .nav-submenu {
+      display: flex;
+      animation: fadeUp 200ms ease;
+    }
+
+    .sub-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px 6px 14px;
+      border-radius: var(--radius-sm);
+      color: var(--ink-3);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 120ms ease;
+      text-decoration: none;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sub-nav-item:hover {
+      background: var(--bg-3);
+      color: var(--ink-2);
+    }
+
+    .sub-nav-item.active {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sub-nav-item svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+
+    .sub-nav-item.active svg {
+      opacity: 1;
+    }
+
+    .sub-nav-item .perm-tag {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      color: var(--ink-2);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 120ms ease;
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-3);
+      color: var(--ink);
+    }
+
+    .nav-item.active {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #FFFCF5;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .user-role {
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    /* ===== 主内容区 ===== */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      height: var(--topbar-h);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+
+    .breadcrumb {
+      font-size: 14px;
+      color: var(--ink-2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .breadcrumb strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--ink-2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 120ms;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-3);
+      color: var(--ink);
+    }
+
+    /* ===== 按钮 ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: center;
+      font-weight: 500;
+      font-size: 14px;
+      line-height: 1;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background-color 120ms, border-color 120ms, color 120ms;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #FFFCF5;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-2);
+      border-color: var(--accent-2);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-3);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-2);
+      border-color: transparent;
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-3);
+      color: var(--ink);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+
+    .btn-soft {
+      background: var(--accent-soft);
+      color: var(--accent-2);
+      border-color: transparent;
+    }
+
+    .btn-sm { height: 28px; padding: 0 10px; font-size: 13px; }
+    .btn-lg { height: 40px; padding: 0 18px; font-size: 14px; }
+
+    /* ===== 标签 ===== */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 999px;
+      line-height: 1.4;
+    }
+
+    .tag-neutral { background: var(--bg-3); color: var(--ink-2); }
+    .tag-accent { background: var(--accent-soft); color: var(--accent-2); }
+    .tag-success { background: var(--success-soft); color: var(--success); }
+    .tag-warn { background: var(--warn-soft); color: var(--warn); }
+    .tag-danger { background: var(--danger-soft); color: var(--danger); }
+    .tag-info { background: var(--info-soft); color: var(--info); }
+
+    /* ===== 卡片 ===== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      transition: box-shadow 220ms ease, transform 220ms ease;
+    }
+
+    .card-hover:hover {
+      box-shadow: var(--shadow-card-hover);
+      transform: translateY(-1px);
+    }
+
+    /* ===== 输入框 ===== */
+    .input {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      height: 38px;
+      transition: border-color 120ms;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--ink);
+    }
+
+    .input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* ===== 页面内容 ===== */
+    .page-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* ===== 页面切换 ===== */
+    .page { display: none; }
+    .page.active { display: block; animation: fadeUp 300ms ease; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideInRight {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: none; opacity: 1; }
+    }
+
+    /* ===== 团队空间列表页 ===== */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .space-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .space-card {
+      padding: 20px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .space-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 220ms;
+    }
+
+    .space-card:hover::before {
+      opacity: 1;
+    }
+
+    .space-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .space-card-title {
+      font-family: var(--serif);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0;
+    }
+
+    .space-card-desc {
+      font-size: 13px;
+      color: var(--ink-3);
+      line-height: 1.5;
+      margin: 8px 0 16px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .space-card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .space-card-owner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--ink-2);
+    }
+
+    .space-card-stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .space-card-stats span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .lock-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--warn);
+      background: var(--warn-soft);
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-top: 8px;
+    }
+
+    /* ===== 空态 ===== */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 24px;
+      text-align: center;
+      color: var(--ink-3);
+    }
+
+    .empty-state-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--bg-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--ink-4);
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      margin: 0 0 20px;
+    }
+
+    /* ===== 团队空间详情页 ===== */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .detail-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .detail-header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-header-title h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .detail-header-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    .detail-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .workspace-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .file-tree-panel {
+      width: 280px;
+      min-width: 220px;
+      max-width: 400px;
+      background: var(--bg-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-header h3 {
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .file-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 80ms;
+    }
+
+    .tree-item:hover {
+      background: var(--bg-3);
+    }
+
+    .tree-item.active {
+      background: var(--accent-soft);
+      color: var(--accent-2);
+    }
+
+    .tree-item .indent {
+      display: inline-block;
+      width: 14px;
+      flex-shrink: 0;
+    }
+
+    .tree-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+
+    .tree-item.active svg {
+      opacity: 1;
+    }
+
+    .preview-panel {
+      flex: 1;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .preview-toolbar {
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .preview-toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .breadcrumb-path {
+      font-size: 13px;
+      color: var(--ink-2);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .preview-content {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+    }
+
+    .code-editor {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      width: 100%;
+      height: 100%;
+      resize: none;
+      outline: none;
+    }
+
+    /* ===== 成员管理抽屉 ===== */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.32);
+      z-index: 50;
+      animation: fade 160ms ease;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 420px;
+      max-width: 90vw;
+      background: var(--bg);
+      border-left: 1px solid var(--line);
+      z-index: 51;
+      display: flex;
+      flex-direction: column;
+      animation: slideInRight 220ms ease;
+    }
+
+    .drawer-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-header h3 {
+      font-family: var(--serif);
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+    }
+
+    .member-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .member-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      transition: border-color 120ms;
+    }
+
+    .member-item:hover {
+      border-color: var(--line-2);
+    }
+
+    .member-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .member-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .member-sub {
+      font-size: 12px;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+
+    .member-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .role-select {
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--ink-2);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    /* ===== 对话工作台 ===== */
+    .chat-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .session-sidebar {
+      width: 280px;
+      min-width: 240px;
+      max-width: 360px;
+      background: var(--bg-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .workspace-switcher {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .switcher-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .workspace-dropdown {
+      flex: 1;
+      position: relative;
+    }
+
+    .dropdown-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--ink);
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 120ms;
+    }
+
+    .dropdown-trigger:hover {
+      border-color: var(--line-2);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 10px;
+      box-shadow: var(--shadow-lg);
+      z-index: 20;
+      overflow: hidden;
+      animation: fadeUp 120ms ease;
+    }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 80ms;
+    }
+
+    .dropdown-item:hover {
+      background: var(--bg-3);
+    }
+
+    .dropdown-item.active {
+      color: var(--accent-2);
+      background: var(--accent-soft);
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 4px 8px;
+    }
+
+    .search-box {
+      width: 100%;
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .agent-group {
+      margin-bottom: 4px;
+    }
+
+    .agent-group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .session-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 14px;
+      margin: 0 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 80ms;
+      position: relative;
+    }
+
+    .session-item:hover {
+      background: var(--bg-3);
+    }
+
+    .session-item.active {
+      background: var(--accent-soft);
+    }
+
+    .session-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-item.active .session-title {
+      color: var(--accent-2);
+    }
+
+    .session-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    .session-tags {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .chat-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .workspace-panel {
+      width: 240px;
+      min-width: 200px;
+      max-width: 360px;
+      background: var(--bg-2);
+      border-left: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 220ms ease, margin-right 220ms ease;
+    }
+
+    .workspace-panel.collapsed {
+      width: 0;
+      min-width: 0;
+      margin-right: -1px;
+      overflow: hidden;
+    }
+
+    .workspace-panel-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .workspace-panel-header h3 {
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .workspace-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .workspace-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .ws-tree-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 80ms;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ws-tree-item:hover {
+      background: var(--bg-3);
+    }
+
+    .ws-tree-item.active {
+      background: var(--accent-soft);
+      color: var(--accent-2);
+    }
+
+    .ws-tree-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+
+    .ws-tree-item.active svg {
+      opacity: 1;
+    }
+
+    .ws-tree-indent {
+      display: inline-block;
+      width: 14px;
+      flex-shrink: 0;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      max-width: 85%;
+    }
+
+    .message-user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #FFFCF5;
+    }
+
+    .message-body {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--ink);
+    }
+
+    .message-user .message-body {
+      background: var(--accent-soft);
+      border-color: var(--accent-soft);
+    }
+
+    .message-sender {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-3);
+      margin-bottom: 4px;
+    }
+
+    .chat-input-area {
+      padding: 16px 32px 24px;
+      border-top: 1px solid var(--line);
+      background: var(--bg);
+    }
+
+    .permission-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    .permission-bar .tag {
+      font-size: 11px;
+    }
+
+    .chat-input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 14px;
+      transition: border-color 120ms;
+    }
+
+    .chat-input-box:focus-within {
+      border-color: var(--accent);
+    }
+
+    .chat-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--ink);
+      font-family: inherit;
+      resize: none;
+      min-height: 20px;
+      max-height: 120px;
+    }
+
+    .chat-input::placeholder {
+      color: var(--ink-4);
+    }
+
+    .send-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #FFFCF5;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 120ms;
+    }
+
+    .send-btn:hover {
+      background: var(--accent-2);
+    }
+
+    /* ===== 模态框 ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.32);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      animation: fade 160ms ease;
+    }
+
+    .modal {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg);
+      width: min(440px, 100%);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: fadeUp 200ms ease;
+    }
+
+    .modal h3 {
+      font-family: var(--serif);
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+
+    /* ===== 工具类 ===== */
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .gap-1 { gap: 4px; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-3 { margin-bottom: 12px; }
+    .ml-auto { margin-left: auto; }
+    .text-sm { font-size: 13px; }
+    .text-xs { font-size: 12px; }
+    .text-muted { color: var(--ink-3); }
+    .font-medium { font-weight: 500; }
+    .w-full { width: 100%; }
+
+    .hidden { display: none !important; }
+
+    /* ===== 筛选面板 ===== */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .filter-search {
+      flex: 1;
+      position: relative;
+    }
+
+    .filter-search input {
+      width: 100%;
+      padding: 7px 10px 7px 32px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--ink);
+      font-family: inherit;
+      outline: none;
+      transition: border-color 120ms;
+    }
+
+    .filter-search input:focus {
+      border-color: var(--accent);
+    }
+
+    .filter-search svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--ink-4);
+      pointer-events: none;
+    }
+
+    .filter-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--ink-2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 120ms;
+      position: relative;
+    }
+
+    .filter-btn:hover,
+    .filter-btn.active {
+      background: var(--bg-3);
+      color: var(--ink);
+      border-color: var(--line-2);
+    }
+
+    .filter-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      width: 220px;
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 10px;
+      box-shadow: var(--shadow-lg);
+      z-index: 30;
+      padding: 10px;
+      animation: fadeUp 120ms ease;
+    }
+
+    .filter-section {
+      margin-bottom: 10px;
+    }
+
+    .filter-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .filter-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
+      padding: 0 4px;
+    }
+
+    .filter-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 80ms;
+    }
+
+    .filter-option:hover {
+      background: var(--bg-3);
+    }
+
+    .filter-option input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ===== 平面会话列表 ===== */
+    .session-list-flat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    .session-flat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 14px;
+      margin: 0 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 80ms;
+      position: relative;
+    }
+
+    .session-flat-item:hover {
+      background: var(--bg-3);
+    }
+
+    .session-flat-item.active {
+      background: var(--accent-soft);
+    }
+
+    .session-flat-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-flat-item.active .session-flat-title {
+      color: var(--accent-2);
+    }
+
+    .session-flat-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    .session-flat-tags {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .session-flat-tags .tag {
+      font-size: 10px;
+      padding: 1px 6px;
+    }
+
+    .session-divider {
+      padding: 4px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-4);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .load-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      margin: 4px 6px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--ink-3);
+      cursor: pointer;
+      transition: background 80ms;
+      border: 1px dashed var(--line);
+      background: transparent;
+      width: calc(100% - 12px);
+      font-family: inherit;
+    }
+
+    .load-more:hover {
+      background: var(--bg-3);
+      color: var(--ink-2);
+    }
+
+    /* ===== 新建会话模态框 ===== */
+    .agent-select-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .agent-select-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 120ms;
+    }
+
+    .agent-select-card:hover {
+      border-color: var(--line-2);
+      background: var(--bg-3);
+    }
+
+    .agent-select-card.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .agent-select-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--bg-3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-2);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .agent-select-card.selected .agent-select-icon {
+      background: var(--accent);
+      color: #FFFCF5;
+    }
+
+    .agent-select-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .agent-select-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .agent-select-desc {
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 1px;
+    }
+
+    .workspace-select {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .workspace-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 120ms;
+    }
+
+    .workspace-option:hover {
+      border-color: var(--line-2);
+    }
+
+    .workspace-option.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .workspace-option input[type="radio"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .share-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .share-toggle-label {
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .share-toggle-sub {
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: var(--bg-3);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 120ms;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch.on {
+      background: var(--accent);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 120ms;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+
+    .toggle-switch.on::after {
+      transform: translateX(18px);
+    }
+
+    /* ===== Tab 导航 ===== */
+    .tab-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .tab-item {
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink-3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 120ms;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: inherit;
+    }
+
+    .tab-item:hover {
+      color: var(--ink-2);
+    }
+
+    .tab-item.active {
+      color: var(--accent-2);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ===== 个人空间页面 ===== */
+    .personal-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .space-grid { grid-template-columns: 1fr; }
+      .drawer { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent);">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          国科智能体
+        </div>
+        <div class="brand-subtitle">GokTech Agents</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- 对话工作台 -->
+        <a href="#" class="nav-item active" onclick="switchView('chatWorkspace'); return false;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          对话工作台
+        </a>
+        <!-- 个人空间 -->
+        <a href="#" class="nav-item" onclick="switchView('personalSpace'); return false;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          </svg>
+          个人空间
+        </a>
+        <!-- 团队空间 -->
+        <a href="#" class="nav-item" onclick="switchView('teamSpaces'); return false;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          团队空间
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="avatar">张</div>
+          <div>
+            <div class="user-name">张三</div>
+            <div class="user-role">管理员</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主内容 -->
+    <main class="main">
+      <!-- 顶部栏 -->
+      <header class="topbar">
+        <div class="breadcrumb" id="breadcrumb">
+          <span>对话工作台</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" title="主题切换" onclick="toggleTheme()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- 页面内容容器 -->
+      <div class="page-content" id="pageContainer">
+
+        <!-- ========== 团队空间列表页 ========== -->
+        <div class="page" id="page-team-list">
+          <div class="page-header">
+            <h1>团队空间</h1>
+            <button class="btn btn-primary" onclick="showCreateModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              创建团队空间
+            </button>
+          </div>
+
+          <div class="space-grid">
+            <!-- 卡片 1 -->
+            <div class="card card-hover space-card" onclick="showSpaceDetail('data-platform')">
+              <div class="space-card-header">
+                <div>
+                  <h3 class="space-card-title">数据中台研发团队</h3>
+                  <div style="margin-top:6px;">
+                    <span class="tag tag-accent">所有者</span>
+                    <span class="tag tag-success">可编辑</span>
+                  </div>
+                </div>
+                <span class="tag tag-neutral">3 成员</span>
+              </div>
+              <p class="space-card-desc">数据平台相关智能体协作空间，包含数据采集、清洗、分析等模块的文档和代码。</p>
+              <div class="space-card-meta">
+                <div class="space-card-owner">
+                  <div class="avatar" style="width:22px;height:22px;font-size:10px;">张</div>
+                  张三
+                </div>
+                <div class="space-card-stats">
+                  <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    12 文件
+                  </span>
+                  <span>2小时前</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 2 -->
+            <div class="card card-hover space-card" onclick="showSpaceDetail('knowledge')">
+              <div class="space-card-header">
+                <div>
+                  <h3 class="space-card-title">知识库维护组</h3>
+                  <div style="margin-top:6px;">
+                    <span class="tag tag-accent">编辑成员</span>
+                  </div>
+                </div>
+                <span class="tag tag-neutral">5 成员</span>
+              </div>
+              <p class="space-card-desc">企业知识库维护与整理，包含各部门文档模板、流程规范和最佳实践。</p>
+              <div class="space-card-meta">
+                <div class="space-card-owner">
+                  <div class="avatar" style="width:22px;height:22px;font-size:10px;background:var(--success);">李</div>
+                  李四
+                </div>
+                <div class="space-card-stats">
+                  <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    28 文件
+                  </span>
+                  <span>昨天</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 3 -->
+            <div class="card card-hover space-card" onclick="showSpaceDetail('locked-space')">
+              <div class="space-card-header">
+                <div>
+                  <h3 class="space-card-title">产品需求评审</h3>
+                  <div style="margin-top:6px;">
+                    <span class="tag tag-warn">只读成员</span>
+                  </div>
+                </div>
+                <span class="tag tag-neutral">8 成员</span>
+              </div>
+              <p class="space-card-desc">产品需求文档共享与评审空间，包含各迭代版本的需求规格说明书。</p>
+              <div class="space-card-meta">
+                <div class="space-card-owner">
+                  <div class="avatar" style="width:22px;height:22px;font-size:10px;background:var(--info);">王</div>
+                  王五
+                </div>
+                <div class="space-card-stats">
+                  <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    45 文件
+                  </span>
+                  <span>3天前</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 4 -->
+            <div class="card card-hover space-card" onclick="showSpaceDetail('agents-dev')">
+              <div class="space-card-header">
+                <div>
+                  <h3 class="space-card-title">智能体开发组</h3>
+                  <div style="margin-top:6px;">
+                    <span class="tag tag-accent">编辑成员</span>
+                  </div>
+                </div>
+                <span class="tag tag-neutral">4 成员</span>
+              </div>
+              <p class="space-card-desc">智能体开发与测试空间，包含提示词工程、工具链配置和评估数据集。</p>
+              <div class="space-card-meta">
+                <div class="space-card-owner">
+                  <div class="avatar" style="width:22px;height:22px;font-size:10px;background:var(--warn);">赵</div>
+                  赵六
+                </div>
+                <div class="space-card-stats">
+                  <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    67 文件
+                  </span>
+                  <span>1周前</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 团队空间详情页 ========== -->
+        <div class="page" id="page-team-detail"><div style="display:flex;flex-direction:column;height:100%;">
+          <!-- 详情头部 -->
+          <div class="detail-header">
+            <div class="detail-header-left">
+              <button class="btn btn-ghost btn-sm" onclick="switchView('teamSpaces')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                返回
+              </button>
+              <div class="detail-header-title">
+                <h2 id="detail-space-name">数据中台研发团队</h2>
+                <div class="detail-header-meta">
+                  <span class="tag tag-accent">所有者</span>
+                  <span class="tag tag-success">可编辑</span>
+                  <span>·</span>
+                  <span>3 成员</span>
+                  <span>·</span>
+                  <span>12 文件</span>
+                  <span>·</span>
+                  <span>更新于 2小时前</span>
+                </div>
+              </div>
+            </div>
+            <div class="detail-header-actions">
+              <button class="btn btn-primary btn-sm" onclick="enterTeamChat('数据中台研发团队')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                团队会话
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="showMemberDrawer()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                成员管理
+              </button>
+              <button class="btn btn-soft btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                编辑信息
+              </button>
+            </div>
+          </div>
+
+          <!-- 工作区布局 -->
+          <div class="workspace-layout" id="team-files-view">
+            <!-- 文件树 -->
+            <div class="file-tree-panel">
+              <div class="panel-header">
+                <h3>文件</h3>
+                <div class="flex gap-2">
+                  <button class="icon-btn" style="width:26px;height:26px;" title="新建文件">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                  </button>
+                  <button class="icon-btn" style="width:26px;height:26px;" title="新建文件夹">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                  </button>
+                  <button class="icon-btn" style="width:26px;height:26px;" title="上传">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="file-tree">
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>docs</span>
+                </div>
+                <div class="tree-item" style="padding-left:30px;" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>需求文档.md</span>
+                </div>
+                <div class="tree-item" style="padding-left:30px;" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>设计规范.md</span>
+                </div>
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>src</span>
+                </div>
+                <div class="tree-item" style="padding-left:30px;" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>main.py</span>
+                </div>
+                <div class="tree-item active" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>README.md</span>
+                </div>
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>config.yaml</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 预览区 -->
+            <div class="preview-panel">
+              <div class="preview-toolbar">
+                <div class="preview-toolbar-left">
+                  <div class="breadcrumb-path">
+                    <span>README.md</span>
+                  </div>
+                  <span class="tag tag-accent" style="font-size:11px;">Markdown</span>
+                </div>
+                <div class="flex gap-2">
+                  <button class="btn btn-ghost btn-sm">预览</button>
+                  <button class="btn btn-secondary btn-sm">编辑</button>
+                  <button class="btn btn-ghost btn-sm">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    下载
+                  </button>
+                </div>
+              </div>
+              <div class="preview-content">
+                <div style="max-width:720px;">
+                  <h1 style="font-size:22px;margin-bottom:16px;">数据中台研发团队</h1>
+                  <p style="color:var(--ink-2);line-height:1.7;margin-bottom:16px;">
+                    本空间用于数据中台相关智能体的协作开发，包含数据采集、清洗、转换、分析等模块的文档和代码。
+                  </p>
+                  <h2 style="font-size:16px;font-family:var(--sans);font-weight:600;margin:20px 0 10px;">目录结构</h2>
+                  <ul style="color:var(--ink-2);line-height:1.8;padding-left:20px;">
+                    <li><code style="background:var(--bg-3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;">docs/</code> - 需求文档与设计规范</li>
+                    <li><code style="background:var(--bg-3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;">src/</code> - 源代码与配置文件</li>
+                    <li><code style="background:var(--bg-3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;">README.md</code> - 项目说明</li>
+                  </ul>
+                  <h2 style="font-size:16px;font-family:var(--sans);font-weight:600;margin:20px 0 10px;">使用说明</h2>
+                  <p style="color:var(--ink-2);line-height:1.7;">
+                    团队成员可在本空间内共享文件，与智能体协作完成数据处理任务。编辑成员可上传、修改文件；只读成员可查看和引用文件内容。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div></div>
+
+        <!-- ========== 对话工作台页 ========== -->
+        <div class="page active" id="page-chat"><div style="display:flex;flex-direction:column;height:100%;">
+          <div class="chat-layout">
+            <!-- 会话侧边栏 -->
+            <div class="session-sidebar">
+              <div class="workspace-switcher">
+                <div class="switcher-row">
+                  <span id="current-workspace-label" style="font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span id="session-list-title">我的会话</span>
+                  </span>
+                  <button class="btn btn-primary btn-sm" onclick="showCreateSessionModal()">+ 新建</button>
+                </div>
+              </div>
+
+              <div class="filter-bar">
+                <div class="filter-search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  <input type="text" placeholder="搜索会话..." oninput="filterSessions(this.value)">
+                </div>
+                <div style="position:relative;">
+                  <button class="filter-btn" id="filter-toggle" onclick="toggleFilterDropdown()" title="筛选">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                  </button>
+                  <div class="filter-dropdown hidden" id="filter-dropdown">
+                    <div class="filter-section">
+                      <div class="filter-section-label">智能体</div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>Echo</span></div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>Delta</span></div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>Alpha</span></div>
+                    </div>
+                    <div class="filter-section">
+                      <div class="filter-section-label">工作空间</div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>个人空间</span></div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>数据中台研发团队</span></div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>知识库维护组</span></div>
+                      <div class="filter-option"><input type="checkbox" checked onchange="applyFilters()"><span>产品需求评审</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="session-list-flat" id="session-list-flat">
+                <!-- 今天 -->
+                <div class="session-divider">今天</div>
+                <div class="session-flat-item active" onclick="selectSession(this)" data-agent="Echo" data-workspace="个人空间">
+                  <div class="session-flat-title">数据清洗流程讨论</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 14:20</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-accent">Echo</span>
+                      <span class="tag tag-neutral">个人空间</span>
+                      <span class="tag tag-warn">运行中</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Delta" data-workspace="数据中台研发团队">
+                  <div class="session-flat-title">ETL 脚本优化建议</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 10:35</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-info">Delta</span>
+                      <span class="tag tag-neutral">数据中台研发团队</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Echo" data-workspace="知识库维护组">
+                  <div class="session-flat-title">知识库分类规则讨论</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 09:12</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-accent">Echo</span>
+                      <span class="tag tag-neutral">知识库维护组</span>
+                      <span class="tag tag-success">已共享</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 昨天 -->
+                <div class="session-divider">昨天</div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Alpha" data-workspace="个人空间">
+                  <div class="session-flat-title">API 接口文档生成</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 17:50</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-success">Alpha</span>
+                      <span class="tag tag-neutral">个人空间</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Delta" data-workspace="产品需求评审">
+                  <div class="session-flat-title">数据质量报告生成</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 15:20</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-info">Delta</span>
+                      <span class="tag tag-neutral">产品需求评审</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Echo" data-workspace="个人空间">
+                  <div class="session-flat-title">临时讨论会话</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 11:05</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-accent">Echo</span>
+                      <span class="tag tag-neutral">个人空间</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 2天前 -->
+                <div class="session-divider">2天前</div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Alpha" data-workspace="数据中台研发团队">
+                  <div class="session-flat-title">Prompt 工程优化</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 09:30</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-success">Alpha</span>
+                      <span class="tag tag-neutral">数据中台研发团队</span>
+                      <span class="tag tag-success">已共享</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Delta" data-workspace="个人空间">
+                  <div class="session-flat-title">代码审查辅助</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 08:15</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-info">Delta</span>
+                      <span class="tag tag-neutral">个人空间</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 3天前 -->
+                <div class="session-divider">3天前</div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Echo" data-workspace="知识库维护组">
+                  <div class="session-flat-title">文档模板设计</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 16:40</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-accent">Echo</span>
+                      <span class="tag tag-neutral">知识库维护组</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="session-flat-item" onclick="selectSession(this)" data-agent="Alpha" data-workspace="个人空间">
+                  <div class="session-flat-title">测试用例生成</div>
+                  <div class="session-flat-meta">
+                    <span>张三 · 14:20</span>
+                    <div class="session-flat-tags">
+                      <span class="tag tag-success">Alpha</span>
+                      <span class="tag tag-neutral">个人空间</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button class="load-more" id="load-more-btn" onclick="loadMoreSessions()">加载更多</button>
+            </div>
+
+            <!-- 聊天主区域 -->
+            <div class="chat-main">
+              <div class="chat-messages">
+                <!-- 用户消息 -->
+                <div class="message message-user">
+                  <div class="message-avatar" style="background:var(--accent);">张</div>
+                  <div>
+                    <div class="message-sender">张三</div>
+                    <div class="message-body">
+                      请帮我分析一下这个数据清洗脚本的问题，看看有没有可以优化的地方。
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI 消息 -->
+                <div class="message">
+                  <div class="message-avatar" style="background:var(--info);">AI</div>
+                  <div class="message-body">
+                    我来分析一下这个脚本。从代码结构来看，有几个可以优化的点：
+                    <ol style="margin:8px 0;padding-left:18px;">
+                      <li>第 15 行的正则表达式可以预编译，避免每次循环重新编译</li>
+                      <li>第 23-28 行的空值处理逻辑可以合并为一个函数</li>
+                      <li>建议使用 pandas 的 <code style="background:var(--bg-3);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:12px;">vectorized</code> 操作替代逐行循环</li>
+                    </ol>
+                    需要我生成优化后的版本吗？
+                  </div>
+                </div>
+
+                <!-- 用户消息 2 -->
+                <div class="message message-user">
+                  <div class="message-avatar" style="background:var(--success);">李</div>
+                  <div>
+                    <div class="message-sender">李四</div>
+                    <div class="message-body">
+                      我也看了下，第 42 行的异常处理可以加上日志记录，方便排查问题。
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chat-input-area">
+                <div class="permission-bar">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span>当前权限：</span>
+                  <span class="tag tag-success">可编辑</span>
+                  <span style="margin-left:auto;color:var(--ink-4);">按 Enter 发送，Shift + Enter 换行</span>
+                </div>
+                <div class="chat-input-box">
+                  <textarea class="chat-input" rows="1" placeholder="输入消息..."></textarea>
+                  <button class="send-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧工作空间面板 -->
+            <div class="workspace-panel" id="workspace-panel">
+              <div class="workspace-panel-header">
+                <h3>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                  <span id="workspace-panel-title">个人空间</span>
+                </h3>
+                <div class="workspace-panel-actions">
+                  <button class="icon-btn" style="width:24px;height:24px;" title="刷新" onclick="refreshWorkspacePanel()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  </button>
+                  <button class="icon-btn" style="width:24px;height:24px;" title="收起" onclick="toggleWorkspacePanel()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="workspace-tree" id="workspace-tree">
+                <!-- 个人空间文件 -->
+                <div class="ws-tree-item active" onclick="selectWsFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>README.md</span>
+                </div>
+                <div class="ws-tree-item" onclick="selectWsFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>main.py</span>
+                </div>
+                <div class="ws-tree-item" onclick="selectWsFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>config.yaml</span>
+                </div>
+                <div class="ws-tree-item" onclick="selectWsFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>documents</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+
+        <!-- ========== 个人空间页 ========== -->
+        <div class="page" id="page-personal-space"><div style="display:flex;flex-direction:column;height:100%;">
+          <div class="detail-header">
+            <div class="detail-header-left">
+              <div class="detail-header-title">
+                <h2>个人空间</h2>
+                <div class="detail-header-meta">
+                  <span>8 文件</span>
+                  <span>·</span>
+                  <span>更新于 1小时前</span>
+                </div>
+              </div>
+            </div>
+            <div class="detail-header-actions">
+              <button class="btn btn-secondary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                新建文件
+              </button>
+              <button class="btn btn-secondary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                上传
+              </button>
+            </div>
+          </div>
+          <div class="workspace-layout">
+            <div class="file-tree-panel">
+              <div class="panel-header">
+                <h3>文件</h3>
+              </div>
+              <div class="file-tree">
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span>documents</span>
+                </div>
+                <div class="tree-item active" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>README.md</span>
+                </div>
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>main.py</span>
+                </div>
+                <div class="tree-item" onclick="selectFile(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>config.yaml</span>
+                </div>
+              </div>
+            </div>
+            <div class="preview-panel">
+              <div class="preview-toolbar">
+                <div class="preview-toolbar-left">
+                  <div class="breadcrumb-path">
+                    <span>README.md</span>
+                  </div>
+                  <span class="tag tag-accent" style="font-size:11px;">Markdown</span>
+                </div>
+                <div class="flex gap-2">
+                  <button class="btn btn-ghost btn-sm">预览</button>
+                  <button class="btn btn-secondary btn-sm">编辑</button>
+                  <button class="btn btn-ghost btn-sm">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    下载
+                  </button>
+                </div>
+              </div>
+              <div class="preview-content">
+                <div style="max-width:720px;">
+                  <h1 style="font-size:22px;margin-bottom:16px;">个人空间</h1>
+                  <p style="color:var(--ink-2);line-height:1.7;margin-bottom:16px;">
+                    这是您的个人工作空间，用于与智能体进行一对一对话，以及管理个人文件。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== 创建团队空间模态框 ===== -->
+  <div class="modal-overlay hidden" id="create-modal" onclick="hideCreateModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h3>创建团队空间</h3>
+      <div class="form-group">
+        <label class="form-label">空间名称</label>
+        <input type="text" class="input w-full" placeholder="请输入团队空间名称">
+      </div>
+      <div class="form-group">
+        <label class="form-label">描述（可选）</label>
+        <textarea style="width:100%;min-height:80px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;color:var(--ink);resize:vertical;outline:none;" placeholder="简要描述该空间的用途..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="hideCreateModal()">取消</button>
+        <button class="btn btn-primary">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 成员管理抽屉 ===== -->
+  <div class="drawer-overlay hidden" id="member-drawer-overlay" onclick="hideMemberDrawer()"></div>
+  <div class="drawer hidden" id="member-drawer">
+    <div class="drawer-header">
+      <h3>成员管理</h3>
+      <button class="icon-btn" onclick="hideMemberDrawer()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <!-- 添加成员 -->
+      <div style="margin-bottom:20px;">
+        <label class="form-label" style="margin-bottom:6px;display:block;">添加成员</label>
+        <div class="flex gap-2">
+          <input type="text" class="input flex-1" placeholder="搜索用户名...">
+          <select class="role-select">
+            <option value="reader">只读</option>
+            <option value="editor">可编辑</option>
+          </select>
+          <button class="btn btn-primary">添加</button>
+        </div>
+      </div>
+
+      <!-- 成员列表 -->
+      <div style="margin-bottom:12px;">
+        <span class="form-label">成员列表</span>
+        <span style="float:right;font-size:12px;color:var(--ink-3);">3 人</span>
+      </div>
+      <div class="member-list">
+        <div class="member-item">
+          <div class="avatar">张</div>
+          <div class="member-info">
+            <div class="member-name">张三</div>
+            <div class="member-sub">所有者</div>
+          </div>
+          <div class="member-actions">
+            <select class="role-select" disabled>
+              <option>所有者</option>
+            </select>
+          </div>
+        </div>
+        <div class="member-item">
+          <div class="avatar" style="background:var(--success);">李</div>
+          <div class="member-info">
+            <div class="member-name">李四</div>
+            <div class="member-sub">编辑成员 · 由张三添加</div>
+          </div>
+          <div class="member-actions">
+            <select class="role-select">
+              <option value="editor" selected>可编辑</option>
+              <option value="reader">只读</option>
+            </select>
+            <button class="icon-btn" style="width:26px;height:26px;" title="移除">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="member-item">
+          <div class="avatar" style="background:var(--info);">王</div>
+          <div class="member-info">
+            <div class="member-name">王五</div>
+            <div class="member-sub">只读成员 · 由张三添加</div>
+          </div>
+          <div class="member-actions">
+            <select class="role-select">
+              <option value="editor">可编辑</option>
+              <option value="reader" selected>只读</option>
+            </select>
+            <button class="icon-btn" style="width:26px;height:26px;" title="移除">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 转移所有权 -->
+      <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--line);">
+        <label class="form-label" style="margin-bottom:6px;display:block;">转移所有权</label>
+        <p style="font-size:13px;color:var(--ink-3);margin:0 0 10px;">将空间所有权转移给另一位成员。您将保留编辑权限。</p>
+        <div class="flex gap-2">
+          <select class="role-select flex-1">
+            <option>李四</option>
+            <option>王五</option>
+          </select>
+          <button class="btn btn-danger btn-sm">转移</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 新建会话模态框 ===== -->
+  <div class="modal-overlay hidden" id="create-session-modal" onclick="hideCreateSessionModal(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="width:min(480px,100%);">
+      <h3>新建会话</h3>
+
+      <div class="form-group">
+        <label class="form-label">选择智能体</label>
+        <div class="agent-select-grid">
+          <div class="agent-select-card selected" onclick="selectAgentCard(this)">
+            <div class="agent-select-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
+            <div class="agent-select-info">
+              <div class="agent-select-name">Echo</div>
+              <div class="agent-select-desc">数据处理与清洗专家</div>
+            </div>
+          </div>
+          <div class="agent-select-card" onclick="selectAgentCard(this)">
+            <div class="agent-select-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+            <div class="agent-select-info">
+              <div class="agent-select-name">Delta</div>
+              <div class="agent-select-desc">数据分析与可视化</div>
+            </div>
+          </div>
+          <div class="agent-select-card" onclick="selectAgentCard(this)">
+            <div class="agent-select-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+            <div class="agent-select-info">
+              <div class="agent-select-name">Alpha</div>
+              <div class="agent-select-desc">通用编程助手</div>
+            </div>
+          </div>
+          <div class="agent-select-card" onclick="selectAgentCard(this)">
+            <div class="agent-select-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+            <div class="agent-select-info">
+              <div class="agent-select-name">Gamma</div>
+              <div class="agent-select-desc">文档生成与写作</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" id="workspace-select-section">
+        <label class="form-label">选择工作空间</label>
+        <div class="workspace-select">
+          <div class="workspace-option selected" onclick="selectWorkspaceOption(this)">
+            <input type="radio" name="workspace" value="personal" checked>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            <span>个人空间</span>
+          </div>
+          <div class="workspace-option" onclick="selectWorkspaceOption(this)">
+            <input type="radio" name="workspace" value="team1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>数据中台研发团队</span>
+          </div>
+          <div class="workspace-option" onclick="selectWorkspaceOption(this)">
+            <input type="radio" name="workspace" value="team2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>知识库维护组</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group hidden" id="workspace-locked-info">
+        <label class="form-label">工作空间</label>
+        <div style="padding:10px 12px;background:var(--bg-3);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:13px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span id="locked-workspace-name"></span>
+          <span style="margin-left:auto;font-size:11px;color:var(--accent);font-weight:500;">已锁定</span>
+        </div>
+      </div>
+
+      <div class="form-group hidden" id="share-toggle-group">
+        <label class="form-label">共享设置</label>
+        <div class="share-toggle">
+          <div>
+            <div class="share-toggle-label">共享到团队空间</div>
+            <div class="share-toggle-sub">团队成员可在会话列表中查看此会话</div>
+          </div>
+          <div class="toggle-switch" id="share-toggle" onclick="toggleShare(this)"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="hideCreateSessionModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmCreateSession()">开始对话</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 当前锁定的工作空间（从团队空间进入会话时设置）
+    let currentLockedWorkspace = null;
+
+    // 页面切换
+    function switchView(view) {
+      // 更新导航状态
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.sub-nav-item').forEach(el => el.classList.remove('active'));
+
+      // 更新面包屑和页面
+      const breadcrumb = document.getElementById('breadcrumb');
+      const pages = document.querySelectorAll('.page');
+      pages.forEach(p => p.classList.remove('active'));
+
+      const navItems = document.querySelectorAll('.nav-item');
+
+      if (view === 'chatWorkspace') {
+        navItems[0].classList.add('active');
+        breadcrumb.innerHTML = '<span>对话工作台</span>';
+        document.getElementById('page-chat').classList.add('active');
+        // 重置为"我的会话"视图
+        document.getElementById('session-list-title').textContent = '我的会话';
+        // 重置会话列表过滤（取消团队锁定）
+        document.querySelectorAll('#session-list-flat .session-flat-item').forEach(item => {
+          item.style.display = '';
+        });
+        // 恢复加载更多按钮
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        if (loadMoreBtn) loadMoreBtn.style.display = '';
+        // 清除工作空间锁定
+        currentLockedWorkspace = null;
+      } else if (view === 'personalSpace') {
+        navItems[1].classList.add('active');
+        breadcrumb.innerHTML = '<span>个人空间</span>';
+        document.getElementById('page-personal-space').classList.add('active');
+      } else if (view === 'teamSpaces') {
+        navItems[2].classList.add('active');
+        breadcrumb.innerHTML = '<span>团队空间</span>';
+        document.getElementById('page-team-list').classList.add('active');
+      }
+    }
+
+    // 展开/折叠导航组
+    function toggleNavGroup(groupId) {
+      document.getElementById(groupId).classList.toggle('expanded');
+    }
+
+    // 进入团队会话（从团队详情页跳转）
+    function enterTeamChat(teamName) {
+      // 隐藏团队详情页，显示对话工作台
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-chat').classList.add('active');
+
+      // 更新导航高亮
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item')[0].classList.add('active');
+
+      // 更新面包屑：团队空间 / 团队名称
+      document.getElementById('breadcrumb').innerHTML = '<span>团队空间</span><span style="margin:0 4px;color:var(--ink-4);">/</span><span>' + teamName + '</span>';
+
+      // 锁定团队空间：标题显示团队名称
+      document.getElementById('session-list-title').innerHTML = teamName + ' <span style="font-size:11px;color:var(--accent);font-weight:500;margin-left:4px;">● 已锁定</span>';
+
+      // 记录锁定的工作空间
+      currentLockedWorkspace = teamName;
+
+      // 过滤会话列表只显示该团队的会话
+      const items = document.querySelectorAll('#session-list-flat .session-flat-item');
+      items.forEach(item => {
+        const tags = item.querySelectorAll('.session-flat-tags .tag');
+        let hasTeam = false;
+        tags.forEach(tag => {
+          if (tag.textContent === teamName) hasTeam = true;
+        });
+        item.style.display = hasTeam ? '' : 'none';
+      });
+
+      // 隐藏加载更多按钮（锁定状态下不分页）
+      const loadMoreBtn = document.getElementById('load-more-btn');
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+    }
+
+    // 选择会话
+    function selectSession(el) {
+      document.querySelectorAll('.session-flat-item').forEach(item => item.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // 筛选下拉
+    function toggleFilterDropdown() {
+      document.getElementById('filter-dropdown').classList.toggle('hidden');
+      document.getElementById('filter-toggle').classList.toggle('active');
+    }
+
+    // 搜索过滤
+    function filterSessions(query) {
+      const items = document.querySelectorAll('#session-list-flat .session-flat-item');
+      const q = query.toLowerCase();
+      items.forEach(item => {
+        const title = item.querySelector('.session-flat-title').textContent.toLowerCase();
+        item.style.display = title.includes(q) ? '' : 'none';
+      });
+    }
+
+    // 应用筛选
+    function applyFilters() {
+      // 原型演示：简单的过滤逻辑
+      const items = document.querySelectorAll('#session-list-flat .session-flat-item');
+      items.forEach(item => item.style.display = '');
+    }
+
+    // 加载更多
+    let loadedCount = 10;
+    function loadMoreSessions() {
+      const list = document.getElementById('session-list-flat');
+      const moreItems = [
+        { title: '历史会话 A', time: '4天前', agent: 'Echo', workspace: '个人空间' },
+        { title: '历史会话 B', time: '5天前', agent: 'Delta', workspace: '数据中台研发团队' },
+        { title: '历史会话 C', time: '1周前', agent: 'Alpha', workspace: '个人空间' },
+        { title: '历史会话 D', time: '1周前', agent: 'Echo', workspace: '知识库维护组' },
+        { title: '历史会话 E', time: '2周前', agent: 'Delta', workspace: '个人空间' },
+      ];
+      moreItems.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'session-flat-item';
+        div.onclick = function() { selectSession(this); };
+        div.innerHTML = '<div class="session-flat-title">' + item.title + '</div><div class="session-flat-meta"><span>张三 · ' + item.time + '</span><div class="session-flat-tags"><span class="tag tag-accent">' + item.agent + '</span><span class="tag tag-neutral">' + item.workspace + '</span></div></div>';
+        list.appendChild(div);
+      });
+      loadedCount += moreItems.length;
+      if (loadedCount >= 20) {
+        document.getElementById('load-more-btn').style.display = 'none';
+      }
+    }
+
+    // 新建会话模态框
+    // lockedWorkspace: 如果传入团队名称，则工作空间锁死为该团队
+    function showCreateSessionModal(lockedWorkspace) {
+      document.getElementById('create-session-modal').classList.remove('hidden');
+      // 如果没有传参，检查全局锁定状态
+      const ws = lockedWorkspace || currentLockedWorkspace;
+      if (ws) {
+        document.getElementById('workspace-select-section').classList.add('hidden');
+        document.getElementById('workspace-locked-info').classList.remove('hidden');
+        document.getElementById('locked-workspace-name').textContent = ws;
+        // 强制显示共享开关（团队空间默认共享）
+        document.getElementById('share-toggle-group').classList.remove('hidden');
+        document.getElementById('share-toggle').classList.add('on');
+      } else {
+        document.getElementById('workspace-select-section').classList.remove('hidden');
+        document.getElementById('workspace-locked-info').classList.add('hidden');
+        // 重置共享开关
+        document.getElementById('share-toggle-group').classList.add('hidden');
+        document.getElementById('share-toggle').classList.remove('on');
+      }
+    }
+
+    function hideCreateSessionModal(event) {
+      if (!event || event.target === document.getElementById('create-session-modal')) {
+        document.getElementById('create-session-modal').classList.add('hidden');
+      }
+    }
+
+    function selectAgentCard(el) {
+      document.querySelectorAll('.agent-select-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+    }
+
+    function selectWorkspaceOption(el) {
+      document.querySelectorAll('.workspace-option').forEach(o => {
+        o.classList.remove('selected');
+        o.querySelector('input[type="radio"]').checked = false;
+      });
+      el.classList.add('selected');
+      el.querySelector('input[type="radio"]').checked = true;
+      // 显示/隐藏共享开关
+      const val = el.querySelector('input').value;
+      if (val !== 'personal') {
+        document.getElementById('share-toggle-group').classList.remove('hidden');
+      } else {
+        document.getElementById('share-toggle-group').classList.add('hidden');
+      }
+    }
+
+    function toggleShare(el) {
+      el.classList.toggle('on');
+    }
+
+    function confirmCreateSession() {
+      hideCreateSessionModal();
+      // 切换到对话页面
+      switchView('chatWorkspace');
+    }
+
+    // 显示空间详情
+    function showSpaceDetail(spaceId) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-team-detail').classList.add('active');
+      document.getElementById('breadcrumb').innerHTML = '<span>团队空间</span><span style="color:var(--ink-4);">/</span><strong>' + document.getElementById('detail-space-name').textContent + '</strong>';
+    }
+
+    // 文件树选择
+    function selectFile(el) {
+      document.querySelectorAll('.tree-item').forEach(item => item.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // 主题切换
+    function toggleTheme() {
+      const html = document.documentElement;
+      if (html.getAttribute('data-theme') === 'dark') {
+        html.removeAttribute('data-theme');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+      }
+    }
+
+    // 创建工作空间模态框
+    function showCreateModal() {
+      document.getElementById('create-modal').classList.remove('hidden');
+    }
+
+    function hideCreateModal(event) {
+      if (!event || event.target === document.getElementById('create-modal')) {
+        document.getElementById('create-modal').classList.add('hidden');
+      }
+    }
+
+    // 成员管理抽屉
+    function showMemberDrawer() {
+      document.getElementById('member-drawer-overlay').classList.remove('hidden');
+      document.getElementById('member-drawer').classList.remove('hidden');
+    }
+
+    function hideMemberDrawer() {
+      document.getElementById('member-drawer-overlay').classList.add('hidden');
+      document.getElementById('member-drawer').classList.add('hidden');
+    }
+
+    // 选择工作空间（从侧边栏二级菜单进入）
+    function selectWorkspace(workspace, el) {
+      const labels = {
+        personal: '个人空间',
+        team1: '数据中台研发团队',
+        team2: '知识库维护组',
+        team3: '产品需求评审',
+        team4: '智能体开发组'
+      };
+      const fileData = {
+        personal: [
+          { name: 'README.md', icon: 'file' },
+          { name: 'main.py', icon: 'file' },
+          { name: 'config.yaml', icon: 'file' },
+          { name: 'documents', icon: 'folder' }
+        ],
+        team1: [
+          { name: 'README.md', icon: 'file' },
+          { name: 'docs', icon: 'folder' },
+          { name: 'src', icon: 'folder' },
+          { name: 'etl_pipeline.py', icon: 'file' },
+          { name: 'data_quality.md', icon: 'file' }
+        ],
+        team2: [
+          { name: '知识库规范.md', icon: 'file' },
+          { name: '模板', icon: 'folder' },
+          { name: '流程文档', icon: 'folder' },
+          { name: '最佳实践.md', icon: 'file' }
+        ],
+        team3: [
+          { name: 'PRD_v2.3.md', icon: 'file' },
+          { name: '评审记录', icon: 'folder' },
+          { name: '需求变更.md', icon: 'file' }
+        ],
+        team4: [
+          { name: 'README.md', icon: 'file' },
+          { name: 'prompts', icon: 'folder' },
+          { name: 'tools', icon: 'folder' },
+          { name: 'eval_dataset.json', icon: 'file' },
+          { name: 'agent_config.yaml', icon: 'file' }
+        ]
+      };
+
+      // 更新侧边栏激活状态
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      document.querySelectorAll('.sub-nav-item').forEach(item => item.classList.remove('active'));
+      if (el) el.classList.add('active');
+
+      // 切换到聊天页面
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-chat').classList.add('active');
+
+      // 更新面包屑
+      document.getElementById('breadcrumb').innerHTML = '<span>对话工作台</span><span style="color:var(--ink-4);"/>></span><strong>' + labels[workspace] + '</strong>';
+
+      // 更新左侧标题
+      const labelEl = document.getElementById('current-workspace-label');
+      if (labelEl) labelEl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>' + labels[workspace];
+
+      // 更新右侧面板标题
+      document.getElementById('workspace-panel-title').textContent = labels[workspace];
+
+      // 确保面板展开
+      document.getElementById('workspace-panel').classList.remove('collapsed');
+
+      // 更新右侧面板文件树
+      const tree = document.getElementById('workspace-tree');
+      const files = fileData[workspace] || fileData.personal;
+      tree.innerHTML = files.map((f, i) => {
+        const fileSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        const folderSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        return '<div class="ws-tree-item ' + (i === 0 ? 'active' : '') + '" onclick="selectWsFile(this)">' + (f.icon === 'folder' ? folderSvg : fileSvg) + '<span>' + f.name + '</span></div>';
+      }).join('');
+    }
+
+    // 右侧工作空间面板
+    function toggleWorkspacePanel() {
+      document.getElementById('workspace-panel').classList.toggle('collapsed');
+    }
+
+    function refreshWorkspacePanel() {
+      const tree = document.getElementById('workspace-tree');
+      tree.style.opacity = '0.5';
+      setTimeout(() => { tree.style.opacity = '1'; }, 300);
+    }
+
+    function selectWsFile(el) {
+      document.querySelectorAll('.ws-tree-item').forEach(item => item.classList.remove('active'));
+      el.classList.add('active');
+    }
+  </script>
+</body>
+</html>

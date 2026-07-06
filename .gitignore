@@ -1,0 +1,27 @@
+.idea/
+.venv/
+__pycache__/
+*.egg-info/
+.env
+*.env.local
+.omc/
+.claude/
+
+# Backend runtime data
+backend/.venv/
+backend/data/
+user_workspaces/
+claude_data/
+agent_workspaces/
+backend/.env
+.playwright-mcp/
+
+/.claude/worktrees/
+/.worktrees/
+/tmp
+/.superpowers/
+.gstack/
+/docker/volumes/*
+/backend/logs
+/.codegraph/
+/.mcp.json

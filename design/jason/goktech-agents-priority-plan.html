@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>goktech-agent 开发优先级计划</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --secondary: #6c5ce7;
+            --accent: #00b894;
+            --p0: #ef4444;
+            --p1: #f59e0b;
+            --p2: #eab308;
+            --p3: #10b981;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #2d3748;
+            --text-light: #718096;
+            --border: #e2e8f0;
+            --sidebar-width: 280px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 60px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+        .header-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .header h1 {
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+        .header-subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            max-width: 800px;
+        }
+        .header-meta {
+            margin-top: 20px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        .header-meta a {
+            color: white;
+            text-decoration: underline;
+            text-underline-offset: 4px;
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--card-bg);
+            border-right: 1px solid var(--border);
+            height: calc(100vh - 180px);
+            position: sticky;
+            top: 40px;
+            padding: 30px 20px;
+            overflow-y: auto;
+        }
+        .sidebar-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-light);
+            margin-bottom: 16px;
+            padding-left: 12px;
+        }
+        .nav-list { list-style: none; }
+        .nav-item { margin-bottom: 4px; }
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            color: var(--text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover { background: #f1f5f9; color: var(--primary); }
+        .nav-link.active { background: #e8f0fe; color: var(--primary); font-weight: 500; }
+        .nav-number {
+            width: 24px;
+            height: 24px;
+            background: #e8f0fe;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 10px;
+            color: var(--primary);
+        }
+        .nav-link.active .nav-number { background: var(--primary); color: white; }
+
+        /* Main Content */
+        .main { flex: 1; padding: 40px 60px; min-width: 0; }
+
+        /* Section Styles */
+        .section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border);
+        }
+        .section-number {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            margin-right: 16px;
+        }
+        .section-title { font-size: 24px; font-weight: 700; color: var(--text); }
+        h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 30px 0 16px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+        }
+        h3::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: var(--accent);
+            border-radius: 2px;
+            margin-right: 10px;
+        }
+        h4 { font-size: 16px; font-weight: 600; margin: 20px 0 12px; color: var(--text); }
+        p { margin-bottom: 12px; }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: linear-gradient(135deg, #e8f0fe 0%, #f0f4ff 100%);
+            border-left: 4px solid var(--primary);
+            padding: 20px 24px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .highlight-box p { margin: 0; }
+        .highlight-box strong { color: var(--primary); }
+
+        .warning-box {
+            background: linear-gradient(135deg, #fff7e6 0%, #fef3c7 100%);
+            border-left: 4px solid var(--p1);
+            padding: 20px 24px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .warning-box strong { color: #b45309; }
+
+        .success-box {
+            background: linear-gradient(135deg, #e6f9f0 0%, #d1fae5 100%);
+            border-left: 4px solid var(--accent);
+            padding: 20px 24px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .success-box strong { color: #047857; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        th {
+            background: #f8fafc;
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text);
+            border-bottom: 2px solid var(--border);
+        }
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        tr:hover td { background: #f8fafc; }
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin: 20px 0;
+        }
+        .table-wrap table { margin: 0; border: none; }
+        .table-wrap tr:last-child td { border-bottom: none; }
+
+        ul, ol { padding-left: 24px; margin: 12px 0; }
+        li { margin-bottom: 8px; }
+
+        /* Priority Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-p0 { background: #fef2f2; color: var(--p0); border: 1px solid #fecaca; }
+        .badge-p1 { background: #fff7ed; color: var(--p1); border: 1px solid #fed7aa; }
+        .badge-p2 { background: #fefce8; color: #a16207; border: 1px solid #fde68a; }
+        .badge-p3 { background: #ecfdf5; color: var(--p3); border: 1px solid #a7f3d0; }
+        .badge-kr {
+            background: #e8f0fe;
+            color: var(--primary);
+            border: 1px solid #c7d7fc;
+        }
+        .badge-version {
+            background: #f3e8ff;
+            color: #7c3aed;
+            border: 1px solid #ddd6fe;
+        }
+
+        /* Priority Block */
+        .priority-block {
+            border-radius: 14px;
+            padding: 28px;
+            margin: 24px 0;
+            border: 2px solid;
+            position: relative;
+        }
+        .priority-block.p0 { background: linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%); border-color: #fecaca; }
+        .priority-block.p1 { background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%); border-color: #fed7aa; }
+        .priority-block.p2 { background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%); border-color: #fde68a; }
+        .priority-block.p3 { background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%); border-color: #a7f3d0; }
+        .priority-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .priority-block.p0 .priority-title { color: #b91c1c; }
+        .priority-block.p1 .priority-title { color: #b45309; }
+        .priority-block.p2 .priority-title { color: #a16207; }
+        .priority-block.p3 .priority-title { color: #047857; }
+        .priority-subtitle {
+            color: var(--text-light);
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .priority-block table { background: white; border-radius: 10px; overflow: hidden; }
+        .priority-block .verify-goal {
+            margin-top: 16px;
+            padding: 14px 18px;
+            background: white;
+            border-radius: 10px;
+            font-size: 14px;
+            border-left: 4px solid var(--accent);
+        }
+
+        /* Dependency SVG */
+        .dep-svg-wrap {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .dep-svg-wrap svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            min-width: 880px;
+        }
+        .dep-svg-caption {
+            margin: 12px 0 0 0;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border);
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            justify-content: center;
+        }
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-box {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1.2px solid;
+        }
+        .legend-p0 { background: #fee2e2; border-color: #ef4444; }
+        .legend-p1 { background: #ffedd5; border-color: #f59e0b; }
+        .legend-p2 { background: #fef3c7; border-color: #eab308; }
+        .legend-line {
+            display: inline-block;
+            width: 22px;
+            height: 0;
+            border-top-width: 2px;
+            border-top-style: dashed;
+        }
+        .legend-feedback { border-top-color: #7c3aed; }
+        .legend-bridge { border-top-color: #94a3b8; }
+
+        /* Dependency Chain (text fallback - legacy) */
+        .dep-chain {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 24px;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 20px 0;
+        }
+
+        /* Anti-pattern cards */
+        .antipattern-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .antipattern-card {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+        }
+        .antipattern-icon {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+        .antipattern-title {
+            font-weight: 600;
+            color: #b91c1c;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+        .antipattern-desc {
+            font-size: 13px;
+            color: #7f1d1d;
+        }
+
+        /* Suggestion Cards */
+        .suggestion {
+            background: #f8fafc;
+            border-left: 4px solid var(--secondary);
+            border-radius: 0 10px 10px 0;
+            padding: 18px 22px;
+            margin: 16px 0;
+        }
+        .suggestion-title {
+            font-weight: 600;
+            color: var(--secondary);
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        /* Version Timeline */
+        .version-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .version-card {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .version-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+        }
+        .version-card.v01::before { background: var(--p0); }
+        .version-card.v02::before { background: var(--p1); }
+        .version-card.v10::before { background: var(--accent); }
+        .version-card.later::before { background: var(--text-light); }
+        .version-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .version-period {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-bottom: 12px;
+        }
+        .version-include {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .version-include strong { display: block; margin-bottom: 4px; }
+
+        /* Summary Box */
+        .summary-box {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 16px;
+            margin: 30px 0;
+        }
+        .summary-box p {
+            font-size: 16px;
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+        .summary-box p:last-child { margin-bottom: 0; }
+        .summary-box strong {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-light);
+            font-size: 14px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+
+        @media (max-width: 968px) {
+            .sidebar { display: none; }
+            .main { padding: 20px; }
+            .section { padding: 24px; }
+            .header { padding: 40px 20px; }
+            .header h1 { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <span class="header-badge">📋 开发优先级计划 · v1.0</span>
+            <h1>goktech-agent 开发优先级计划</h1>
+            <p class="header-subtitle">基于 PRD 制定的分层优先级排序与执行建议 —— P0 基石 → P1 闭环 → P2 规模化 → P3 扩展</p>
+            <div class="header-meta">
+                📅 编制日期：2026-06-03 &nbsp;&nbsp;|&nbsp;&nbsp; 🔗 关联文档：<a href="./goktech-agents-prd.html">goktech-agents-prd</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-title">目录导航</div>
+            <ul class="nav-list">
+                <li class="nav-item"><a href="#section-1" class="nav-link"><span class="nav-number">1</span>判断维度</a></li>
+                <li class="nav-item"><a href="#section-2" class="nav-link"><span class="nav-number">2</span>四级优先级分层</a></li>
+                <li class="nav-item"><a href="#section-3" class="nav-link"><span class="nav-number">3</span>关键依赖链</a></li>
+                <li class="nav-item"><a href="#section-4" class="nav-link"><span class="nav-number">4</span>对 PRD 的建议</a></li>
+                <li class="nav-item"><a href="#section-5" class="nav-link"><span class="nav-number">5</span>版本-优先级对照</a></li>
+                <li class="nav-item"><a href="#section-6" class="nav-link"><span class="nav-number">6</span>一句话总结</a></li>
+                <li class="nav-item"><a href="#section-7" class="nav-link"><span class="nav-number">7</span>KR 优先级速查</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Section 1 -->
+            <section class="section" id="section-1">
+                <div class="section-header">
+                    <div class="section-number">1</div>
+                    <h2 class="section-title">优先级判断维度</h2>
+                </div>
+                <p>从五个维度评估每个功能的优先级：</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th width="22%">维度</th><th>含义</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>依赖关系</strong></td><td>是否是其他功能的前置条件（基石不建，上层无法构建）</td></tr>
+                            <tr><td><strong>业务紧迫性</strong></td><td>V0.1（2-4周）需支撑实训营，V0.2（4-8周）需支撑首批 FDE 试点</td></tr>
+                            <tr><td><strong>频次与刚需</strong></td><td>每日高频使用 vs 偶尔触发；缺失即阻塞 vs 缺失可绕行</td></tr>
+                            <tr><td><strong>风险消除</strong></td><td>§7.4 假设栏中标记的高风险项应优先验证</td></tr>
+                            <tr><td><strong>闭环完整性</strong></td><td>是否构成"业务可走通"的最小闭环，避免功能孤岛</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Section 2 -->
+            <section class="section" id="section-2">
+                <div class="section-header">
+                    <div class="section-number">2</div>
+                    <h2 class="section-title">四级优先级分层</h2>
+                </div>
+
+                <!-- P0 -->
+                <div class="priority-block p0">
+                    <div class="priority-title">🔴 P0 — 平台基石</div>
+                    <div class="priority-subtitle">必须最早完成，V0.1 必交付</div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th width="5%">#</th><th width="25%">功能模块</th><th width="12%">对应 KR</th><th>核心理由</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>1</td><td><strong>个人/团队空间文件管理</strong></td><td><span class="badge badge-kr">KR1</span></td><td>所有上层能力的"原料入口"。没有文件就没有 RAG、没有 Agent 上下文、没有资产沉淀</td></tr>
+                                <tr><td>2</td><td><strong>基础权限治理</strong><br>（白名单 + 空间隔离）</td><td><span class="badge badge-kr">KR6</span></td><td>§7.4 明确指出"权限和空间隔离是客户资料进入平台的前提"。<strong>晚做即返工</strong></td></tr>
+                                <tr><td>3</td><td><strong>Agent 中心 + 单 Agent 对话</strong></td><td>—</td><td>平台的核心交付物。没有 Agent，平台就只是文件夹</td></tr>
+                                <tr><td>4</td><td><strong>多任务对话（基础版）</strong></td><td><span class="badge badge-kr">KR3</span></td><td>FDE 的主工作台。一个 FDE 一天会并行 3-5 个调试任务</td></tr>
+                                <tr><td>5</td><td><strong>/command 搜索 + 技能/插件中心</strong></td><td><span class="badge badge-kr">KR4</span></td><td>Agent 的"手脚"发现入口。无此则技能资产看不到</td></tr>
+                                <tr><td>6</td><td><strong>文件预览 + 拖拽引用 + 反馈入口</strong></td><td>—</td><td>高频交互动作，缺失会让用户立刻流失</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="verify-goal">
+                        🎯 <strong>P0 验证目标</strong>：FDE 能在 2 周内独立完成"上传文件 → 配 Agent → 调试对话 → 反馈"全链路（首版 Agent 通过文件直接引用获取上下文，RAG 调整至 P2）。
+                    </div>
+                </div>
+
+                <!-- P1 -->
+                <div class="priority-block p1">
+                    <div class="priority-title">🟠 P1 — 闭环关键</div>
+                    <div class="priority-subtitle">V0.2 试点必交付</div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th width="5%">#</th><th width="25%">功能模块</th><th width="12%">对应 KR</th><th>核心理由</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>1</td><td><strong>工具接入管理</strong><br>（MCP Server/HTTP API 注册）</td><td><span class="badge badge-kr">KR13</span></td><td>Agent 调用真实业务系统的唯一通路。<strong>先于多智能体编排</strong>——单 Agent 都接不了工具，多 Agent 协作无意义</td></tr>
+                                <tr><td>2</td><td><strong>数据工作台</strong><br>（MinerU + ETL + Supabase）</td><td><span class="badge badge-kr">KR10</span></td><td>试点项目 80% 的工作是"先把客户数据搞进来"。无此则 FDE 退回 Excel+脚本</td></tr>
+                                <tr><td>3</td><td><strong>知识图谱 + 本体工作台（基础）</strong></td><td>—</td><td>"文件→数据→Agent"主循环的语义层。结构化数据需要本体/关系才能被 Agent 准确消费，避免每个 Agent 重复理解业务 schema</td></tr>
+                                <tr><td>4</td><td><strong>Agent 业务视图</strong><br>（表格 + 任务状态渲染）</td><td><span class="badge badge-kr">KR11</span></td><td>业务用户接触平台的唯一窗口。试点能否成功取决于此</td></tr>
+                                <tr><td>5</td><td><strong>反馈与改进任务台 + 反馈回链</strong></td><td><span class="badge badge-kr">KR9</span></td><td>闭环"流程三"的承载。没有它，业务反馈就是聊天截图</td></tr>
+                                <tr><td>6</td><td><strong>完整权限矩阵 + 审计日志</strong></td><td><span class="badge badge-kr">KR6 增强</span></td><td>客户私有化部署的合规前提</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="verify-goal">
+                        🎯 <strong>P1 验证目标</strong>：至少 1 个 FDE 小队在 V0.2 跑通 "<strong>文件 → 数据 → 知识图谱/本体 → Agent → 调用业务工具 → 业务用户使用 → 反馈回流</strong>" 主循环。
+                    </div>
+                </div>
+
+                <!-- P2 -->
+                <div class="priority-block p2">
+                    <div class="priority-title">🟡 P2 — 规模化与复用</div>
+                    <div class="priority-subtitle">V1.0 BU 移交版</div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th width="5%">#</th><th width="30%">功能模块</th><th>优先级理由</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>1</td><td><strong>RAG 知识库 + 引用溯源 + 评测面板</strong></td><td>由原 P0 调整至 P2。RAG 本身工程量大且效果不稳定（§7.4 风险栏），V0.1 可让 Agent 通过文件直接引用获取上下文，V0.2 通过知识图谱/本体提供结构化语义层，待数据治理和评测样本就绪后再上 RAG</td></tr>
+                                <tr><td>2</td><td><strong>团队空间 Release 发布 + 项目资产库</strong></td><td>由原 P1 调整至 P2。V0.2 先聚焦"文件→数据→Agent"主循环跑通，Release 沉淀放到 V1.0 阶段——MVP 还没成熟时发布快照只是空壳</td></tr>
+                                <tr><td>3</td><td><strong>资产复用 Fork + 复用次数统计</strong></td><td>跟随 Release 同步下沉。Fork 是 Release 的消费端，必须等 V1.0 资产库有内容后才有意义</td></tr>
+                                <tr><td>4</td><td><strong>多智能体团队编排（串行/并行）</strong></td><td>KR12 虽列入首版，但<strong>实操依赖单 Agent + 工具成熟</strong>。强行前置会陷入"多 Agent 互相调试"陷阱</td></tr>
+                                <tr><td>5</td><td><strong>快照对比 + 行业/标签分类</strong></td><td>资产库规模到 20+ 后才有价值</td></tr>
+                                <tr><td>6</td><td><strong>运营统计后台完整版</strong></td><td>复用率指标需要 P2 复用数据沉淀后才有意义</td></tr>
+                                <tr><td>7</td><td><strong>Agent 配置复制和迁移</strong></td><td>跨团队复用的体验优化</td></tr>
+                                <tr><td>8</td><td><strong>结构化输出扩展（看板/流程图）</strong></td><td>P1 已覆盖表格+任务状态，已能跑通试点</td></tr>
+                                <tr><td>9</td><td><strong>表单驱动对话 + 推理过程摘要折叠</strong></td><td>体验加分项，非阻塞项</td></tr>
+                                <tr><td>10</td><td><strong>标准交付包 + 部署清单 + SLA</strong></td><td>BU 移交的标准化前提，但需 P1 试点经验沉淀后才知道"包"长什么样</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="verify-goal">
+                        🎯 <strong>P2 验证目标</strong>：至少 1 个成熟 MVP 完成 "<strong>Release 发布 → 另一小队 Fork → 客户定制</strong>" 的跨团队复用链路，同时沉淀首批 RAG 评测样本。
+                    </div>
+                </div>
+
+                <!-- P3 -->
+                <div class="priority-block p3">
+                    <div class="priority-title">🟢 P3 — 后续扩展</div>
+                    <div class="priority-subtitle">V1.0 之后</div>
+                    <ul>
+                        <li><strong>企微协同 + 群聊 Agent</strong> — 渠道扩展，非核心闭环</li>
+                        <li><strong>定时任务</strong> — 运营优化，可用外部 cron 替代</li>
+                        <li><strong>GraphRAG / 跨知识库推理</strong> — 技术前沿，需 P2 知识图谱成熟</li>
+                        <li><strong>动态业务工具开发</strong> — FDE 工具箱沉淀，依赖 P1 工具接入成熟</li>
+                        <li><strong>客户侧私有化部署模式</strong> — §10 Open Question 1 待定，先内部部署验证</li>
+                        <li><strong>跨业务线模板库</strong> — 资产规模 50+ 后才有提炼空间</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Section 3 -->
+            <section class="section" id="section-3">
+                <div class="section-header">
+                    <div class="section-number">3</div>
+                    <h2 class="section-title">关键依赖链（容易踩坑的顺序）</h2>
+                </div>
+                <p>下图展示了主要功能模块之间的前后依赖关系：</p>
+                <div class="dep-svg-wrap">
+                    <svg viewBox="0 0 1100 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="goktech-agent 优先级依赖链图">
+                        <defs>
+                            <!-- Arrow marker -->
+                            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+                            </marker>
+                            <!-- Loop arrow (darker) -->
+                            <marker id="arrow-loop" viewBox="0 0 10 10" refX="9" refY="5"
+                                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+                            </marker>
+                            <!-- Node gradients -->
+                            <linearGradient id="g-p0" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#fee2e2"/>
+                                <stop offset="100%" stop-color="#fecaca"/>
+                            </linearGradient>
+                            <linearGradient id="g-p1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#ffedd5"/>
+                                <stop offset="100%" stop-color="#fed7aa"/>
+                            </linearGradient>
+                            <linearGradient id="g-p2" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#fef3c7"/>
+                                <stop offset="100%" stop-color="#fde68a"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- ========== Layer Backgrounds ========== -->
+                        <rect x="10" y="10" width="1080" height="120" rx="14" fill="#fef2f2" stroke="#fecaca" stroke-dasharray="4 4"/>
+                        <text x="28" y="38" font-size="13" font-weight="700" fill="#b91c1c" font-family="'Noto Sans SC', sans-serif">P0 基石</text>
+
+                        <rect x="10" y="145" width="1080" height="225" rx="14" fill="#fff7ed" stroke="#fed7aa" stroke-dasharray="4 4"/>
+                        <text x="28" y="173" font-size="13" font-weight="700" fill="#b45309" font-family="'Noto Sans SC', sans-serif">P1 闭环主循环（文件 → 数据 → 知识 → Agent → 业务用户 → 反馈）</text>
+
+                        <rect x="10" y="385" width="1080" height="245" rx="14" fill="#fefce8" stroke="#fde68a" stroke-dasharray="4 4"/>
+                        <text x="28" y="413" font-size="13" font-weight="700" fill="#a16207" font-family="'Noto Sans SC', sans-serif">P2 沉淀复用层（成熟 MVP 后启用）</text>
+
+                        <!-- ========== P0 Nodes ========== -->
+                        <g font-family="'Noto Sans SC', sans-serif" font-size="13" text-anchor="middle">
+                            <!-- 文件管理 -->
+                            <rect x="60" y="65" width="130" height="42" rx="10" fill="url(#g-p0)" stroke="#ef4444" stroke-width="1.5"/>
+                            <text x="125" y="91" fill="#7f1d1d" font-weight="600">文件管理</text>
+
+                            <!-- 权限治理 -->
+                            <rect x="60" y="200" width="130" height="42" rx="10" fill="url(#g-p0)" stroke="#ef4444" stroke-width="1.5"/>
+                            <text x="125" y="226" fill="#7f1d1d" font-weight="600">权限治理 (P0)</text>
+                        </g>
+
+                        <!-- ========== P1 Nodes ========== -->
+                        <g font-family="'Noto Sans SC', sans-serif" font-size="13" text-anchor="middle">
+                            <!-- 数据工作台 -->
+                            <rect x="240" y="200" width="130" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="305" y="226" fill="#7c2d12" font-weight="600">数据工作台</text>
+
+                            <!-- 知识图谱/本体 -->
+                            <rect x="420" y="200" width="140" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="490" y="226" fill="#7c2d12" font-weight="600">知识图谱/本体</text>
+
+                            <!-- Agent 对话 -->
+                            <rect x="610" y="200" width="130" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="675" y="226" fill="#7c2d12" font-weight="600">Agent 对话</text>
+
+                            <!-- 工具接入 (上分支) -->
+                            <rect x="790" y="190" width="130" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="855" y="216" fill="#7c2d12" font-weight="600">工具接入</text>
+
+                            <!-- 业务系统调用 -->
+                            <rect x="940" y="190" width="135" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="1007" y="216" fill="#7c2d12" font-weight="600">业务系统调用</text>
+
+                            <!-- 业务视图 (下分支) -->
+                            <rect x="790" y="265" width="130" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="855" y="291" fill="#7c2d12" font-weight="600">业务视图</text>
+
+                            <!-- 反馈入口 -->
+                            <rect x="940" y="265" width="135" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="1007" y="291" fill="#7c2d12" font-weight="600">反馈入口</text>
+
+                            <!-- 改进任务台 -->
+                            <rect x="610" y="320" width="130" height="42" rx="10" fill="url(#g-p1)" stroke="#f59e0b" stroke-width="1.5"/>
+                            <text x="675" y="346" fill="#7c2d12" font-weight="600">改进任务台</text>
+                        </g>
+
+                        <!-- ========== P2 Nodes ========== -->
+                        <g font-family="'Noto Sans SC', sans-serif" font-size="13" text-anchor="middle">
+                            <!-- 成熟 MVP (entry) -->
+                            <rect x="60" y="450" width="130" height="42" rx="10" fill="#fffbeb" stroke="#a16207" stroke-width="1.5" stroke-dasharray="3 3"/>
+                            <text x="125" y="476" fill="#78350f" font-weight="600">成熟 MVP</text>
+
+                            <!-- Release -->
+                            <rect x="240" y="450" width="130" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="305" y="476" fill="#713f12" font-weight="600">团队 Release</text>
+
+                            <!-- 项目资产库 -->
+                            <rect x="420" y="450" width="130" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="485" y="476" fill="#713f12" font-weight="600">项目资产库</text>
+
+                            <!-- Fork -->
+                            <rect x="600" y="450" width="120" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="660" y="476" fill="#713f12" font-weight="600">Fork 复用</text>
+
+                            <!-- 复用统计 -->
+                            <rect x="770" y="450" width="120" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="830" y="476" fill="#713f12" font-weight="600">复用统计</text>
+
+                            <!-- RAG 知识库 -->
+                            <rect x="240" y="540" width="130" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="305" y="566" fill="#713f12" font-weight="600">RAG 知识库</text>
+
+                            <!-- 评测样本 -->
+                            <rect x="60" y="540" width="130" height="42" rx="10" fill="#fffbeb" stroke="#a16207" stroke-width="1.5" stroke-dasharray="3 3"/>
+                            <text x="125" y="566" fill="#78350f" font-weight="600">评测样本</text>
+
+                            <!-- 多 Agent 编排 -->
+                            <rect x="420" y="540" width="140" height="42" rx="10" fill="url(#g-p2)" stroke="#eab308" stroke-width="1.5"/>
+                            <text x="490" y="566" fill="#713f12" font-weight="600">多 Agent 编排</text>
+                        </g>
+
+                        <!-- ========== P0 → P1 Edges ========== -->
+                        <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)">
+                            <!-- 文件管理 → 数据工作台 -->
+                            <path d="M 190 88 Q 215 88, 215 200 L 240 215"/>
+                            <!-- 权限治理 → 数据工作台 -->
+                            <path d="M 190 221 L 240 221"/>
+                        </g>
+
+                        <!-- ========== P1 Main Flow ========== -->
+                        <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)">
+                            <!-- 数据工作台 → 知识图谱 -->
+                            <line x1="370" y1="221" x2="420" y2="221"/>
+                            <!-- 知识图谱 → Agent 对话 -->
+                            <line x1="560" y1="221" x2="610" y2="221"/>
+                            <!-- Agent → 工具接入 (上) -->
+                            <path d="M 740 215 Q 765 215, 765 211 L 790 211"/>
+                            <!-- 工具接入 → 业务系统调用 -->
+                            <line x1="920" y1="211" x2="940" y2="211"/>
+                            <!-- Agent → 业务视图 (下) -->
+                            <path d="M 740 230 Q 765 230, 765 286 L 790 286"/>
+                            <!-- 业务视图 → 反馈入口 -->
+                            <line x1="920" y1="286" x2="940" y2="286"/>
+                        </g>
+
+                        <!-- ========== Feedback Loop (purple emphasis) ========== -->
+                        <g fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-dasharray="6 3" marker-end="url(#arrow-loop)">
+                            <!-- 反馈入口 → 改进任务台 (拐弯) -->
+                            <path d="M 1007 307 L 1007 341 L 740 341"/>
+                            <!-- 改进任务台 → Agent 对话 (回链) -->
+                            <path d="M 675 320 Q 675 280, 675 242"/>
+                        </g>
+                        <text x="870" y="335" font-size="11" fill="#7c3aed" font-family="'Noto Sans SC', sans-serif" font-style="italic">反馈回链</text>
+
+                        <!-- ========== P1 → P2 Bridge ========== -->
+                        <g fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)">
+                            <!-- 整个 P1 闭环 → 成熟 MVP -->
+                            <path d="M 125 362 Q 125 410, 125 450"/>
+                        </g>
+                        <text x="140" y="408" font-size="11" fill="#64748b" font-family="'Noto Sans SC', sans-serif" font-style="italic">MVP 成熟后</text>
+
+                        <!-- ========== P2 Edges ========== -->
+                        <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)">
+                            <!-- 成熟 MVP → Release -->
+                            <line x1="190" y1="471" x2="240" y2="471"/>
+                            <!-- Release → 资产库 -->
+                            <line x1="370" y1="471" x2="420" y2="471"/>
+                            <!-- 资产库 → Fork -->
+                            <line x1="550" y1="471" x2="600" y2="471"/>
+                            <!-- Fork → 复用统计 -->
+                            <line x1="720" y1="471" x2="770" y2="471"/>
+                            <!-- 评测样本 → RAG 知识库 -->
+                            <line x1="190" y1="561" x2="240" y2="561"/>
+                            <!-- RAG 知识库 → 多 Agent 编排 -->
+                            <line x1="370" y1="561" x2="420" y2="561"/>
+                            <!-- 资产库 → RAG (向下分支) -->
+                            <path d="M 485 492 Q 485 520, 370 552"/>
+                            <!-- 资产库 → 多 Agent (向下分支) -->
+                            <path d="M 485 492 L 490 540"/>
+                        </g>
+                    </svg>
+                    <p class="dep-svg-caption">
+                        <span class="legend-item"><span class="legend-box legend-p0"></span>P0 基石</span>
+                        <span class="legend-item"><span class="legend-box legend-p1"></span>P1 主循环</span>
+                        <span class="legend-item"><span class="legend-box legend-p2"></span>P2 沉淀复用</span>
+                        <span class="legend-item"><span class="legend-line legend-feedback"></span>反馈回链</span>
+                        <span class="legend-item"><span class="legend-line legend-bridge"></span>MVP 成熟后启用</span>
+                    </p>
+                </div>
+
+                <h3>三个常见反模式（需主动避免）</h3>
+                <div class="antipattern-grid">
+                    <div class="antipattern-card">
+                        <div class="antipattern-icon">❌</div>
+                        <div class="antipattern-title">先做多 Agent 编排再做工具接入</div>
+                        <div class="antipattern-desc">Agent 没有手脚，多个 Agent 也只能互相聊天</div>
+                    </div>
+                    <div class="antipattern-card">
+                        <div class="antipattern-icon">❌</div>
+                        <div class="antipattern-title">先做 Release/Fork 再做基础数据治理</div>
+                        <div class="antipattern-desc">MVP 没成熟就发布快照，资产库里全是空壳，Fork 出来也用不起来</div>
+                    </div>
+                    <div class="antipattern-card">
+                        <div class="antipattern-icon">❌</div>
+                        <div class="antipattern-title">跳过本体/知识图谱直接上 RAG</div>
+                        <div class="antipattern-desc">Agent 拿到的是松散的文档片段，理解业务 schema 时反复出错——本体先行才能让结构化数据真正被消费</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 4 -->
+            <section class="section" id="section-4">
+                <div class="section-header">
+                    <div class="section-number">4</div>
+                    <h2 class="section-title">对 PRD 的几点建议</h2>
+                </div>
+                <p>基于"Think Before Coding"原则，以下几处需要在动工前澄清：</p>
+
+                <div class="suggestion">
+                    <div class="suggestion-title">4.1 V0.1 范围似乎略乐观（2-4 周）</div>
+                    <p>P0 第 1-6 项全部要求 V0.1 交付，但其中 Agent 中心 + 多任务对话任一项的工程量都不止 1 周。建议：</p>
+                    <ul>
+                        <li><strong>RAG 知识库整体后置至 P2/V1.0</strong>（本计划已调整 ✅）：V0.1 阶段 Agent 通过文件直接引用获取上下文，待数据治理和评测样本就绪后再启动 RAG</li>
+                        <li>将 <strong>/command 跨技能包检索</strong> 简化为首版只支持本团队技能</li>
+                        <li><strong>Agent 业务视图</strong> 的 P1 范围可以仅做"消费 Markdown + 表格"，避免和对话工作台并行开发</li>
+                    </ul>
+                </div>
+
+                <div class="suggestion">
+                    <div class="suggestion-title">4.2 P1 知识图谱/本体的"轻量起步"边界要先约定</div>
+                    <p>本计划把"知识图谱+本体（基础）"升入 P1，作为"文件→数据→Agent"主循环的语义层。但本体建模容易陷入"建模炸弹"——一开始就追求完整的领域 schema 会拖慢 V0.2 全部进度。</p>
+                    <div class="warning-box">
+                        <p><strong>建议：</strong></p>
+                        <ul>
+                            <li>V0.2 阶段<strong>只交付"最小可用本体"</strong>：每个试点场景定义 ≤ 10 个核心实体 + ≤ 20 个关系，覆盖 Agent 当前需要回答的问题即可</li>
+                            <li>本体编辑器<strong>只做表单/CSV 录入</strong>，不做可视化建模工具（推迟到 P2）</li>
+                            <li>知识图谱查询<strong>只支持基于本体 schema 的过滤查询</strong>，不做 GraphRAG 推理（P3 才做）</li>
+                            <li>这样可避免与"工具接入、数据工作台、业务视图"4 个核心模块并行 4-8 周时出现进度风险</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="suggestion">
+                    <div class="suggestion-title">4.3 §10 Open Question 应在 V0.1 启动前解决</div>
+                    <p>特别是这三个，直接影响架构：</p>
+                    <ul>
+                        <li><strong>Q1：部署模式（内部 vs 客户侧）</strong> → 决定 Supabase 选型</li>
+                        <li><strong>Q2：Supabase 是终态还是临时方案</strong> → 决定是否需要抽象数据层</li>
+                        <li><strong>Q5：权限模型是否已有现成设计</strong> → 决定 P0 第 2 项的工期</li>
+                    </ul>
+                </div>
+
+                <div class="suggestion">
+                    <div class="suggestion-title">4.4 缺一个"运营仪表盘最小可见"</div>
+                    <p>KR8 要求"统计资产复用率"，但 PRD 中运营统计后台被排到 V1.0。建议：V0.2 至少有一个<strong>最简的复用计数页面</strong>（哪怕只有 1 个数字），否则无法验证 KR8。</p>
+                </div>
+            </section>
+
+            <!-- Section 5 -->
+            <section class="section" id="section-5">
+                <div class="section-header">
+                    <div class="section-number">5</div>
+                    <h2 class="section-title">版本-优先级对照表</h2>
+                </div>
+                <div class="version-grid">
+                    <div class="version-card v01">
+                        <div class="version-name">V0.1</div>
+                        <div class="version-period">📅 2-4 周</div>
+                        <div class="version-include">
+                            <strong>必含：</strong>P0 全部<br>
+                            <strong>可选：</strong>—
+                        </div>
+                    </div>
+                    <div class="version-card v02">
+                        <div class="version-name">V0.2</div>
+                        <div class="version-period">📅 4-8 周</div>
+                        <div class="version-include">
+                            <strong>必含：</strong>P1 全部<br>（含知识图谱/本体基础）<br>
+                            <strong>可选：</strong>—
+                        </div>
+                    </div>
+                    <div class="version-card v10">
+                        <div class="version-name">V1.0</div>
+                        <div class="version-period">📅 8-12 周</div>
+                        <div class="version-include">
+                            <strong>必含：</strong>P2 全部<br>（含 RAG、Release/Fork、多 Agent 编排）<br>
+                            <strong>可选：</strong>P3 部分
+                        </div>
+                    </div>
+                    <div class="version-card later">
+                        <div class="version-name">后续版本</div>
+                        <div class="version-period">📅 —</div>
+                        <div class="version-include">
+                            <strong>必含：</strong>—<br>
+                            <strong>可选：</strong>P3 全部
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 6 -->
+            <section class="section" id="section-6">
+                <div class="section-header">
+                    <div class="section-number">6</div>
+                    <h2 class="section-title">最终优先级一句话总结</h2>
+                </div>
+                <div class="summary-box">
+                    <p>先把 <strong>"FDE 一个人能跑通 文件→Agent 主循环"</strong> 做扎实（P0），再把 <strong>"文件→数据→知识图谱→Agent→业务用户→反馈"</strong> 完整链路打通（P1），最后才考虑 <strong>"Release/Fork 沉淀复用"</strong> 和 <strong>"RAG / 多 Agent 等高级能力"</strong>（P2/P3）。</p>
+                    <p>⚠️ 关键风险点：<strong>权限要早做</strong>、<strong>工具接入要早于多 Agent</strong>、<strong>本体/知识图谱先于 RAG</strong>、<strong>Release/Fork 属于 V1.0 不是 V0.2</strong>（MVP 未成熟时发布快照只是空壳）。</p>
+                </div>
+            </section>
+
+            <!-- Section 7 -->
+            <section class="section" id="section-7">
+                <div class="section-header">
+                    <div class="section-number">7</div>
+                    <h2 class="section-title">附录：KR 优先级映射速查表</h2>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th width="8%">KR</th><th width="35%">内容</th><th width="22%">优先级</th><th>所在版本</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><span class="badge badge-kr">KR1</span></td><td>个人/团队空间文件管理</td><td><span class="badge badge-p0">P0</span></td><td><span class="badge badge-version">V0.1</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR2</span></td><td>RAG 知识库 + 基础评测</td><td><span class="badge badge-p2">P2</span>（由 P0 调整）</td><td><span class="badge badge-version">V1.0</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR3</span></td><td>多任务对话和团队对话</td><td><span class="badge badge-p0">P0</span></td><td><span class="badge badge-version">V0.1</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR4</span></td><td>技能、插件、command 搜索</td><td><span class="badge badge-p0">P0</span></td><td><span class="badge badge-version">V0.1</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR5</span></td><td>团队空间发布为快照</td><td><span class="badge badge-p2">P2</span>（由 P1 调整）</td><td><span class="badge badge-version">V1.0</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR6</span></td><td>基础权限治理</td><td><span class="badge badge-p0">P0 (基础)</span> + <span class="badge badge-p1">P1 (完整)</span></td><td><span class="badge badge-version">V0.1</span> + <span class="badge badge-version">V0.2</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR7</span></td><td>支撑实训营和 FDE MVP</td><td><span class="badge badge-p0">P0</span> + <span class="badge badge-p1">P1 (业务目标)</span></td><td><span class="badge badge-version">V0.1</span> + <span class="badge badge-version">V0.2</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR8</span></td><td>跨团队资产复用 Fork</td><td><span class="badge badge-p2">P2</span>（由 P1 调整）</td><td><span class="badge badge-version">V1.0</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR9</span></td><td>业务反馈到改进任务闭环</td><td><span class="badge badge-p1">P1</span></td><td><span class="badge badge-version">V0.2</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR10</span></td><td>结构化数据接入工作台</td><td><span class="badge badge-p1">P1</span></td><td><span class="badge badge-version">V0.2</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR11</span></td><td>业务用户 AI UI 结构化输出</td><td><span class="badge badge-p1">P1</span></td><td><span class="badge badge-version">V0.2</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR12</span></td><td>多智能体团队基础编排</td><td><span class="badge badge-p2">P2</span><br><small>（PRD 列 V0.2 偏激进）</small></td><td><span class="badge badge-version">V0.2 末 ~ V1.0</span></td></tr>
+                            <tr><td><span class="badge badge-kr">KR13</span></td><td>外部连接器接入管理</td><td><span class="badge badge-p1">P1</span></td><td><span class="badge badge-version">V0.2</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <div class="footer">
+                <p>📋 goktech-agent 开发优先级计划 v1.0 · 编制于 2026-06-03</p>
+                <p>关联文档：<a href="./goktech-agents-prd.html" style="color: var(--primary);">goktech-agents-prd.html</a></p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Sidebar nav highlighting on scroll
+        const sections = document.querySelectorAll('.section');
+        const navLinks = document.querySelectorAll('.nav-link');
+
+        function updateActiveNav() {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 100;
+                if (window.scrollY >= sectionTop) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', updateActiveNav);
+        updateActiveNav();
+
+        // Smooth scroll for sidebar links
+        document.querySelectorAll('a[href^="#"]').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    window.scrollTo({
+                        top: target.offsetTop - 20,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
