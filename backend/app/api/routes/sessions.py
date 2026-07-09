@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.api.deps import current_user
 from app.integrations.claude.runner import load_history, remove_session
-from app.models import Agent, ChatSession, User
+from app.models import Agent, ChatSession, Project, User
+from app.modules.projects.access import get_user_project_role
 from app.modules.sessions.service import (
     create_session as create_session_svc,
     delete_session as delete_session_svc,
@@ -54,6 +55,12 @@ async def _session_out(
 ) -> SessionOut:
     scope = await _scope_for_session(db, user, cs)
     creator = user if cs.user_id == user.id else await db.get(User, cs.user_id)
+    # M3.4.2：解析项目名（项目级会话才显示）
+    project_name: str | None = None
+    project_id = getattr(cs, "project_id", None)
+    if project_id is not None:
+        project = await db.get(Project, project_id)
+        project_name = project.name if project else None
     return SessionOut.model_validate(
         {
             "id": cs.id,
@@ -69,6 +76,8 @@ async def _session_out(
             "workspace_member_role": scope.member_role,
             "workspace_can_write": scope.can_write,
             "workspace_readonly_reason": scope.readonly_reason,
+            "project_id": project_id,
+            "project_name": project_name,
             "created_at": cs.created_at,
             "updated_at": cs.updated_at,
         }
@@ -113,6 +122,13 @@ async def create_session(
         if payload.team_space_id is None:
             raise HTTPException(status_code=400, detail="团队空间会话必须指定团队空间")
         await team_workspace_scope(db, user, payload.team_space_id)
+    # M3.4.2：项目级会话需校验项目成员资格（§3.5 项目内透明、项目外隔离）
+    if payload.project_id is not None:
+        project = await db.get(Project, payload.project_id)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目不存在")
+        if await get_user_project_role(db, payload.project_id, user) is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该项目")
     cs = await create_session_svc(
         db,
         user,
@@ -121,6 +137,7 @@ async def create_session(
         payload.workspace_kind,
         payload.team_space_id,
         payload.is_shared,
+        payload.project_id,
     )
     agent_name = None
     if cs.agent_id:

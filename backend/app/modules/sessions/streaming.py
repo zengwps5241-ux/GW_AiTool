@@ -5,7 +5,9 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi.responses import StreamingResponse
 
@@ -14,9 +16,11 @@ from app.core.config import _merged_env, get_settings, user_workspace
 from app.db.session import async_session
 from app.integrations.claude.guard import FileLockHookContext
 from app.integrations.claude.runner import stream_chat
+from app.integrations.claude.tools import DraftToolContext
 from app.integrations.openai import generate_chat_completion
 from app.models import Agent, ChatSession, User
 from app.modules.agents.workdir import get_agent_workdir
+from app.modules.projects.access import get_user_project_role
 from app.modules.catalog.commands import scan_agent_commands
 from app.modules.sessions.run_state import RunEvent, RunStatus, run_state_store
 from app.modules.team_spaces.file_locks import FileLockService, agent_lock_token
@@ -191,6 +195,40 @@ async def _scope_for_session(db, user: User, cs: ChatSession) -> WorkspaceScope:
     )
 
 
+async def _build_draft_context(
+    db,
+    *,
+    project_id: int | None,
+    user: User,
+    source_session_id: str,
+    publish: Callable[[dict[str, Any]], Awaitable[None]],
+) -> DraftToolContext | None:
+    """会话绑定项目且当前用户仍是项目成员时，构造草稿工具上下文（M3.4.2）。
+
+    - 未绑定项目 → None（不挂载草稿工具）
+    - 用户已退出项目（role 为 None）→ None（防御：避免向无权项目写草稿）
+    - 否则返回注入了 project_id/user_id/source_session_id/publish 的 DraftToolContext
+
+    入参显式传 project_id/source_session_id（不依赖 cs 对象），便于后台 runner
+    在请求会话关闭后安全调用，也便于单测。
+    """
+    if project_id is None:
+        return None
+    role = await get_user_project_role(db, project_id, user)
+    if role is None:
+        logger.warning(
+            "用户 %s 在项目 %s 已无权限，会话 %s 不挂载草稿工具",
+            user.id, project_id, source_session_id,
+        )
+        return None
+    return DraftToolContext(
+        project_id=project_id,
+        user_id=user.id,
+        source_session_id=source_session_id,
+        publish=publish,
+    )
+
+
 async def stream_session_chat(
     cs: ChatSession,
     user: User,
@@ -209,6 +247,9 @@ async def stream_session_chat(
         scope = await _scope_for_session(None, user, cs)
     ws = scope.root
     session_id = cs.id
+    # M3.4.2：项目绑定在 runner 前捕获为局部量（runner 在请求会话关闭后仍可能运行，
+    # 且后台 runner 不直接访问 cs 对象，与 session_id/prior_session_id 同处理）。
+    project_id = getattr(cs, "project_id", None)
     run_id = str(uuid.uuid4())
     async with _session_lock_for(session_id):
         run_state_store.start(session_id, run_id)
@@ -238,6 +279,18 @@ async def stream_session_chat(
             tool_uses.append(evt)
         elif evt.get("type") == "tool_result":
             tool_results.append(evt)
+        run_state_store.append_event(
+            session_id,
+            _run_event_from_stream_event(evt),
+            run_id=run_id,
+        )
+        await publish_to_sse(evt)
+
+    async def publish_draft_event(evt: dict) -> None:
+        """草稿「待采纳」事件：与 tool_use/tool_result 同走 run_state + SSE（M3.4.2）。
+
+        run_state 入栈保证客户端断开重连（/running/stream）仍可回放草稿卡片。
+        """
         run_state_store.append_event(
             session_id,
             _run_event_from_stream_event(evt),
@@ -344,6 +397,20 @@ async def stream_session_chat(
                 stream_kwargs["model"] = model
             if thinking_level != "low":
                 stream_kwargs["thinking_level"] = thinking_level
+            # M3.4.2：项目级会话挂载草稿工具（绑定项目且当前用户仍为成员）。
+            # 草稿工具经 DraftToolContext 闭包把 project/user/session 注入 handler，
+            # AI 调用 save_xxx_draft → 校验落库 → publish_draft_event 推送「待采纳」。
+            if project_id is not None:
+                async with async_session() as s:
+                    draft_context = await _build_draft_context(
+                        s,
+                        project_id=project_id,
+                        user=user,
+                        source_session_id=session_id,
+                        publish=publish_draft_event,
+                    )
+                if draft_context is not None:
+                    stream_kwargs["draft_context"] = draft_context
             summary = await stream_chat(**stream_kwargs)
             await finalize_usage(summary)
             finish_run_state(summary, summary.error_message)

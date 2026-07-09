@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Agent, ChatSession, TeamSpaceMember, User
+from app.models import Agent, ChatSession, Project, TeamSpaceMember, User
 
 
 async def get_owned_session(db: AsyncSession, session_id: str, user: User) -> ChatSession | None:
@@ -100,7 +100,13 @@ async def create_session(
     workspace_kind: str = "personal",
     team_space_id: int | None = None,
     is_shared: bool = False,
+    project_id: int | None = None,
 ) -> ChatSession:
+    # M3.4.2：绑定项目时，若未显式指定 agent，自动加载项目 Agent（§5.2）。
+    if project_id is not None and agent_id is None:
+        project = await db.get(Project, project_id)
+        if project is not None and project.agent_id is not None:
+            agent_id = project.agent_id
     cs = ChatSession(
         id=str(uuid.uuid4()),
         user_id=user.id,
@@ -109,6 +115,7 @@ async def create_session(
         workspace_kind=workspace_kind,
         team_space_id=team_space_id,
         is_shared=is_shared if workspace_kind == "team" else False,
+        project_id=project_id,
     )
     db.add(cs)
     await db.commit()

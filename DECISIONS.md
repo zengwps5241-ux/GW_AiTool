@@ -212,5 +212,15 @@
   - **SSE 待采纳事件**：handler 经 `ctx.publish` 推送 `{type:"draft_pending", entity_type, entity_label, draft_id, project_id, preview}`，与 tool_use/tool_result 同走 on_message → run_state + SSE，前端 M3.1.4 渲染为采纳/驳回卡片。
 - **理由**：SDK 进程内 MCP server 是「让 Claude 调用自定义 Python 工具」的原生正确路径（性能/调试/进程简洁均优），避免造子进程或假装「扩展 guard.py」（hook 无法回写结果）。JSON Schema 双用作工具定义与校验，消除「定义/校验两套 schema 漂移」。草稿落库复用 M2.1/M2.2/M2.3 已测的 create/upsert，零新表。会话↔项目绑定（draft_context 的 project_id 来源）属 M3.4.2，本任务把 `stream_chat` 接 `draft_context` 参数、框架全链路用 handler 级测试覆盖（不依赖真实 Claude 会话，与 test_claude_runner 同类环境依赖测试隔离）。
 
+## 决策 #30：M3.4.2 会话↔项目绑定——project_id 列 + 创建期成员校验 + 对话期防御性重校验 + publish 走 run_state（M3.4.2 / §3.5 §5.2）
+
+- **背景**：M3.1 的 `stream_chat` 已支持 `draft_context` 参数，但 ChatSession 无 project_id 列、streaming.py 不构造 DraftToolContext，草稿工具未接入对话流。M3.4.2 要求「会话创建时关联 projectId，会话内自动加载项目 Agent（含 Skill/Plugin 绑定）」。需抉择：列存 project_id 还是派生？成员校验放哪层？草稿 publish 是否入 run_state？
+- **选择**：
+  - **列存 project_id（FK projects ON DELETE SET NULL）**：项目级会话是显式语义（绑定后才挂草稿工具/加载项目 Agent），用一列表达比「靠 agent_id 反查项目」更直接、可索引、可空（普通会话 = 无项目）。创建期 `agent_id is None` 时自动取 `project.agent_id`（§5.2），显式给 agent_id 则尊重（不覆盖）。
+  - **成员校验两道**：创建期在路由层用 `get_user_project_role` 翻 404/403（§3.5，与 project_deps 同模式）；对话期在 `_build_draft_context` 再校验一次——用户退出项目后旧会话 role 为 None 则不挂载草稿工具（防御：避免向无权项目写草稿）。
+  - **后台 runner 不访问 cs**：`project_id`/`session_id`/`prior_session_id` 在 runner 创建前捕获为局部量（后台 runner 可能在请求会话关闭后仍运行，expire_on_commit=False 虽使 detached 属性可读，但与既有写法保持一致更稳）；`_build_draft_context` 入参显式接收 project_id/source_session_id，不依赖 cs 对象，便于单测。
+  - **publish 走 run_state + SSE**：M3.1 的 publish 回调在 streaming.py 构造为 `publish_draft_event`——草稿「待采纳」事件同走 `run_state_store.append_event` + SSE，使客户端断开重连（`/running/stream`）仍可回放草稿卡片，兑现 M3.1 文档「与 tool_use/tool_result 同走 run_state + SSE」。
+- **理由**：列存 project_id 是最小且可表达的方案（可空=普通会话不变，FK 级联删除安全）；两道成员校验兼顾「创建期清晰报错」与「对话期防御」；publish 入 run_state 补齐 M3.1 的回放韧性。全链路由 mock stream_chat 的接线测试覆盖（不依赖真实 Claude 会话）。
+
 
 

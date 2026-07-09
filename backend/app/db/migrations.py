@@ -58,6 +58,8 @@ async def init_db() -> None:
             ("chat_sessions", "workspace_kind", "VARCHAR NOT NULL DEFAULT 'personal'"),
             ("chat_sessions", "team_space_id", "INTEGER NULL REFERENCES team_spaces(id) ON DELETE CASCADE"),
             ("chat_sessions", "is_shared", "BOOLEAN NOT NULL DEFAULT FALSE"),
+            # M3.4.2：项目级会话绑定（FK projects，删除项目→SET NULL）
+            ("chat_sessions", "project_id", "INTEGER NULL REFERENCES projects(id) ON DELETE SET NULL"),
         ]:
             result = await conn.execute(text(
                 "SELECT COUNT(*) FROM information_schema.columns "
@@ -79,6 +81,11 @@ async def init_db() -> None:
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS idx_sessions_shared "
             "ON chat_sessions (team_space_id, is_shared, updated_at)"
+        ))
+        # M3.4.2：按项目列出会话的索引
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_project "
+            "ON chat_sessions (project_id, updated_at)"
         ))
 
         result = await conn.execute(text(

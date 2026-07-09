@@ -20,6 +20,9 @@ class SessionOut(BaseModel):
     workspace_member_role: Literal["reader", "editor"] | None = None
     workspace_can_write: bool = True
     workspace_readonly_reason: str | None = None
+    # M3.4.2：项目级会话绑定（绑定后自动加载项目 Agent + 草稿工具）
+    project_id: int | None = None
+    project_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -30,6 +33,8 @@ class CreateSessionRequest(BaseModel):
     workspace_kind: Literal["personal", "team"] = "personal"
     team_space_id: int | None = None
     is_shared: bool = False
+    # M3.4.2：绑定项目后，自动加载项目 Agent（未显式给 agent_id 时）
+    project_id: int | None = None
 
 
 class RenameSessionRequest(BaseModel):

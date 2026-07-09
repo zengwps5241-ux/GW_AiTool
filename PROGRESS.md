@@ -167,6 +167,22 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **前端（M3.1.4）**：ChatWorkspace.tsx 新增 `DraftPart` + `foldEvents` 处理 `draft_pending` 事件；TurnView 渲染「待采纳」卡片（entityLabel + 待采纳徽标 + 结构化预览 + 采纳/驳回按钮）；采纳调 `api.adoptDraft`（POST /api/projects/{id}/adopt），状态机 adopting→adopted/error；驳回=前端暂不采纳（草稿留存可后续处理）。types 增 `draft_pending` ChatEvent + `AdoptResult`。**验证**：`tsc -b` + `vite build` 通过（71 模块，构建 1.33s）。前端无组件测试基建（既有 9 个测试均为 src/lib 纯函数 Node assert），UI 渲染以类型检查+生产构建验证。
 
+### M3.4.2 项目级会话关联 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| ChatSession 加 project_id | ✅ | 2026-07-09 | `chat_sessions.project_id`（FK projects ON DELETE SET NULL）+ 迁移 + idx_sessions_project 索引 |
+| schemas/service/route 支持项目绑定 | ✅ | 2026-07-09 | CreateSessionRequest/SessionOut 增 project_id/project_name；create_session 校验成员资格（404/403）+ 未显式给 agent_id 时自动加载项目 Agent（§5.2） |
+| streaming.py 接入 DraftToolContext | ✅ | 2026-07-09 | `_build_draft_context`（成员→上下文 / 非成员→None / 未绑定→None）+ `publish_draft_event`（draft_pending 同走 run_state+SSE，可重连回放）→ stream_chat(draft_context=…) |
+
+**设计要点**：
+- **绑定语义（决策#30）**：会话创建时可选传 `project_id`；绑定后该会话即为「项目级会话」——自动加载项目 Agent（`cs.agent_id = project.agent_id`，未显式给 agent_id 时），并在对话时挂载草稿工具上下文，使 AI 调 `save_xxx_draft` 写入对应项目的草稿区。普通会话（无 project_id）行为不变，不挂载草稿工具。
+- **成员校验**：创建项目会话时用 `get_user_project_role` 校验（§3.5 项目内透明、项目外隔离），非成员 403、不存在 404。对话时再次校验（防御：用户退出项目后旧会话不再向无权项目写草稿，role 为 None 则不挂载）。
+- **后台 runner 安全**：`project_id` 在 runner 前捕获为局部量（与既有 session_id/prior_session_id 同处理，因后台 runner 可能在请求会话关闭后仍运行，不直接访问 cs 对象）；`_build_draft_context` 入参显式传 project_id/source_session_id，不依赖 cs。
+- **draft_pending 可回放**：M3.1 的 publish 回调在 streaming.py 构造为 `publish_draft_event`——草稿「待采纳」事件同走 `run_state_store.append_event` + SSE，客户端断开重连（/running/stream）仍可回放草稿卡片（补齐 M3.1 文档所述「与 tool_use/tool_result 同走 run_state + SSE」）。
+
+**回归测试**：test_sessions_project_binding.py（11 全过：绑定项目+自动加载 Agent / 非成员 403 / 不存在 404 / 显式 agent 不被覆盖 / 列表含 project 字段 / `_build_draft_context` 成员·非成员·未绑定 / stream_session_chat 项目会话传 draft_context·普通会话不传 / draft_pending 入 run_state 可回放）。全量 **556 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.1 基线（545 passed）passed +11（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题：企微注释致 ImportError、Windows 路径/符号链接、本地 DB 口令、config 默认值、Claude SDK 真实依赖；与本任务无关）。
+
 
 
 
