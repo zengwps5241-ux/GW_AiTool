@@ -25,6 +25,7 @@ from app.models.team_space import TeamSpace, TeamSpaceMember
 from app.models.upload_task import UploadTask
 from app.models.usage import UsageEvent, UsageResourceEvent
 from app.models.user import User
+from app.models.visit import EvidenceSource, VisitRecord
 
 __all__ = [
     "Base",
@@ -59,4 +60,6 @@ __all__ = [
     "UsageResourceEvent",
     "User",
     "UserOrganization",
+    "EvidenceSource",
+    "VisitRecord",
 ]

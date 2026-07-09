@@ -20,6 +20,7 @@ from app.api.routes import (
     team_spaces,
     upload_tasks,
     uploads,
+    visit,
     workspace,
     workspace_tasks,
 )
@@ -48,3 +49,4 @@ router.include_router(customers.router)
 router.include_router(projects.router)
 router.include_router(business_map.router)
 router.include_router(marketing_map.router)
+router.include_router(visit.router)

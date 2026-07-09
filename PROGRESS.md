@@ -110,6 +110,23 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_marketing_map_api.py（12 全过：角色卡+综合评分+筛选 / 态度变化 / 关系+图 / 话术+模板 / 知识库 / 项目隔离+admin越权）。全量 **511 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.1 基线（499 passed）passed +12（恰好新增），**fail 集未扩大**。
 
+### M2.3 拜访记录数据 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M2.3.1 VisitRecord 模型 | ✅ | 2026-07-09 | visit_records（日期/类型/参与人/摘要/下一步/KeyTakeaways，决策#25） |
+| M2.3.2 EvidenceSource 模型 | ✅ | 2026-07-09 | evidence_sources（类型/强度/内容 + 关联角色卡 sourceRoleId + 关联假设 relatedHypothesisId，决策#25） |
+| M2.3.3 VisitRecord CRUD API | ✅ | 2026-07-09 | /visit-records 全套 + 时间倒序 + 按类型/角色卡(JSONB @>) 筛选 |
+| M2.3.4 EvidenceSource CRUD API | ✅ | 2026-07-09 | /evidence-sources 全套 + 多维筛选（拜访/类型/强度/角色/假设） |
+| M2.3.5 证据验证联动 | ✅ | 2026-07-09 | §7.5 建议验证状态(强度计数)+人工确认→更新 verificationStatus+推翻自动入偏差池；§7.6 角色态度信号证据→自动 record_stance_change（决策#26/#27） |
+
+**设计要点**：
+- 派生统计 `evidenceCount`/`verifiedHypotheses` 不落库，读取时按关联证据动态计算（避免同步问题）。
+- §7.5 建议状态规则：0→未验证 / 强≥3→成立 / 强≥1或中≥2→部分成立 / 仅弱→待补充；推翻确认自动新增 current 偏差节点（已存在则复用）。
+- §7.6 触发条件：`evidenceType=角色态度信号` + `sourceRoleId` + `impliedFromStance/toStance` 齐备 → 复用 M2.2 `record_stance_change`（决策#27）。
+
+**回归测试**：test_visit_api.py（9 全过：拜访CRUD+时间倒序+角色筛选 / 证据CRUD+多维筛选+派生统计 / §7.5建议规则+确认+偏差池 / §7.6态度自动触发+非信号不触发 / 项目隔离+跨项目关联拒绝）。全量 **520 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.2 基线（511 passed）passed +9（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
+
 
 
 

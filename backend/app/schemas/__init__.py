@@ -108,6 +108,17 @@ from app.schemas.workspace import (
     WorkspaceTextSaveIn,
 )
 from app.schemas.workspace_tasks import WorkspaceTaskOut
+from app.schemas.visit import (
+    EvidenceSourceCreate,
+    EvidenceSourceOut,
+    EvidenceSourceUpdate,
+    VerificationConfirmIn,
+    VerificationConfirmOut,
+    VerificationSuggestionOut,
+    VisitRecordCreate,
+    VisitRecordOut,
+    VisitRecordUpdate,
+)
 
 __all__ = [
     "UserOut",
@@ -209,4 +220,13 @@ __all__ = [
     "ProjectMemberOut",
     "ProjectDepartmentAccessAdd",
     "ProjectDepartmentAccessOut",
+    "VisitRecordCreate",
+    "VisitRecordUpdate",
+    "VisitRecordOut",
+    "EvidenceSourceCreate",
+    "EvidenceSourceUpdate",
+    "EvidenceSourceOut",
+    "VerificationSuggestionOut",
+    "VerificationConfirmIn",
+    "VerificationConfirmOut",
 ]
