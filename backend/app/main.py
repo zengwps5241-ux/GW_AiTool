@@ -19,6 +19,9 @@ async def _lifespan(_: FastAPI):
     # M3.2：把内置 7 个顾问 Skill 模板播种到 master 目录，供项目 Agent 拷贝加载
     from app.modules.agents.workdir import seed_default_skills
     seed_default_skills()
+    # M3.3：把内置 3 个顾问 Plugin 模板播种到 master 目录，供项目 Agent 拷贝加载
+    from app.modules.agents.workdir import seed_default_plugins
+    seed_default_plugins()
     # 为 DB 中所有 Agent 兜底初始化工作目录(缺则补)
     from app.modules.agents.workdir import ensure_all_agent_workdirs
     await ensure_all_agent_workdirs()

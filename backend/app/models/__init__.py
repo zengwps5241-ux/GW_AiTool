@@ -7,6 +7,7 @@ from app.models.business_map import (
     PreAnalysis,
 )
 from app.models.category import Category, PluginBinding, SkillBinding
+from app.models.consultant import IntentRoutingLog
 from app.models.conversion_task import ConversionTask
 from app.models.customer import Customer
 from app.models.department import Department
@@ -40,6 +41,7 @@ __all__ = [
     "Department",
     "FeedbackAttachment",
     "FeedbackIssue",
+    "IntentRoutingLog",
     "KnowledgeBase",
     "LoginWhitelistDepartment",
     "LoginWhitelistUser",

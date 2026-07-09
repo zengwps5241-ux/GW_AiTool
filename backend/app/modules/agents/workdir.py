@@ -200,3 +200,31 @@ def seed_default_skills() -> None:
         if dst.exists():
             continue  # 已播种或用户自定义，不覆盖
         shutil.copytree(src, dst)
+
+
+def seed_default_plugins() -> None:
+    """把内置 3 个顾问 Plugin 模板（app/plugins_seed/）播种到 master 目录
+    claude_data/plugins/（M3.3）。
+
+    - 非破坏性：目标已存在同名目录则跳过，保留用户经管理后台上传的同名自定义 Plugin。
+    - 与 ``seed_default_skills`` 同一时机调用（启动 ``init_db`` 之后、
+      ``ensure_all_agent_workdirs`` 之前），使新建项目 Agent 能经
+      ``init_agent_workdir`` 把这些 Plugin 拷贝进各自工作目录、被
+      ``scan_plugins`` 发现并供 SDK 加载。
+    - master 模板版本化存放于包内 ``app/plugins_seed/``（claude_data/ 被 gitignore）。
+      Plugin 的实际运行逻辑在 app 层（router/search_tools/defense），本目录承载
+      绑定/发现/资产（plugin.json + Prompt/规则）。
+    """
+    settings = get_settings()
+    seed_root = Path(__file__).resolve().parents[2] / "plugins_seed"
+    if not seed_root.exists():
+        return
+    dest_root = settings.claude_data_dir / "plugins"
+    dest_root.mkdir(parents=True, exist_ok=True)
+    for src in sorted(seed_root.iterdir()):
+        if not src.is_dir():
+            continue
+        dst = dest_root / src.name
+        if dst.exists():
+            continue  # 已播种或用户自定义，不覆盖
+        shutil.copytree(src, dst)

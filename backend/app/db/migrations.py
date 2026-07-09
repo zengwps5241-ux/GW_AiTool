@@ -507,3 +507,37 @@ async def init_db() -> None:
             await conn.execute(text("CREATE INDEX idx_usage_resource_event ON usage_resource_events (usage_event_id)"))
             await conn.execute(text("CREATE INDEX idx_usage_resource_type_name ON usage_resource_events (resource_type, resource_name)"))
             await conn.execute(text("CREATE INDEX idx_usage_resource_plugin ON usage_resource_events (plugin_name)"))
+
+        # intent_routing_logs 表（M3.3.1 consultant-router 路由日志）
+        result = await conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_name='intent_routing_logs'"
+        ))
+        if result.scalar() == 0:
+            await conn.execute(text(
+                "CREATE TABLE intent_routing_logs ("
+                "id SERIAL PRIMARY KEY, "
+                "session_id VARCHAR NULL, "
+                "project_id INTEGER NULL REFERENCES projects(id) ON DELETE SET NULL, "
+                "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+                "prompt TEXT NOT NULL, "
+                "intent_label VARCHAR NOT NULL, "
+                "route_target VARCHAR NULL, "
+                "confidence_source VARCHAR NOT NULL, "
+                "llm_label VARCHAR NULL, "
+                "llm_confidence DOUBLE PRECISION NULL, "
+                "keyword_hits JSON NULL, "
+                "llm_raw JSON NULL, "
+                "final_prompt TEXT NOT NULL, "
+                "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX idx_intent_routing_session ON intent_routing_logs (session_id, created_at)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX idx_intent_routing_project ON intent_routing_logs (project_id, created_at)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX idx_intent_routing_label ON intent_routing_logs (intent_label)"
+            ))

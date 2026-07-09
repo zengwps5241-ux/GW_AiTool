@@ -38,13 +38,14 @@ async def app_env(monkeypatch, tmp_path):
 
     # Layer 2: models, schemas (reload submodules so they re-import fresh Base)
     from app import models, schemas
-    from app.models import agent as model_agent, business_map as model_business_map, category as model_category, conversion_task as model_conversion_task, customer as model_customer, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, marketing_map as model_marketing_map, organization as model_organization, project as model_project, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user, visit as model_visit
+    from app.models import agent as model_agent, business_map as model_business_map, category as model_category, consultant as model_consultant, conversion_task as model_conversion_task, customer as model_customer, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, marketing_map as model_marketing_map, organization as model_organization, project as model_project, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user, visit as model_visit
     from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, reviews as schema_reviews, workspace_tasks as schema_workspace_tasks
     reload(model_agent)
     reload(model_business_map)
     reload(model_marketing_map)
     reload(model_visit)
     reload(model_category)
+    reload(model_consultant)
     reload(model_conversion_task)
     reload(model_customer)
     reload(model_department)
@@ -88,10 +89,12 @@ async def app_env(monkeypatch, tmp_path):
     # Layer 4: modules
     from app.modules.agents import workdir
     from app.modules.catalog import skills, plugins, commands
+    from app.modules.consultant import router as consultant_router
     reload(workdir)
     reload(skills)
     reload(plugins)
     reload(commands)
+    reload(consultant_router)
     from app.modules.auth import service as auth_service, departments as auth_departments, login_whitelist as auth_login_whitelist
     from app.modules.agents import service as agents_service
     from app.modules.sessions import service as sessions_service, streaming

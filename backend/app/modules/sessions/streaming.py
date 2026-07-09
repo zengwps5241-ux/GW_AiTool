@@ -21,6 +21,11 @@ from app.integrations.openai import generate_chat_completion
 from app.models import Agent, ChatSession, User
 from app.modules.agents.workdir import get_agent_workdir
 from app.modules.projects.access import get_user_project_role
+from app.modules.consultant.router import (
+    log_routing,
+    route_user_prompt,
+    router_plugin_active,
+)
 from app.modules.catalog.commands import scan_agent_commands
 from app.modules.sessions.run_state import RunEvent, RunStatus, run_state_store
 from app.modules.team_spaces.file_locks import FileLockService, agent_lock_token
@@ -375,8 +380,28 @@ async def stream_session_chat(
 
     async def runner() -> None:
         try:
+            # M3.3.1 consultant-router：项目 Agent 绑定路由 Plugin 时，对用户输入
+            # 做意图路由（斜杠/chip 直达 / LLM 分类 / 关键词兜底 / chat 兜底），
+            # 落 IntentRoutingLog，并把路由到 Skill 的提示改写为 /<skill> <原提示>
+            # （复用 M3.4.1 斜杠命令机制）。失败只记日志，不阻断对话。
+            routed_prompt = prompt
+            if router_plugin_active(agent):
+                try:
+                    decision = await route_user_prompt(agent=agent, prompt=prompt)
+                    async with async_session() as s:
+                        await log_routing(
+                            s,
+                            session_id=session_id,
+                            project_id=project_id,
+                            user_id=user.id,
+                            prompt=prompt,
+                            decision=decision,
+                        )
+                    routed_prompt = decision.final_prompt
+                except Exception:
+                    logger.warning("意图路由失败，按原始提示继续", exc_info=True)
             stream_kwargs = {
-                "prompt": prompt,
+                "prompt": routed_prompt,
                 "claude_session_id": prior_session_id,
                 "user_workspace": ws,
                 "agent": agent,
