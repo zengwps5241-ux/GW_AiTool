@@ -1,0 +1,353 @@
+"""AI 结构化草稿工具注册框架（M3.1）。
+
+机制
+----
+用 ``claude_agent_sdk.create_sdk_mcp_server`` 把 3 个草稿工具注册为**进程内 MCP 工具**，
+Claude 在对话中调用 ``mcp__<server>__<tool>`` 时，SDK 路由到本模块的 handler：
+
+1. 按 JSON Schema 校验入参（M3.1.2）
+2. 落库为草稿（M3.1.3）：
+   - save_business_map_draft → ``BusinessMapDraft``（整图草稿单元，§7.1.7）
+   - save_stakeholder_card_draft → ``StakeholderCard``（review_status=draft）
+   - save_visit_record_draft → ``VisitRecord``（review_status=draft）
+3. 通过 ``publish`` 回调向 SSE 推送「待采纳」事件（前端 M3.1.4 消费）
+4. 返回工具结果文本给 Claude（告知已存草稿待用户采纳）
+
+工具钩子位于 ``integrations/claude/``（与 ``guard.py`` 同包）。``guard.py`` 的 PreToolUse
+安全钩子（Bash 黑名单 / 文件锁 / 只读）保持不变；草稿工具的拦截/校验/落库在 handler 内完成，
+SDK 对草稿工具的权限仍由 ``tool_approval.auto_approve_tool`` 放行、安全边界由自身逻辑保证。
+
+会话级上下文（project_id / user_id / source_session_id）由调用方（``runner.stream_chat``）
+通过 ``DraftToolContext`` 闭包注入；会话↔项目绑定见 M3.4.2。
+"""
+
+from __future__ import annotations
+
+import jsonschema
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+
+from claude_agent_sdk import create_sdk_mcp_server, tool
+
+# ─── M3.1.2：三个草稿工具的输入 JSON Schema ──────────────────────
+#
+# 单一真源：既作为 Claude 工具定义（inputSchema），又作为 handler 入参校验依据。
+# 草稿内容为自由 JSONB，此处只约束「结构化输出的骨架字段」，载荷内部（payload/
+# objective_layer 等）不展开约束（与既有 schema 层风格一致，由 Skill/前端约定）。
+
+SAVE_BUSINESS_MAP_DRAFT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "objects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "level": {"type": "string", "enum": ["L1", "L2", "L3", "L4"]},
+                    "name": {"type": "string", "minLength": 1},
+                    "map_type": {"type": "string", "enum": ["hypothesis", "current"]},
+                    "parent_id": {"type": "integer"},
+                    "verification_status": {"type": "string"},
+                    "linked_hypothesis_id": {"type": "integer"},
+                    "payload": {"type": "object"},
+                    "generated_by_ai": {"type": "boolean"},
+                },
+                "required": ["level", "name"],
+                "additionalProperties": True,
+            },
+        }
+    },
+    "required": ["objects"],
+    "additionalProperties": True,
+}
+
+SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "position": {"type": "string"},
+        "department": {"type": "string"},
+        "reports_to": {"type": "string"},
+        "contact_info": {"type": "string"},
+        "role_type": {"type": "string"},
+        "decision_power": {"type": "string"},
+        "objective_layer": {"type": "object"},
+        "subjective_layer": {"type": "object"},
+        "behaviors": {"type": "array"},
+    },
+    "required": ["name"],
+    "additionalProperties": True,
+}
+
+SAVE_VISIT_RECORD_DRAFT_SCHEMA: dict = {
+    "type": "object",
+    "minProperties": 1,  # 至少一个字段（一句话记录可只给 summary）
+    "properties": {
+        "visit_date": {"type": "string", "format": "date"},
+        "visit_type": {"type": "string"},
+        "participants_our": {"type": "array"},
+        "participants_client": {"type": "array"},
+        "location": {"type": "string"},
+        "duration": {"type": "string"},
+        "summary": {"type": "string"},
+        "next_steps": {"type": "string"},
+        "key_takeaways": {"type": "array"},
+        "related_card_ids": {"type": "array"},
+    },
+    "additionalProperties": True,
+}
+
+
+def validate_tool_input(schema: dict, data: object) -> str | None:
+    """按 JSON Schema 校验工具入参，返回首条错误信息（无错返回 None）。
+
+    返回的人类可读信息会同时回写给 Claude（is_error=True），便于模型自我修正。
+    """
+    validator = jsonschema.Draft7Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
+    if not errors:
+        return None
+    first = errors[0]
+    loc = ".".join(str(p) for p in first.path) or "<root>"
+    return f"{loc}: {first.message}"
+
+
+# ─── 工具结果 / 待采纳事件 构造 ─────────────────────────────────
+
+
+@dataclass
+class DraftToolContext:
+    """单轮对话的草稿工具上下文（由 runner 注入，handler 闭包读取）。
+
+    - project_id / user_id / source_session_id：落库归属与审计
+    - publish：草稿落库后向 SSE 推送「待采纳」事件的回调
+    """
+
+    project_id: int
+    user_id: int
+    source_session_id: str | None
+    publish: Callable[[dict[str, Any]], Awaitable[None]]
+
+
+def _ok_result(text: str) -> dict:
+    """构造 MCP 工具成功结果（文本回写给 Claude）。"""
+    return {"content": [{"type": "text", "text": text}], "is_error": False}
+
+
+def _error_result(text: str) -> dict:
+    """构造 MCP 工具错误结果（is_error=True，Claude 可据以自我修正）。"""
+    return {"content": [{"type": "text", "text": text}], "is_error": True}
+
+
+def _draft_pending_event(
+    entity_type: str,
+    entity_label: str,
+    draft_id: int,
+    project_id: int,
+    preview: dict[str, Any],
+) -> dict[str, Any]:
+    """构造 SSE「待采纳」事件（前端 M3.1.4 渲染为采纳/驳回卡片）。"""
+    return {
+        "type": "draft_pending",
+        "entity_type": entity_type,
+        "entity_label": entity_label,
+        "draft_id": draft_id,
+        "project_id": project_id,
+        "preview": preview,
+    }
+
+
+# ─── M3.1.3：草稿工具 handler（校验→落库→推送→回写 Claude） ─────
+
+
+async def handle_save_business_map_draft(
+    ctx: DraftToolContext, args: dict
+) -> dict:
+    """保存业务地图草稿（整图草稿单元，§7.1.7）→ BusinessMapDraft。"""
+    err = validate_tool_input(SAVE_BUSINESS_MAP_DRAFT_SCHEMA, args)
+    if err:
+        return _error_result(f"save_business_map_draft 入参校验失败：{err}")
+
+    from app.db.session import async_session
+    from app.models import User
+    from app.modules.business_map import service as business_map_service
+    from app.schemas.business_map import BusinessMapDraftUpdate
+
+    objects = args.get("objects", []) if isinstance(args, dict) else []
+    async with async_session() as db:
+        user = await db.get(User, ctx.user_id)
+        if user is None:
+            return _error_result("当前用户不存在，无法保存草稿")
+        draft = await business_map_service.upsert_draft(
+            db,
+            ctx.project_id,
+            BusinessMapDraftUpdate(
+                draft_data=args,
+                source_session_id=ctx.source_session_id,
+            ),
+            user,
+        )
+
+    await ctx.publish(
+        _draft_pending_event(
+            "business_map_draft",
+            "业务地图草稿",
+            draft.id,
+            ctx.project_id,
+            preview={"object_count": len(objects)},
+        )
+    )
+    return _ok_result(
+        f"已保存业务地图草稿（{len(objects)} 个节点，草稿ID #{draft.id}）。"
+        "草稿已进入「待采纳」区，等待用户采纳后才写入正式地图。"
+    )
+
+
+async def handle_save_stakeholder_card_draft(
+    ctx: DraftToolContext, args: dict
+) -> dict:
+    """保存角色卡草稿 → StakeholderCard（review_status=draft）。"""
+    err = validate_tool_input(SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA, args)
+    if err:
+        return _error_result(f"save_stakeholder_card_draft 入参校验失败：{err}")
+
+    from app.db.session import async_session
+    from app.models import User
+    from app.modules.marketing_map import service as marketing_map_service
+    from app.schemas.marketing_map import StakeholderCardCreate
+
+    data = dict(args)
+    data["review_status"] = "draft"  # AI 产出先入草稿区，采纳后才 reviewed
+    try:
+        payload = StakeholderCardCreate.model_validate(data)
+    except Exception as exc:  # pydantic 校验失败（如 role_type 枚举）
+        return _error_result(f"角色卡字段不合法：{exc}")
+
+    async with async_session() as db:
+        user = await db.get(User, ctx.user_id)
+        if user is None:
+            return _error_result("当前用户不存在，无法保存草稿")
+        card = await marketing_map_service.create_card(
+            db, ctx.project_id, payload, user
+        )
+
+    await ctx.publish(
+        _draft_pending_event(
+            "stakeholder_card_draft",
+            "角色卡草稿",
+            card.id,
+            ctx.project_id,
+            preview={"name": card.name, "role_type": card.role_type},
+        )
+    )
+    return _ok_result(
+        f"已保存角色卡草稿「{card.name}」（草稿ID #{card.id}）。"
+        "等待用户采纳后才进入正式营销地图。"
+    )
+
+
+async def handle_save_visit_record_draft(
+    ctx: DraftToolContext, args: dict
+) -> dict:
+    """保存拜访记录草稿 → VisitRecord（review_status=draft）。"""
+    err = validate_tool_input(SAVE_VISIT_RECORD_DRAFT_SCHEMA, args)
+    if err:
+        return _error_result(f"save_visit_record_draft 入参校验失败：{err}")
+
+    from app.db.session import async_session
+    from app.models import User
+    from app.modules.visits import service as visits_service
+    from app.schemas.visit import VisitRecordCreate
+
+    data = dict(args)
+    data["review_status"] = "draft"
+    try:
+        payload = VisitRecordCreate.model_validate(data)
+    except Exception as exc:
+        return _error_result(f"拜访记录字段不合法：{exc}")
+
+    async with async_session() as db:
+        user = await db.get(User, ctx.user_id)
+        if user is None:
+            return _error_result("当前用户不存在，无法保存草稿")
+        visit = await visits_service.create_visit(
+            db, ctx.project_id, payload, user
+        )
+
+    await ctx.publish(
+        _draft_pending_event(
+            "visit_record_draft",
+            "拜访记录草稿",
+            visit.id,
+            ctx.project_id,
+            preview={
+                "visit_type": visit.visit_type,
+                "summary": (visit.summary or "")[:80],
+            },
+        )
+    )
+    return _ok_result(
+        f"已保存拜访记录草稿（草稿ID #{visit.id}）。等待用户采纳后才进入正式时间线。"
+    )
+
+
+# ─── M3.1.1：草稿工具注册机制（SDK 进程内 MCP server） ───────────
+
+# MCP server 名：Claude 侧工具名为 mcp__<server>__<tool>
+DRAFT_SERVER_NAME = "consultant_drafts"
+
+# 三个草稿工具的裸名（注册顺序固定，便于日志/调试）
+DRAFT_TOOL_NAMES = (
+    "save_business_map_draft",
+    "save_stakeholder_card_draft",
+    "save_visit_record_draft",
+)
+
+
+def build_draft_tool_server(ctx: DraftToolContext) -> dict:
+    """构造草稿工具的进程内 MCP server（注入会话上下文到各 handler 闭包）。
+
+    返回 ``McpSdkServerConfig``（``{type:"sdk", name, instance}``），
+    由 ``runner.stream_chat`` 合并进 ``ClaudeAgentOptions.mcp_servers``，
+    工具名经 ``draft_tool_allowed_names()`` 加入 ``allowed_tools``。
+    """
+    @tool(
+        "save_business_map_draft",
+        "保存业务地图草稿（结构化节点列表）。AI 完成假设/现状地图结构化输出后调用，"
+        "草稿进入「待采纳」区，用户采纳后才写入正式业务地图。",
+        SAVE_BUSINESS_MAP_DRAFT_SCHEMA,
+    )
+    async def _save_business_map_draft(args):  # noqa: ANN202
+        return await handle_save_business_map_draft(ctx, args)
+
+    @tool(
+        "save_stakeholder_card_draft",
+        "保存营销地图角色卡草稿（客观层/主观层/行为）。用户采纳后才进入正式营销地图。",
+        SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA,
+    )
+    async def _save_stakeholder_card_draft(args):  # noqa: ANN202
+        return await handle_save_stakeholder_card_draft(ctx, args)
+
+    @tool(
+        "save_visit_record_draft",
+        "保存拜访记录草稿（摘要/参与人/Key Takeaways）。用户采纳后才进入正式时间线。",
+        SAVE_VISIT_RECORD_DRAFT_SCHEMA,
+    )
+    async def _save_visit_record_draft(args):  # noqa: ANN202
+        return await handle_save_visit_record_draft(ctx, args)
+
+    return create_sdk_mcp_server(
+        name=DRAFT_SERVER_NAME,
+        tools=[
+            _save_business_map_draft,
+            _save_stakeholder_card_draft,
+            _save_visit_record_draft,
+        ],
+    )
+
+
+def draft_tool_allowed_names() -> list[str]:
+    """草稿工具在 Claude 侧的允许调用名（mcp__<server>__<tool>），供 allowed_tools 使用。"""
+    return [f"mcp__{DRAFT_SERVER_NAME}__{name}" for name in DRAFT_TOOL_NAMES]

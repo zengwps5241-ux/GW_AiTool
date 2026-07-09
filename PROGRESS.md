@@ -143,6 +143,28 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_reviews_api.py（11 全过：采纳派发 Owner+Deputy / 不支持类型 400 / 跨模块聚合+筛选 / business_map 审批发布 / 逐类 approve / reject+意见 / Deputy 403 / 404+非pending 400 / 项目隔离 / admin 越权）。全量 **531 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.3 基线（520 passed）passed +11（恰好新增），**fail 集未扩大**。
 
+---
+
+## Phase 3：Skill 与 Plugin
+
+### M3.1 Tool Use 基础框架（后端 M3.1.1-3）✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M3.1.1 Tool Use 注册机制 | ✅ | 2026-07-09 | `app/integrations/claude/tools.py`：用 claude_agent_sdk `create_sdk_mcp_server`+`@tool` 把 3 个草稿工具注册为进程内 MCP server（决策#29） |
+| M3.1.2 Tool JSON Schema 定义 | ✅ | 2026-07-09 | 三个工具输入 JSON Schema（jsonschema Draft7 校验，单一真源同时作工具定义 inputSchema） |
+| M3.1.3 Tool 调用拦截与存储 | ✅ | 2026-07-09 | handler 校验→落库（business_map→BusinessMapDraft / stakeholder→StakeholderCard(draft) / visit→VisitRecord(draft)）→SSE 推送 `draft_pending` 事件→回写 Claude；reviews.adopt 扩 stakeholder/visit 草稿分支（§3.3 自确认→reviewed） |
+| M3.1.4 前端采纳交互 | ⏳ | — | ChatWorkspace 待采纳卡片（下一步） |
+
+**设计要点**：
+- **注册机制（决策#29）**：Claude Agent SDK 支持「进程内 MCP server」（`create_sdk_mcp_server`+`@tool`，`McpSdkServerConfig`），无需起子进程。`build_draft_tool_server(ctx)` 把会话上下文（project_id/user_id/source_session_id/publish 回调）闭包注入 3 个 handler。Claude 侧工具名 `mcp__consultant_drafts__save_xxx_draft`，经 `allowed_tools` 放行，权限仍由 `tool_approval.auto_approve_tool` 放行。
+- **校验单一真源**：JSON Schema 既作工具 inputSchema（Claude 据之生成结构化入参）又作 handler 入参校验（`jsonschema.Draft7Validator`）；非法入参返回 `is_error=True` + 人类可读错误回写 Claude 自我修正，不落库不推送。
+- **草稿落库 + 采纳**：business_map→整图草稿单元（复用 M2.1 `upsert_draft`/`adopt_draft`，带版本快照语义）；stakeholder/visit→实体行 review_status=draft（复用 M2.2/M2.3 create）。统一采纳派发器 `reviews.adopt` 扩两分支：stakeholder_card_draft/visit_record_draft → draft→reviewed（§3.3 非 WF07 自确认，不进 pending_review 待审批列表，不生成版本快照）。
+- **SSE 待采纳事件**：`{type:"draft_pending", entity_type, entity_label, draft_id, project_id, preview}`，由 handler 经 `ctx.publish` 推送（与 tool_use/tool_result 同走 on_message → run_state + SSE）。
+- **会话↔项目绑定 = M3.4.2**：`stream_chat` 已支持 `draft_context` 参数（注入则挂载草稿 MCP server）；ChatSession 尚无 project_id 列，故 streaming.py 暂不构造 draft_context，待 M3.4.2 会话关联项目后接入。框架全链路由 handler 级测试覆盖（不依赖真实 Claude 会话）。
+
+**回归测试**：test_draft_tools.py（14 全过：Schema 合法 + 校验通过/拒绝 / 三 handler 落库+推送+回写 / 非法入参 is_error 无副作用 / build_draft_tool_server 经 list_tools 暴露三工具 / reviews.adopt stakeholder+visit 草稿采纳 + 非法状态 400）。全量 **545 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.4 基线（531 passed）passed +14（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
+
 
 
 

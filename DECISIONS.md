@@ -201,5 +201,16 @@
   - **权限**：`GET /pending-reviews` 用 `require_project_member`（§3.5 项目内透明）；`approve`/`reject` 用 `require_project_owner`（决策 #12，破坏性/发布操作限 Owner）；`adopt` 用 `require_project_member`（采纳者是产出方，角色决定状态）。驳回意见 comment M2.4 不持久化（Phase 3 对话 Banner 审核流承载「修改意见」）。
 - **理由**：采纳的草稿单元粒度+版本快照是业务地图专有（§7.4 明确营销/拜访不需版本回溯），强抽象会污染通用层；而「跨模块待审批聚合 + Owner 审批」是真正共有的需求，注册表模式以最小耦合覆盖且易扩展。与决策 #16/#21（半结构化用 JSONB、不强约束）、#17/#18（reviewed 真源 + Owner/Deputy 区分）一脉相承。
 
+## 决策 #29：M3.1 草稿工具用「SDK 进程内 MCP server」注册，校验单一真源（M3.1.1 / M3.1.2 / M3.1.3）
+
+- **背景**：开发计划 M3.1.1 要求「扩展 guard.py 工具钩子，支持注册自定义 Tool（save_business_map_draft / save_stakeholder_card_draft / save_visit_record_draft）」。需抉择：自定义工具如何让 Claude 可调用 + 入参如何校验 + 草稿如何落库 + 如何回推前端。
+- **选择**：用 `claude_agent_sdk.create_sdk_mcp_server` + `@tool` 把 3 个草稿工具注册为**进程内 MCP server**（新模块 `app/integrations/claude/tools.py`）。
+  - **机制**：SDK 原生支持「进程内 MCP server」（`McpSdkServerConfig`，instance=`mcp.server.Server`），无需起子进程/IPC。`build_draft_tool_server(ctx)` 闭包注入会话上下文（project_id/user_id/source_session_id/publish），Claude 调用 `mcp__consultant_drafts__save_xxx_draft` → SDK 路由到 handler。工具名经 `draft_tool_allowed_names()` 加入 `allowed_tools`，权限仍由 `tool_approval.auto_approve_tool` 放行（安全边界由 handler 自身校验保证）。
+  - **为何不用 PreToolUse hook 承载**：PreToolUse hook（guard.py）只能 allow/deny + 设上下文，**不能合成工具结果**；而草稿工具需「校验→落库→回写结果文本」三步，必须由可执行 handler 完成。故 guard.py 的 Bash 黑名单/文件锁安全钩子保持不变，草稿工具的拦截/校验/落库在 MCP handler 内完成（同处 integrations/claude/ 包，符合「工具钩子位于 integrations/claude」）。
+  - **校验单一真源**：每个工具的 JSON Schema 既作工具 inputSchema（Claude 据之生成结构化入参）又作 handler 入参校验（`jsonschema.Draft7Validator` 经 `validate_tool_input`）。非法入参返回 `is_error=True` + 人类可读错误回写 Claude（自我修正），不落库不推送。
+  - **草稿落库 + 采纳**：business_map→整图草稿单元（复用 M2.1 `upsert_draft`/`adopt_draft`，带版本快照语义）；stakeholder/visit→实体行 review_status=draft（复用 M2.2/M2.3 create）。统一采纳派发器 `reviews.adopt`（决策 #28）扩两分支：stakeholder_card_draft/visit_record_draft → draft→reviewed（§3.3 非 WF07 自确认，不进 pending_review 待审批列表，不生成版本快照，故 AdoptResult.version_number=0）。
+  - **SSE 待采纳事件**：handler 经 `ctx.publish` 推送 `{type:"draft_pending", entity_type, entity_label, draft_id, project_id, preview}`，与 tool_use/tool_result 同走 on_message → run_state + SSE，前端 M3.1.4 渲染为采纳/驳回卡片。
+- **理由**：SDK 进程内 MCP server 是「让 Claude 调用自定义 Python 工具」的原生正确路径（性能/调试/进程简洁均优），避免造子进程或假装「扩展 guard.py」（hook 无法回写结果）。JSON Schema 双用作工具定义与校验，消除「定义/校验两套 schema 漂移」。草稿落库复用 M2.1/M2.2/M2.3 已测的 create/upsert，零新表。会话↔项目绑定（draft_context 的 project_id 来源）属 M3.4.2，本任务把 `stream_chat` 接 `draft_context` 参数、框架全链路用 handler 级测试覆盖（不依赖真实 Claude 会话，与 test_claude_runner 同类环境依赖测试隔离）。
+
 
 

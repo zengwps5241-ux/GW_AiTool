@@ -78,10 +78,11 @@ async def app_env(monkeypatch, tmp_path):
 
     # Layer 3: integrations
     from app.integrations import mineru
-    from app.integrations.claude import serializers, guard, runner
+    from app.integrations.claude import serializers, guard, tools as claude_tools, runner
     reload(mineru)
     reload(serializers)
     reload(guard)
+    reload(claude_tools)
     reload(runner)
 
     # Layer 4: modules

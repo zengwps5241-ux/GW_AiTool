@@ -194,6 +194,36 @@ async def reject_review(
 # ─── 统一采纳派发 ─────────────────────────────────────────────
 
 
+async def _adopt_entity_draft(
+    db: AsyncSession,
+    project_id: int,
+    entity_id: int,
+    user: User,
+    adapter: ReviewableAdapter,
+) -> AdoptResult:
+    """采纳营销/拜访草稿（§3.3 非 WF07 自确认 → 直接 reviewed）。
+
+    与 business_map_draft 不同：营销地图/拜访记录不生成版本快照，也无 pending_review
+    中间态——任何项目成员采纳即翻 draft→reviewed（自确认）。
+    """
+    obj = await db.get(adapter.model, entity_id)
+    if obj is None or obj.project_id != project_id:
+        raise ValueError("草稿不存在")
+    if obj.review_status != "draft":
+        raise ValueError(f"该项当前状态为 {obj.review_status}，不能采纳")
+    obj.review_status = "reviewed"
+    obj.reviewed_by = user.id
+    obj.reviewed_at = datetime.now(timezone.utc)
+    await db.commit()
+    return AdoptResult(
+        success=True,
+        adopted_object_count=1,
+        version_number=0,  # 营销/拜访无版本快照语义
+        review_status="reviewed",
+        message="采纳成功",
+    )
+
+
 async def adopt(
     db: AsyncSession, project_id: int, payload: AdoptRequest, user: User
 ) -> AdoptResult:
@@ -201,9 +231,10 @@ async def adopt(
 
     按 entity_type 委派：
     - business_map_draft → business_map.adopt_draft（Owner→reviewed / Deputy→pending_review + 版本快照）。
-    - 其它类型（营销/拜访草稿）留待 M3.1.1 落地后扩展。
+    - stakeholder_card_draft / visit_record_draft → 直接 draft→reviewed（§3.3 非 WF07 自确认）。
 
-    权限由调用者项目角色决定目标 review_status（在 business_map.adopt_draft 内判定）。
+    权限：项目成员即可（adopt 路由用 require_project_member）；business_map 内部按角色
+    决定 reviewed/pending_review，营销/拜访一律自确认 reviewed。
     """
     # 项目成员校验（与各模块 adopt 一致）
     role = await get_user_project_role(db, project_id, user)
@@ -213,5 +244,15 @@ async def adopt(
     if payload.entity_type == "business_map_draft":
         return await business_map_service.adopt_draft(
             db, project_id, payload.draft_id, user
+        )
+    if payload.entity_type == "stakeholder_card_draft":
+        adapter = REGISTRY["stakeholder_card"]
+        return await _adopt_entity_draft(
+            db, project_id, payload.draft_id, user, adapter
+        )
+    if payload.entity_type == "visit_record_draft":
+        adapter = REGISTRY["visit_record"]
+        return await _adopt_entity_draft(
+            db, project_id, payload.draft_id, user, adapter
         )
     raise ValueError(f"暂不支持的采纳类型: {payload.entity_type}")

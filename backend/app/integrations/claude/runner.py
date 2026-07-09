@@ -23,6 +23,12 @@ from app.core import config as core_config
 from app.integrations.claude.guard import FileLockHookContext, build_pre_tool_use_hooks
 from app.integrations.claude.serializers import serialize_block
 from app.integrations.claude.tool_approval import auto_approve_tool
+from app.integrations.claude.tools import (
+    DRAFT_SERVER_NAME,
+    DraftToolContext,
+    build_draft_tool_server,
+    draft_tool_allowed_names,
+)
 from app.models import Agent
 from app.modules.agents.workdir import get_agent_workdir, override_claude_config_dir
 from app.modules.catalog.plugins import resolve_plugin_path  # noqa: F401 — 保留作 fallback,供其它入口复用
@@ -150,6 +156,7 @@ async def stream_chat(
     file_lock_context: FileLockHookContext | None = None,
     on_message: Callable[[dict], Awaitable[None]],
     stop_event: asyncio.Event | None = None,
+    draft_context: DraftToolContext | None = None,
 ) -> ChatRunSummary:
     """运行一次对话,把每条 SDK 消息序列化后通过 on_message 回传。
 
@@ -234,6 +241,15 @@ async def stream_chat(
     if _ZHIPU_WEB_SEARCH_MCP_NAME in builtin_mcp_servers:
         # Claude MCP 工具名格式为 mcp__<server>__<tool>。
         allowed_tools.append(f"mcp__{_ZHIPU_WEB_SEARCH_MCP_NAME}__web_search")
+    # 草稿工具（M3.1）：注入会话上下文（project/user/session）后挂载为进程内 MCP server，
+    # Claude 调用 mcp__consultant_drafts__save_xxx_draft → 拦截校验 → 落库 → SSE「待采纳」。
+    mcp_servers: dict[str, dict] = builtin_mcp_servers
+    if draft_context is not None:
+        mcp_servers = {
+            **builtin_mcp_servers,
+            DRAFT_SERVER_NAME: build_draft_tool_server(draft_context),
+        }
+        allowed_tools = [*allowed_tools, *draft_tool_allowed_names()]
     options = ClaudeAgentOptions(
         system_prompt={
             "type": "preset",
@@ -246,7 +262,7 @@ async def stream_chat(
         permission_mode="default",
         settings=_settings(user_workspace,agent_workdir),
         setting_sources=["project","user"],
-        mcp_servers=builtin_mcp_servers,
+        mcp_servers=mcp_servers,
         plugins=plugins,
         tools={"type": "preset", "preset": "claude_code"},
         allowed_tools=allowed_tools,
