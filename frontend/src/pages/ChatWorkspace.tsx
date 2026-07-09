@@ -58,7 +58,18 @@ type ToolPart = {
   errorText?: string;
 };
 type ErrorPart = { kind: "error"; text: string };
-type Part = TextPart | ToolPart | ErrorPart;
+/** AI 结构化草稿「待采纳」卡片（M3.1.4） */
+type DraftPart = {
+  kind: "draft";
+  /** (entity_type, draft_id) 唯一键，亦作采纳状态 map 的 key */
+  id: string;
+  entityType: string;
+  entityLabel: string;
+  draftId: number;
+  projectId: number;
+  preview: Record<string, unknown>;
+};
+type Part = TextPart | ToolPart | ErrorPart | DraftPart;
 
 interface Turn {
   kind: "user" | "assistant";
@@ -285,6 +296,18 @@ function foldEvents(events: ChatEvent[]): Turn[] {
           tool.errorText = undefined;
         }
       }
+    } else if (evt.type === "draft_pending") {
+      // AI 调用 save_xxx_draft 落库后推送的「待采纳」卡片（M3.1.3/M3.1.4）
+      const t = ensureAssistant();
+      t.parts.push({
+        kind: "draft",
+        id: `${evt.entity_type}:${evt.draft_id}`,
+        entityType: evt.entity_type,
+        entityLabel: evt.entity_label,
+        draftId: evt.draft_id,
+        projectId: evt.project_id,
+        preview: evt.preview,
+      });
     } else if (evt.type === "error") {
       const t = ensureAssistant();
       t.parts.push({ kind: "error", text: evt.message });
@@ -1985,6 +2008,38 @@ export default function ChatWorkspace({
 // ============ 子组件:消息轮 ============
 function TurnView({ turn, username }: { turn: Turn; username: string }) {
   const [copied, setCopied] = useState(false);
+  // AI 草稿「待采纳」卡片的采纳/驳回状态（M3.1.4）。key = `${entityType}:${draftId}`
+  const [draftAction, setDraftAction] = useState<
+    Record<
+      string,
+      { status: "adopting" | "adopted" | "rejected" | "error"; message?: string }
+    >
+  >({});
+
+  const handleAdoptDraft = useCallback(async (part: DraftPart) => {
+    setDraftAction((s) => ({ ...s, [part.id]: { status: "adopting" } }));
+    try {
+      const res = await api.adoptDraft(part.projectId, part.entityType, part.draftId);
+      setDraftAction((s) => ({
+        ...s,
+        [part.id]: { status: "adopted", message: res.message || "采纳成功" },
+      }));
+    } catch (e) {
+      setDraftAction((s) => ({
+        ...s,
+        [part.id]: {
+          status: "error",
+          message: e instanceof Error ? e.message : "采纳失败",
+        },
+      }));
+    }
+  }, []);
+
+  const handleRejectDraft = useCallback((part: DraftPart) => {
+    // 驳回 = 暂不采纳（仅前端收起操作，草稿仍留存可于数据页后续采纳/到期清理）
+    setDraftAction((s) => ({ ...s, [part.id]: { status: "rejected" } }));
+  }, []);
+
   const copyText = turn.parts
     .map((p) => (p.kind === "text" ? p.text : ""))
     .join("");
@@ -2065,6 +2120,143 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
       >
         {turn.parts.map((p, i) => {
           if (p.kind === "text") return <MarkdownView key={i} text={p.text} />;
+          if (p.kind === "draft") {
+            // AI 结构化草稿「待采纳」卡片（M3.1.4）
+            const action = draftAction[p.id];
+            const previewLabel: Record<string, string> = {
+              object_count: "节点数",
+              name: "姓名",
+              role_type: "角色类型",
+              visit_type: "类型",
+              summary: "摘要",
+            };
+            const previewEntries = Object.entries(p.preview).filter(
+              ([, v]) => v !== null && v !== undefined && v !== "",
+            );
+            return (
+              <div
+                key={i}
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: 10,
+                  background: "var(--bg-2)",
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--ink)",
+                  }}
+                >
+                  <I.Sparkles size={14} style={{ color: "var(--accent)" }} />
+                  <span>{p.entityLabel}</span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background: "var(--accent-soft)",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    待采纳
+                  </span>
+                </div>
+                {previewEntries.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                      fontSize: 12.5,
+                      color: "var(--ink-2)",
+                    }}
+                  >
+                    {previewEntries.map(([k, v]) => (
+                      <div key={k} style={{ display: "flex", gap: 8 }}>
+                        <span style={{ color: "var(--ink-4)", minWidth: 64 }}>
+                          {previewLabel[k] ?? k}
+                        </span>
+                        <span style={{ flex: 1, wordBreak: "break-word" }}>
+                          {String(v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {action?.status === "adopted" ? (
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--success)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <I.Check size={14} /> {action.message}
+                  </div>
+                ) : action?.status === "rejected" ? (
+                  <div style={{ fontSize: 12.5, color: "var(--ink-4)" }}>
+                    已驳回（暂不采纳，草稿仍保留可后续处理）
+                  </div>
+                ) : action?.status === "error" ? (
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--danger)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <I.CircleAlert size={14} /> {action.message}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => handleAdoptDraft(p)}
+                      disabled={action?.status === "adopting"}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: 8,
+                        border: "none",
+                        cursor: action?.status === "adopting" ? "wait" : "pointer",
+                        background: "var(--accent)",
+                        color: "#fff",
+                        fontSize: 13,
+                        opacity: action?.status === "adopting" ? 0.6 : 1,
+                      }}
+                    >
+                      {action?.status === "adopting" ? "采纳中…" : "采纳"}
+                    </button>
+                    <button
+                      onClick={() => handleRejectDraft(p)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        background: "transparent",
+                        color: "var(--ink-2)",
+                        border: "1px solid var(--line)",
+                        fontSize: 13,
+                      }}
+                    >
+                      驳回
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          }
           if (p.kind === "tool")
             return (
               <ToolCall

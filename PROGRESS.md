@@ -154,7 +154,7 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 | M3.1.1 Tool Use 注册机制 | ✅ | 2026-07-09 | `app/integrations/claude/tools.py`：用 claude_agent_sdk `create_sdk_mcp_server`+`@tool` 把 3 个草稿工具注册为进程内 MCP server（决策#29） |
 | M3.1.2 Tool JSON Schema 定义 | ✅ | 2026-07-09 | 三个工具输入 JSON Schema（jsonschema Draft7 校验，单一真源同时作工具定义 inputSchema） |
 | M3.1.3 Tool 调用拦截与存储 | ✅ | 2026-07-09 | handler 校验→落库（business_map→BusinessMapDraft / stakeholder→StakeholderCard(draft) / visit→VisitRecord(draft)）→SSE 推送 `draft_pending` 事件→回写 Claude；reviews.adopt 扩 stakeholder/visit 草稿分支（§3.3 自确认→reviewed） |
-| M3.1.4 前端采纳交互 | ⏳ | — | ChatWorkspace 待采纳卡片（下一步） |
+| M3.1.4 前端采纳交互 | ✅ | 2026-07-09 | ChatWorkspace 渲染 `draft_pending` 事件为「待采纳」卡片（结构化预览+采纳/驳回按钮）；采纳调 `api.adoptDraft`→POST /adopt；驳回=前端暂不采纳（草稿留存） |
 
 **设计要点**：
 - **注册机制（决策#29）**：Claude Agent SDK 支持「进程内 MCP server」（`create_sdk_mcp_server`+`@tool`，`McpSdkServerConfig`），无需起子进程。`build_draft_tool_server(ctx)` 把会话上下文（project_id/user_id/source_session_id/publish 回调）闭包注入 3 个 handler。Claude 侧工具名 `mcp__consultant_drafts__save_xxx_draft`，经 `allowed_tools` 放行，权限仍由 `tool_approval.auto_approve_tool` 放行。
@@ -164,6 +164,8 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 - **会话↔项目绑定 = M3.4.2**：`stream_chat` 已支持 `draft_context` 参数（注入则挂载草稿 MCP server）；ChatSession 尚无 project_id 列，故 streaming.py 暂不构造 draft_context，待 M3.4.2 会话关联项目后接入。框架全链路由 handler 级测试覆盖（不依赖真实 Claude 会话）。
 
 **回归测试**：test_draft_tools.py（14 全过：Schema 合法 + 校验通过/拒绝 / 三 handler 落库+推送+回写 / 非法入参 is_error 无副作用 / build_draft_tool_server 经 list_tools 暴露三工具 / reviews.adopt stakeholder+visit 草稿采纳 + 非法状态 400）。全量 **545 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.4 基线（531 passed）passed +14（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
+
+**前端（M3.1.4）**：ChatWorkspace.tsx 新增 `DraftPart` + `foldEvents` 处理 `draft_pending` 事件；TurnView 渲染「待采纳」卡片（entityLabel + 待采纳徽标 + 结构化预览 + 采纳/驳回按钮）；采纳调 `api.adoptDraft`（POST /api/projects/{id}/adopt），状态机 adopting→adopted/error；驳回=前端暂不采纳（草稿留存可后续处理）。types 增 `draft_pending` ChatEvent + `AdoptResult`。**验证**：`tsc -b` + `vite build` 通过（71 模块，构建 1.33s）。前端无组件测试基建（既有 9 个测试均为 src/lib 纯函数 Node assert），UI 渲染以类型检查+生产构建验证。
 
 
 

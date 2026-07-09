@@ -5,6 +5,7 @@ import type {
   Category,
   ChatModelSelection,
   ChatEvent,
+  AdoptResult,
   ConversionTask,
   Customer,
   CustomerInput,
@@ -833,6 +834,13 @@ export const api = {
   revokeProjectDeptAccess: (projectId: number, organizationId: number) =>
     request<void>(`/api/projects/${projectId}/department-access/${organizationId}`, {
       method: "DELETE",
+    }),
+
+  // ─── 采纳草稿（M2.4 统一派发器 / M3.1.3 衔接）─────────────────
+  adoptDraft: (projectId: number, entityType: string, draftId: number) =>
+    request<AdoptResult>(`/api/projects/${projectId}/adopt`, {
+      method: "POST",
+      body: JSON.stringify({ entity_type: entityType, draft_id: draftId }),
     }),
 };
 

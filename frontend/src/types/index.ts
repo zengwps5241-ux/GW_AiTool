@@ -198,8 +198,26 @@ export type ChatEvent =
       content: unknown;
       is_error?: boolean;
     }
+  | {
+      /** 草稿「待采纳」事件（M3.1.3 后端 handler 推送） */
+      type: "draft_pending";
+      entity_type: string;
+      entity_label: string;
+      draft_id: number;
+      project_id: number;
+      preview: Record<string, unknown>;
+    }
   | { type: "result"; [key: string]: unknown }
   | { type: "error"; message: string };
+
+/** 采纳结果（POST /api/projects/{id}/adopt，M2.4/M3.1.3） */
+export interface AdoptResult {
+  success: boolean;
+  adopted_object_count: number;
+  version_number: number;
+  review_status: string;
+  message?: string | null;
+}
 
 /** 带序号的运行事件,用于恢复运行中会话的 SSE 流 */
 export interface RunEvent {
