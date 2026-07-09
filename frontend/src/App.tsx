@@ -228,6 +228,7 @@ export default function App() {
           onOpenTeamSpaces={openTeamSpaces}
           onOpenTeamDetail={openTeamDetailById}
           onBreadcrumbChange={setChatBreadcrumb}
+          selectedProject={selectedProject}
           me={auth.me}
         />
       );

@@ -69,6 +69,9 @@ export interface Session {
   workspace_kind: WorkspaceKind;
   team_space_id: number | null;
   team_space_name: string | null;
+  /** 项目级会话绑定的项目（M3.4.2）；普通会话为 null */
+  project_id: number | null;
+  project_name: string | null;
   is_shared: boolean;
   workspace_member_role: TeamMemberRole | null;
   workspace_can_write: boolean;

@@ -232,5 +232,14 @@
   - **WF07 五步强制定步**：Step1 前置分析+WF03 缺口 → Step2 L1 → Step3 L2 → Step4 L3（先本体后 AI）→ Step5 L4+跨层一致性校验；每步用纯文本询问是否继续（runner rule_prompt 禁用 AskUserQuestion），禁止一次输出四层。
 - **理由**：落点选 claude_data/skills 是平台既有「master 模板→Agent 工作目录拷贝」机制的自然延伸，零新机制；草稿 Skill 对齐 M3.1 Schema 消除「Skill 期望字段 vs 工具校验字段」漂移；字段契约内嵌降低 AI 跑偏（M3.2 风险#3「Skill Prompt 质量」的直接缓解）。可校验性：用文件级测试（存在性/frontmatter/工具引用/scan_skills 发现）覆盖交付物，不依赖真实 Claude 会话。
 
+## 决策 #32：M3.4.1 WF chip 触发 = 斜杠命令 + 意图；项目会话由 Topbar selectedProject 驱动新建（M3.4.1 / §4 §5.2）
+
+- **背景**：M3.4.1 要求对话底部加 5 个工作流 chip（生成假设地图/生成拜访前方案/整理拜访纪要/验证假设/营销地图）。需抉择：① chip 如何可靠触发「特定」Skill（runner 只给模型 Skill 工具 + 元数据，无「强制某 Skill」入参）；② 项目会话如何创建（5 个 Skill 绑定在项目 Agent，普通会话无这些 Skill，chip 必须落在项目会话）；③ 是否为本任务新建项目会话 UI 入口。
+- **选择**：
+  - **触发 = `/${command} ${hint}`**：`command` = Skill 名（如 consultant-hypothesis-map），`hint` = 一句中文意图。复用既有命令菜单的斜杠命令机制（`scan_agent_commands` 已把 `workdir/skills/*` 暴露为 `/command`，前端 commandMenu 早已这么发）——零新机制。slash 给模型明确的 Skill 调用信号，hint 给自然语言意图作双重保险：即便 `/skill-name` 解析不完美，模型据 hint 仍会调对应 Skill 工具。5 chip 映射 5 个产出型 Skill（WF07/WF06/WF09/WF10/WF12；WF02 文件归档/WF03 缺口为辅助/非结构化，不入 chip）。
+  - **项目会话 = Topbar selectedProject 驱动**：把 M1.3.9 的 `selectedProject`（ProjectSelector，已支持「未选项目」清空）传入 ChatWorkspace；`sendMessage` 新建会话时若 `selectedProject` 非空→`createSession({ project_id })`（不传 agent_id，后端 M3.4.2 自动加载项目 Agent），否则沿用用户挑选的 Agent。**不为本任务新建项目会话入口**，复用既有 ProjectSelector。
+  - **chip 显隐 = 项目上下文**：仅当 `activeProjectId != null` 显示（空状态取 selectedProject.id / 已进入会话取 currentSession.project_id）。普通会话与「选了项目但停在旧的非项目会话」均不显示——旧会话非项目会话，无项目 Skill，需新建会话才生效（空状态横幅已提示绑定）。streaming 中 chip 禁用。
+- **理由**：斜杠命令是平台既有「Skill 作为命令」的既有路径，chip 直接复用，避免造新触发协议；slash+hint 双重信号兼顾「可靠触发」与「可读意图」；项目会话由既有 ProjectSelector 驱动，零新 UI 入口，与 M3.4.2 后端「createSession 校验成员 + 自动加载项目 Agent」天然衔接。纯前端任务，无后端改动（后端 SessionOut/CreateSessionRequest 早在 M3.4.2 支持 project_id），故以 tsc + vite build 验证（同 M3.1.4 前端口径），不跑 pytest 回归。
+
 
 

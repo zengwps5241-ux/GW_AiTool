@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ComponentType,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -16,6 +17,7 @@ import type {
   AgentCommand,
   ChatEvent,
   ModelSettings,
+  Project,
   Session,
   TeamSpace,
   ThinkingLevelValue,
@@ -394,6 +396,8 @@ interface Props {
   onOpenTeamSpaces?: () => void;
   onOpenTeamDetail?: (space: { id: number; name: string }) => void;
   onBreadcrumbChange?: (items: BreadcrumbItem[]) => void;
+  /** Topbar 选中的项目（M3.4.1）：新建会话时绑定到该项目，加载项目 Agent + 工作流 Skill */
+  selectedProject?: Project | null;
   me: UserMe;
 }
 
@@ -465,6 +469,27 @@ function FilterChip({
   );
 }
 
+// ============ 工作流快捷 chip（M3.4.1）============
+// 项目级会话可用的 5 个工作流快捷入口：点击向会话发送 `/${command} ${hint}` 触发对应 Skill。
+// command 严格对齐 app/skills_seed/<name> 的 Skill 名（项目 Agent 绑定的 7 个 Skill 中 5 个产出型）。
+type WfChipIcon = ComponentType<{ size?: number; style?: CSSProperties }>;
+interface WfChipDef {
+  key: string;
+  label: string;
+  Icon: WfChipIcon;
+  /** Skill 名（即斜杠命令）；点击后发送 `/${command} ${hint}` */
+  command: string;
+  /** 附在命令后的简短意图说明，帮助模型确定启动该 Skill */
+  hint: string;
+}
+const WF_CHIPS: WfChipDef[] = [
+  { key: "hypothesis-map", label: "生成假设地图", Icon: I.Map, command: "consultant-hypothesis-map", hint: "请基于当前项目资料，开始生成分层业务假设地图（L1→L4 分步）。" },
+  { key: "visit-plan", label: "生成拜访前方案", Icon: I.ClipboardList, command: "consultant-visit-plan", hint: "请为本项目下一次关键拜访生成前置方案。" },
+  { key: "interview", label: "整理拜访纪要", Icon: I.MessagesSquare, command: "consultant-interview", hint: "我将提供拜访纪要素材，请结构化整理并抽取四维度证据。" },
+  { key: "verify", label: "验证假设", Icon: I.ClipboardCheck, command: "consultant-verify", hint: "请基于已有证据验证假设地图并更新现状节点。" },
+  { key: "stakeholder", label: "营销地图", Icon: I.Users, command: "consultant-stakeholder", hint: "请为本项目生成营销地图角色卡。" },
+];
+
 export default function ChatWorkspace({
   mode,
   teamSpaceId,
@@ -476,6 +501,7 @@ export default function ChatWorkspace({
   onOpenTeamSpaces,
   onOpenTeamDetail,
   onBreadcrumbChange,
+  selectedProject,
   me,
 }: Props) {
   const { showToast } = useToast();
@@ -1169,7 +1195,11 @@ export default function ChatWorkspace({
         }
         try {
           const created = await api.createSession({
-            agent_id: pickedAgentId,
+            // 项目会话（M3.4.1）：Topbar 已选项目时绑定 project_id，后端自动加载项目 Agent
+            // （含 7 个工作流 Skill + 3 Plugin），不传 agent_id；普通会话沿用用户挑选的 Agent。
+            ...(selectedProject
+              ? { project_id: selectedProject.id }
+              : { agent_id: pickedAgentId }),
             workspace_kind: createWorkspaceKind,
             team_space_id: createTeamSpaceId,
             is_shared: createWorkspaceKind === "team" ? shareDraftSession : false,
@@ -1231,6 +1261,7 @@ export default function ChatWorkspace({
       selectedModel,
       thinkingLevel,
       finishStreaming,
+      selectedProject,
     ],
   );
 
@@ -1259,6 +1290,16 @@ export default function ChatWorkspace({
 
   // ============ 渲染 ============
   const isEmpty = localMode === "empty" || !currentId;
+  // 当前对话的项目上下文（M3.4.1）：
+  //  - 空状态（尚未建会话）：以 Topbar 选中的项目作为「待绑定」项目，新建会话将关联它；
+  //  - 已进入会话：仅当该会话本身是项目会话（project_id）才视为项目上下文（旧的非项目会话不变）。
+  const activeProjectId = isEmpty
+    ? selectedProject?.id ?? null
+    : currentSession?.project_id ?? null;
+  const activeProjectName = isEmpty
+    ? selectedProject?.name ?? null
+    : currentSession?.project_name ?? null;
+  const hasProjectContext = activeProjectId != null;
   const commandAgentId = currentSession?.agent_id ?? (isEmpty ? pickedAgentId : null);
 
   useEffect(() => {
@@ -1718,6 +1759,19 @@ export default function ChatWorkspace({
                               : "个人空间"}
                           </span>
                         </span>
+                        {s.project_name && (
+                          <span
+                            style={{
+                              ...sessionMetaTagStyle,
+                              borderColor: "var(--accent-soft)",
+                              background: "var(--accent-soft)",
+                              color: "var(--accent-2)",
+                            }}
+                          >
+                            <I.Briefcase size={11} />
+                            <span style={sessionMetaTextStyle}>{s.project_name}</span>
+                          </span>
+                        )}
                         {s.is_shared && (
                           <span
                             style={{
@@ -1889,6 +1943,12 @@ export default function ChatWorkspace({
               {currentSession.agent_name}
             </Tag>
           )}
+          {currentSession?.project_name && (
+            <Tag tone="neutral">
+              <I.Briefcase size={11} />
+              {currentSession.project_name}
+            </Tag>
+          )}
         </div>
 
         {/* 消息流 */}
@@ -1906,6 +1966,7 @@ export default function ChatWorkspace({
               }}
               shareSession={shareDraftSession}
               onShareSessionChange={setShareDraftSession}
+              projectName={hasProjectContext ? activeProjectName : null}
             />
           ) : (
             <div
@@ -1961,6 +2022,9 @@ export default function ChatWorkspace({
           onKeyDown={onKeyDown}
           streaming={streaming}
           commands={commands}
+          wfChips={WF_CHIPS}
+          showWfChips={hasProjectContext}
+          onWfChip={(prompt) => sendMessage(prompt)}
           attached={attached}
           uploading={uploading}
           uploadErr={uploadErr}
@@ -2801,6 +2865,7 @@ function EmptyState({
   onPickWorkspace,
   shareSession,
   onShareSessionChange,
+  projectName,
 }: {
   agents: Agent[];
   pickedAgentId: number | null;
@@ -2810,6 +2875,8 @@ function EmptyState({
   onPickWorkspace: (workspace: WorkspaceChoice) => void;
   shareSession: boolean;
   onShareSessionChange: (shared: boolean) => void;
+  /** Topbar 已选项目（空状态待绑定）；null 表示普通会话 */
+  projectName: string | null;
 }) {
   const selectedAgent = agents.find((agent) => agent.id === pickedAgentId) || null;
 
@@ -2858,9 +2925,33 @@ function EmptyState({
           您好，欢迎使用国科智能体平台!
         </h2>
         <div style={{ color: "var(--ink-3)", fontSize: 18 }}>
-          选择一个智能体，告诉我你要做什么
+          {projectName
+            ? `项目会话 · ${projectName}，直接描述需求或点击下方工作流开始`
+            : "选择一个智能体，告诉我你要做什么"}
         </div>
       </div>
+
+      {projectName && (
+        <div
+          style={{
+            width: "min(560px, 100%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 16px",
+            background: "var(--accent-soft)",
+            border: "1px solid var(--accent-soft)",
+            borderRadius: 12,
+            color: "var(--accent-2)",
+            fontSize: 13,
+          }}
+        >
+          <I.Briefcase size={16} style={{ flexShrink: 0 }} />
+          <span>
+            新会话将关联项目 <b>{projectName}</b>，自动加载项目专属顾问 Agent（含 7 个工作流 Skill）。可在顶部切换或取消选择项目。
+          </span>
+        </div>
+      )}
 
       <div
         style={{
@@ -2870,17 +2961,19 @@ function EmptyState({
           gap: 12,
         }}
       >
-        <SearchableDropdown
-          label="智能体"
-          placeholder="搜索智能体"
-          valueLabel={selectedAgent?.name || "选择智能体"}
-          options={agents.map((agent) => ({
-            key: String(agent.id),
-            label: agent.name,
-            meta: agent.is_default ? "默认" : agent.code,
-            onSelect: () => onPickAgent(agent.id),
-          }))}
-        />
+        {!projectName && (
+          <SearchableDropdown
+            label="智能体"
+            placeholder="搜索智能体"
+            valueLabel={selectedAgent?.name || "选择智能体"}
+            options={agents.map((agent) => ({
+              key: String(agent.id),
+              label: agent.name,
+              meta: agent.is_default ? "默认" : agent.code,
+              onSelect: () => onPickAgent(agent.id),
+            }))}
+          />
+        )}
         <SearchableDropdown
           label="工作空间"
           placeholder="搜索工作空间"
@@ -2924,6 +3017,9 @@ function ChatInput({
   onKeyDown,
   streaming,
   commands,
+  wfChips,
+  showWfChips,
+  onWfChip,
   attached,
   uploading,
   uploadErr,
@@ -2944,6 +3040,12 @@ function ChatInput({
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
   streaming: boolean;
   commands: AgentCommand[];
+  /** 项目级会话可用的工作流快捷 chip（M3.4.1） */
+  wfChips: WfChipDef[];
+  /** 是否显示工作流 chip（仅项目上下文） */
+  showWfChips: boolean;
+  /** 点击 chip：发送 `/${command} ${hint}` 触发对应 Skill */
+  onWfChip: (prompt: string) => void;
   attached: UploadedFile[];
   uploading: boolean;
   uploadErr: string | null;
@@ -3120,6 +3222,60 @@ function ChatInput({
         flexShrink: 0,
       }}
     >
+      {/* 工作流快捷 chip（M3.4.1）：仅项目级会话显示，点击向会话发送 /skill-name 触发对应 Skill */}
+      {showWfChips && wfChips.length > 0 && (
+        <div
+          style={{
+            maxWidth: 820,
+            margin: "0 auto 10px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+          }}
+        >
+          {wfChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              disabled={streaming}
+              onClick={() => onWfChip(`/${chip.command} ${chip.hint}`)}
+              title={`/${chip.command}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                height: 30,
+                padding: "0 12px",
+                background: "var(--surface)",
+                border: "1px solid var(--line)",
+                borderRadius: 999,
+                color: "var(--ink-2)",
+                cursor: streaming ? "not-allowed" : "pointer",
+                fontSize: 12.5,
+                fontWeight: 500,
+                fontFamily: "inherit",
+                opacity: streaming ? 0.55 : 1,
+                transition: "border-color 140ms, color 140ms, background 140ms",
+              }}
+              onMouseEnter={(e) => {
+                if (streaming) return;
+                e.currentTarget.style.borderColor = "var(--accent-soft)";
+                e.currentTarget.style.color = "var(--accent-2)";
+                e.currentTarget.style.background = "var(--accent-soft)";
+              }}
+              onMouseLeave={(e) => {
+                if (streaming) return;
+                e.currentTarget.style.borderColor = "var(--line)";
+                e.currentTarget.style.color = "var(--ink-2)";
+                e.currentTarget.style.background = "var(--surface)";
+              }}
+            >
+              <chip.Icon size={13} style={{ flexShrink: 0 }} />
+              <span>{chip.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div
         style={{
           maxWidth: 820,

@@ -203,6 +203,22 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_consultant_skills.py（18 全过：7 文件齐备 / 名称与 DEFAULT_PROJECT_SKILLS 一致 / 每文件 frontmatter+WF 编码 / 4 草稿 Skill 指示正确工具 / 3 非草稿 Skill 不误引 / scan_skills 发现全部 7 个 / seed_default_skills 播种+非破坏性）。全量 **574 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.4.2 基线（556 passed）passed +18（11 绑定 + 7 本任务新增；含 1 seed 测），**fail 集未扩大**（20 fail+3 err 全为既有环境问题，与本任务无关）。
 
+### M3.4.1 WF chip 按钮 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| 前端项目会话打通 | ✅ | 2026-07-09 | Session 类型加 project_id/project_name（同步后端 M3.4.2 SessionOut）；CreateSessionPayload 加 project_id；App.tsx 把 Topbar 的 selectedProject 传入 ChatWorkspace |
+| 项目会话创建 | ✅ | 2026-07-09 | sendMessage 新建会话时若 selectedProject 非空→传 project_id（不传 agent_id，后端自动加载项目 Agent）；普通会话行为不变 |
+| 5 个 WF chip | ✅ | 2026-07-09 | ChatInput 输入区上方加 5 个工作流 chip（生成假设地图/生成拜访前方案/整理拜访纪要/验证假设/营销地图），点击发 `/${command} ${hint}` 触发对应 Skill；仅项目上下文显示 |
+
+**设计要点**：
+- **触发机制（决策#32）**：chip 点击发送 `/${command} ${hint}`——`command` = Skill 名（复用既有命令菜单的斜杠命令机制：`scan_agent_commands` 已把 skills 暴露为 `/command`），`hint` = 一句中文意图作双重保险（既走 `/skill-name` 路径又给模型自然语言信号）。5 个 chip 映射 5 个产出型 Skill：WF07 consultant-hypothesis-map / WF06 consultant-visit-plan / WF09 consultant-interview / WF10 consultant-verify / WF12 consultant-stakeholder。
+- **项目会话驱动**：Topbar 的 ProjectSelector（M1.3.9 selectedProject）传入 ChatWorkspace；新建会话绑定 project_id（后端 M3.4.2 自动加载项目 Agent 含 7 Skill/3 Plugin + 挂载草稿工具）。**零新 UI 入口**——复用既有项目选择器。
+- **chip 显隐**：仅「项目上下文」显示——空状态 selectedProject 非空（待绑定）或当前会话 project_id 非空（已绑定）。普通会话/非项目会话不显示（5 个 Skill 绑定在项目 Agent，普通 Agent 无这些 Skill）。streaming 中 chip 禁用。
+- **可视化项目绑定**：标题栏 + 会话列表项显示项目名 Tag；空状态显示「新会话将关联项目 X」横幅并隐藏智能体选择器（项目 Agent 固定）。
+
+**验证**：纯前端任务，无后端改动 → 无需 pytest 回归。`tsc -b` 通过 + `vite build` 通过（71 模块，构建 1.24s，0 错误）。前端无组件测试基建（既有 9 个测试均为 src/lib 纯函数，本次未触及），UI 渲染以类型检查 + 生产构建验证（同 M3.1.4 前端验证口径）。
+
 
 
 

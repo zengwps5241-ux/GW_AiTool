@@ -111,6 +111,8 @@ type CreateSessionPayload = {
   workspace_kind?: WorkspaceKind;
   team_space_id?: number | null;
   is_shared?: boolean;
+  /** 项目级会话绑定（M3.4.2）：传入则后端自动加载项目 Agent（含 Skill/Plugin） */
+  project_id?: number | null;
 };
 
 type UploadTaskFileOptions = {
