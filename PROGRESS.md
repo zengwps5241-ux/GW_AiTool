@@ -127,6 +127,22 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_visit_api.py（9 全过：拜访CRUD+时间倒序+角色筛选 / 证据CRUD+多维筛选+派生统计 / §7.5建议规则+确认+偏差池 / §7.6态度自动触发+非信号不触发 / 项目隔离+跨项目关联拒绝）。全量 **520 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.2 基线（511 passed）passed +9（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
 
+### M2.4 采纳与审批机制 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M2.4.1 采纳 API | ✅ | 2026-07-09 | `POST /api/projects/{id}/adopt` 统一派发器：business_map_draft→adopt_draft（Owner→reviewed+版本快照 / Deputy→pending_review）；营销/拜访草稿留待 M3.1.1 扩展 |
+| M2.4.2 审批 API | ✅ | 2026-07-09 | `GET /api/projects/{id}/pending-reviews` 跨四类实体聚合（+entity_type 筛选）；`POST /reviews/{type}/{id}/approve\|reject`（Owner 翻状态） |
+| M2.4.3 采纳后数据流转 | ✅ | 2026-07-09 | 采纳→草稿写正式表+版本快照+草稿置adopted；approve→reviewed 立即页面可见（§7.3）；reject→rejected 退回（§3.4） |
+
+**设计要点**：
+- **架构（决策 #28）**：保留各模块自有 adopt（business_map.adopt_draft 带「整图草稿单元+版本快照」专有语义，§7.4 仅业务地图支持版本回溯）；新增统一审批层 `app/modules/reviews/`，用「实体注册表」覆盖四类可审批实体（BusinessMapObject/StakeholderCard/VisitRecord/EvidenceSource 共享 review_status/reviewed_by/reviewed_at 三列）。
+- **§3.3 审批范围**：仅 WF07（业务地图）Deputy 产出需 Owner 审；非 WF07 自确认。故 adopt 时 business_map Deputy→pending_review（需审），营销/拜访未来 Deputy→reviewed（自确认，不进待审批列表）；统一审批机制对任何 pending_review 通用。
+- **权限**：GET pending-reviews = require_project_member（项目内透明）；approve/reject = require_project_owner（发布/退回限 Owner）；adopt = require_project_member（角色决定状态）。admin 越权可审任意项目。
+- **驳回意见**：M2.4 数据层不持久化（Phase 3 对话 Banner 审核流承载「修改意见」）。
+
+**回归测试**：test_reviews_api.py（11 全过：采纳派发 Owner+Deputy / 不支持类型 400 / 跨模块聚合+筛选 / business_map 审批发布 / 逐类 approve / reject+意见 / Deputy 403 / 404+非pending 400 / 项目隔离 / admin 越权）。全量 **531 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.3 基线（520 passed）passed +11（恰好新增），**fail 集未扩大**。
+
 
 
 

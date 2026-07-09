@@ -191,5 +191,15 @@
   - 证据关联的拜访/角色卡/假设必须属本项目，跨项目关联 → 400。
 - **理由**：立场 from/to 是记录态度变化的必要数据，规格遗漏故补两个可选列（向后兼容）。把「触发条件」收窄为「角色态度信号类 + 显式 stance」，使自动记录确定可测、不误触；复用 M2.2 已实现的 record_stance_change，记录逻辑零重复。仅创建时触发避免编辑证据反复追加日志（编辑场景由顾问手动维护）。
 
+## 决策 #28：M2.4 采纳/审批——保留各模块 adopt + 新增统一审批层（实体注册表）（M2.4 / §3.3 §3.4 §7.1 §7.3）
+
+- **背景**：M2.1 已在 business_map 实现 `/drafts/{id}/adopt`（Owner→reviewed / Deputy→pending_review + 版本快照，决策 #18）。M2.4 要求「跨模块统一的采纳/审批层」：`POST /api/projects/{id}/adopt`、`GET /pending-reviews`、`POST /reviews/{type}/{id}/approve|reject`。需抉择：抽象一个通用 adopt 服务复用各模块，还是各模块保留各自 adopt + 新增统一审批列表 API。
+- **选择**：**保留各模块自有的 adopt + 新增统一审批层**（`app/modules/reviews/`，实体注册表模式）。
+  - **采纳（adopt）保留模块自有**：business_map.adopt_draft 带「整张图为一个草稿单元（§7.1.7）+ 采纳即版本快照（§7.4/#18）」的专有语义，仅业务地图支持版本回溯（§7.4），抽象为通用服务会丢失这些。统一 `POST /adopt` 是**派发器**：按 `entity_type` 委派——`business_map_draft`→`business_map.adopt_draft`；营销/拜访草稿留待 M3.1.1（`save_xxx_draft` 工具）落地后扩展。不与 `/business-map/drafts/{id}/adopt` 重复（前者是统一入口/后者是模块入口，逻辑单一来源）。
+  - **统一审批层（新）**：四类可审批实体（BusinessMapObject/StakeholderCard/VisitRecord/EvidenceSource）共享 `review_status`/`reviewed_by`/`reviewed_at` 三列，故用「实体注册表」`REGISTRY` 把列表/审批动作参数化——`list_pending_reviews` 跨模块聚合 `pending_review`，`approve_review`/`reject_review` 统一翻这三列。新增可审批实体只需登记一行。
+  - **§3.3 审批范围**：规格仅 WF07（业务地图）Deputy 产出需 Owner 审核；非 WF07（营销/拜访）Owner+Deputy 均可自确认。故 adopt 时 business_map Deputy→pending_review（需审，决策 #18 已实现），营销/拜访未来的 adopt 将 Deputy→reviewed（自确认，§3.3）不进待审批列表；统一审批机制对「任何 pending_review」通用，不限定来源。
+  - **权限**：`GET /pending-reviews` 用 `require_project_member`（§3.5 项目内透明）；`approve`/`reject` 用 `require_project_owner`（决策 #12，破坏性/发布操作限 Owner）；`adopt` 用 `require_project_member`（采纳者是产出方，角色决定状态）。驳回意见 comment M2.4 不持久化（Phase 3 对话 Banner 审核流承载「修改意见」）。
+- **理由**：采纳的草稿单元粒度+版本快照是业务地图专有（§7.4 明确营销/拜访不需版本回溯），强抽象会污染通用层；而「跨模块待审批聚合 + Owner 审批」是真正共有的需求，注册表模式以最小耦合覆盖且易扩展。与决策 #16/#21（半结构化用 JSONB、不强约束）、#17/#18（reviewed 真源 + Owner/Deputy 区分）一脉相承。
+
 
 

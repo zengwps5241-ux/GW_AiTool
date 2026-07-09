@@ -39,7 +39,7 @@ async def app_env(monkeypatch, tmp_path):
     # Layer 2: models, schemas (reload submodules so they re-import fresh Base)
     from app import models, schemas
     from app.models import agent as model_agent, business_map as model_business_map, category as model_category, conversion_task as model_conversion_task, customer as model_customer, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, marketing_map as model_marketing_map, organization as model_organization, project as model_project, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user, visit as model_visit
-    from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, workspace_tasks as schema_workspace_tasks
+    from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, reviews as schema_reviews, workspace_tasks as schema_workspace_tasks
     reload(model_agent)
     reload(model_business_map)
     reload(model_marketing_map)
@@ -63,6 +63,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(schema_business_map)
     reload(schema_marketing_map)
     reload(schema_visit)
+    reload(schema_reviews)
     reload(schema_categories)
     reload(schema_customers)
     reload(schema_organizations)
@@ -100,6 +101,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.modules.business_map import service as business_map_service, health as business_map_health
     from app.modules.marketing_map import service as marketing_map_service
     from app.modules.visits import service as visits_service
+    from app.modules.reviews import service as reviews_service
     from app.modules.workspace import (
         archive,
         markdown_index,
@@ -129,6 +131,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(business_map_service)
     reload(marketing_map_service)
     reload(visits_service)
+    reload(reviews_service)
     reload(paths)
     reload(preview)
     reload(workspace_scope)
@@ -161,6 +164,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.api.routes import business_map as business_map_routes
     from app.api.routes import marketing_map as marketing_map_routes
     from app.api.routes import visit as visit_routes
+    from app.api.routes import reviews as reviews_routes
     reload(deps)
     reload(project_deps)
     reload(auth_routes)
@@ -184,6 +188,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(business_map_routes)
     reload(marketing_map_routes)
     reload(visit_routes)
+    reload(reviews_routes)
     reload(router)
 
     # Layer 6: main, scripts

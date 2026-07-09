@@ -119,6 +119,11 @@ from app.schemas.visit import (
     VisitRecordOut,
     VisitRecordUpdate,
 )
+from app.schemas.reviews import (
+    AdoptRequest,
+    PendingReviewItem,
+    RejectRequest,
+)
 
 __all__ = [
     "UserOut",
@@ -229,4 +234,7 @@ __all__ = [
     "VerificationSuggestionOut",
     "VerificationConfirmIn",
     "VerificationConfirmOut",
+    "AdoptRequest",
+    "PendingReviewItem",
+    "RejectRequest",
 ]

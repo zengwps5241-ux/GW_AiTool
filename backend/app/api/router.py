@@ -16,6 +16,7 @@ from app.api.routes import (
     model_settings,
     organizations,
     projects,
+    reviews,
     sessions,
     team_spaces,
     upload_tasks,
@@ -50,3 +51,4 @@ router.include_router(projects.router)
 router.include_router(business_map.router)
 router.include_router(marketing_map.router)
 router.include_router(visit.router)
+router.include_router(reviews.router)
