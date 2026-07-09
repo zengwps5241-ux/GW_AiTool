@@ -15,6 +15,11 @@ import type {
   LoginWhitelistDepartmentSearchItem,
   LoginWhitelistUser,
   ModelSettings,
+  Organization,
+  OrganizationImportResponse,
+  OrganizationImportRow,
+  OrganizationInput,
+  OrganizationTreeNode,
   Plugin,
   RunEvent,
   RunningSessionState,
@@ -158,6 +163,43 @@ export const api = {
     request<{ success: boolean; user_id: number; status: string }>(`/api/admin/approve-user/${userId}`, {
       method: "POST",
       body: JSON.stringify({ action, reason }),
+    }),
+
+  // 组织架构管理（自建三级：公司→部门→小组）
+  listOrganizations: () =>
+    request<Organization[]>("/api/admin/organizations"),
+  organizationTree: () =>
+    request<OrganizationTreeNode[]>("/api/admin/organizations/tree"),
+  createOrganization: (data: OrganizationInput) =>
+    request<Organization>("/api/admin/organizations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateOrganization: (id: number, data: Partial<OrganizationInput>) =>
+    request<Organization>(`/api/admin/organizations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteOrganization: (id: number) =>
+    request<void>(`/api/admin/organizations/${id}`, { method: "DELETE" }),
+  addOrganizationMember: (orgId: number, data: { user_id: number; position_title?: string; is_primary?: boolean }) =>
+    request<void>(`/api/admin/organizations/${orgId}/members`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  removeOrganizationMember: (orgId: number, userId: number) =>
+    request<void>(`/api/admin/organizations/${orgId}/members/${userId}`, {
+      method: "DELETE",
+    }),
+  importOrganizations: (rows: OrganizationImportRow[]) =>
+    request<OrganizationImportResponse>("/api/admin/organizations/import", {
+      method: "POST",
+      body: JSON.stringify(rows),
+    }),
+  importOrganizationsCsv: (content: string) =>
+    request<OrganizationImportResponse>("/api/admin/organizations/import-csv", {
+      method: "POST",
+      body: JSON.stringify({ content, content_type: "csv" }),
     }),
 
   // DEPRECATED: 企微登录模式配置，保留以备未来扩展

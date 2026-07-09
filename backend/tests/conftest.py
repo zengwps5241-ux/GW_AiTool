@@ -6,9 +6,10 @@ from httpx import AsyncClient, ASGITransport
 @pytest.fixture(autouse=True)
 def _default_database_url(monkeypatch):
     """为所有测试提供默认的数据库连接地址。"""
+    # 本地 PostgreSQL 口令为 dev（与 backend/.env 一致）
     monkeypatch.setenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/gokagent_test",
+        "postgresql+asyncpg://postgres:dev@localhost:5432/gokagent_test",
     )
 
 
@@ -19,7 +20,7 @@ async def app_env(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "test-token")
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://example.com")
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/gokagent_test")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:dev@localhost:5432/gokagent_test")
     monkeypatch.chdir(tmp_path)
 
     from importlib import reload
@@ -37,14 +38,15 @@ async def app_env(monkeypatch, tmp_path):
 
     # Layer 2: models, schemas (reload submodules so they re-import fresh Base)
     from app import models, schemas
-    from app.models import agent as model_agent, category as model_category, conversion_task as model_conversion_task, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user
-    from app.schemas import auth as schema_auth, agents as schema_agents, categories as schema_categories, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, workspace_tasks as schema_workspace_tasks
+    from app.models import agent as model_agent, category as model_category, conversion_task as model_conversion_task, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, organization as model_organization, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user
+    from app.schemas import auth as schema_auth, agents as schema_agents, categories as schema_categories, organizations as schema_organizations, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, workspace_tasks as schema_workspace_tasks
     reload(model_agent)
     reload(model_category)
     reload(model_conversion_task)
     reload(model_department)
     reload(model_feedback)
     reload(model_login_whitelist)
+    reload(model_organization)
     reload(model_session)
     reload(model_team_space)
     reload(model_upload_task)
@@ -54,6 +56,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(schema_auth)
     reload(schema_agents)
     reload(schema_categories)
+    reload(schema_organizations)
     reload(schema_sessions)
     reload(schema_team_spaces)
     reload(schema_model_settings)
@@ -81,6 +84,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.modules.agents import service as agents_service
     from app.modules.sessions import service as sessions_service, streaming
     from app.modules.team_spaces import service as team_spaces_service
+    from app.modules.organizations import service as organizations_service
     from app.modules.workspace import (
         archive,
         markdown_index,
@@ -102,6 +106,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(team_spaces_service)
     reload(sessions_service)
     reload(streaming)
+    reload(organizations_service)
     reload(paths)
     reload(preview)
     reload(workspace_scope)
@@ -128,6 +133,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.api.routes import admin_skills as admin_skills_routes
     from app.api.routes import admin_plugins as admin_plugins_routes
     from app.api.routes import admin_usage as admin_usage_routes
+    from app.api.routes import organizations as organizations_routes
     reload(deps)
     reload(auth_routes)
     reload(agents_routes)
@@ -144,6 +150,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(admin_plugins_routes)
     reload(admin_categories_routes)
     reload(admin_usage_routes)
+    reload(organizations_routes)
     reload(router)
 
     # Layer 6: main, scripts
@@ -171,57 +178,55 @@ async def client(app_env):
         yield c
 
 
-async def _login_wechat_user(client, *, code: str, userid: str, name: str):
-    """按企微二维码流程登录指定测试用户。"""
-    from unittest.mock import AsyncMock, patch
-    from app.modules.auth import wechat_work
+async def _register_and_login(
+    client: AsyncClient,
+    *,
+    username: str,
+    password: str = "pass1234",
+    phone: str | None = None,
+    display_name: str | None = None,
+):
+    """直接在数据库创建已激活用户，再走 /api/auth/login 登录（自建认证体系）。
 
-    res = await client.get("/api/auth/wechat-work/qrcode-config")
-    assert res.status_code == 200
-    state = res.json()["state"]
+    V2.2 认证重构后已弃用企微二维码流程，测试改用自建登录。
+    """
+    from app.db.session import async_session
+    from app.models.user import User
+    from app.core import security
 
-    res = await client.get(
-        f"/api/auth/wechat-work/callback?code={code}&state={state}",
-        follow_redirects=False,
-    )
-    assert res.status_code == 200
-
-    res = await client.get(f"/api/auth/wechat-work/poll-code?state={state}")
-    assert res.status_code == 200
-    assert res.json()["code"] == code
-
-    with patch.object(wechat_work, "get_access_token", new=AsyncMock(return_value="token")), \
-         patch.object(wechat_work, "auth_get_user_info", new=AsyncMock(return_value={
-             "userid": userid,
-             "user_ticket": f"ticket_{userid}",
-         })), \
-         patch.object(wechat_work, "auth_get_user_detail", new=AsyncMock(return_value={
-             "userid": userid,
-             "name": name,
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_user_detail", new=AsyncMock(return_value={
-             "userid": userid,
-             "name": name,
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_department_list", new=AsyncMock(return_value=[])):
-        res = await client.post(
-            "/api/auth/wechat-work/login-by-code",
-            json={"code": code},
+    async with async_session() as db:
+        user = User(
+            username=username,
+            password_hash=security.hash_password(password),
+            phone=phone,
+            display_name=display_name or username,
+            status="active",
+            registration_source="admin_create",
+            auth_source="local",
         )
-        assert res.status_code == 200
-        assert res.json()["success"] is True
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        uid = user.id
 
-    return client
+    res = await client.post(
+        "/api/auth/login",
+        json={"login": phone or username, "password": password},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["success"] is True
+    return client, uid
+
+
+async def _login_wechat_user(client, *, code: str, userid: str, name: str):
+    """DEPRECATED: 企微二维码登录流程，V2.2 认证重构后不再使用。
+
+    保留以兼容尚未迁移的旧测试。新测试应使用 _register_and_login。
+    """
+    # V2.2: 企微路由已注释，此辅助函数不再可用。
+    raise RuntimeError(
+        "企微登录流程已弃用（V2.2 认证重构）。请改用 _register_and_login。"
+    )
 
 
 @pytest_asyncio.fixture
@@ -247,8 +252,14 @@ async def test_user(db_session):
 
 @pytest_asyncio.fixture
 async def logged_in_client(client):
-    """通过企微自建二维码流程创建并登录一个普通用户。"""
-    return await _login_wechat_user(client, code="test_code", userid="alice", name="Alice")
+    """创建并登录一个普通用户（自建注册登录体系）。"""
+    c, _ = await _register_and_login(
+        client,
+        username="alice",
+        phone="13800000001",
+        display_name="Alice",
+    )
+    return c
 
 
 @pytest_asyncio.fixture
@@ -260,140 +271,54 @@ async def other_logged_in_client(app_env):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        yield await _login_wechat_user(c, code="other_code", userid="bob", name="Bob")
+        _, _ = await _register_and_login(
+            c,
+            username="bob",
+            phone="13800000002",
+            display_name="Bob",
+        )
+        yield c
 
 
 @pytest_asyncio.fixture
 async def admin_client(client):
-    """通过企微自建二维码流程创建并登录一个 admin 用户。"""
-    from unittest.mock import patch, AsyncMock
-    from app.modules.auth import wechat_work
+    """创建并登录一个 admin 用户（自建注册登录体系）。"""
+    c, uid = await _register_and_login(
+        client,
+        username="admin_user",
+        phone="13800000003",
+        display_name="Admin",
+    )
+    # 提升为 admin
     from app.db.session import async_session
     from app.models.user import User
     from sqlalchemy import select
 
-    # 1. 获取二维码配置
-    res = await client.get("/api/auth/wechat-work/qrcode-config")
-    assert res.status_code == 200
-    config = res.json()
-    state = config["state"]
-
-    # 2. 模拟企微回调(存 code)
-    res = await client.get(
-        f"/api/auth/wechat-work/callback?code=admin_code&state={state}",
-        follow_redirects=False,
-    )
-    assert res.status_code == 200
-
-    # 3. 轮询获取 code
-    res = await client.get(f"/api/auth/wechat-work/poll-code?state={state}")
-    assert res.status_code == 200
-    assert res.json()["code"] == "admin_code"
-
-    # 4. 用 code 登录
-    with patch.object(wechat_work, "get_access_token", new=AsyncMock(return_value="token")), \
-         patch.object(wechat_work, "auth_get_user_info", new=AsyncMock(return_value={
-             "userid": "admin_user",
-             "user_ticket": "ticket_admin",
-         })), \
-         patch.object(wechat_work, "auth_get_user_detail", new=AsyncMock(return_value={
-             "userid": "admin_user",
-             "name": "Admin",
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_user_detail", new=AsyncMock(return_value={
-             "userid": "admin_user",
-             "name": "Admin",
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_department_list", new=AsyncMock(return_value=[])):
-        res = await client.post(
-            "/api/auth/wechat-work/login-by-code",
-            json={"code": "admin_code"},
-        )
-        assert res.status_code == 200
-        assert res.json()["success"] is True
-
     async with async_session() as session:
-        result = await session.execute(select(User).where(User.username == "admin_user"))
+        result = await session.execute(select(User).where(User.id == uid))
         user = result.scalar_one()
         user.role = "admin"
         await session.commit()
-
-    return client
+    return c
 
 
 @pytest_asyncio.fixture
 async def super_client(client):
-    """通过企微自建二维码流程创建并登录一个 super 用户。"""
-    from unittest.mock import patch, AsyncMock
-    from app.modules.auth import wechat_work
+    """创建并登录一个 super 用户（自建注册登录体系）。"""
+    c, uid = await _register_and_login(
+        client,
+        username="super_user",
+        phone="13800000004",
+        display_name="Super",
+    )
+    # 提升为 super
     from app.db.session import async_session
     from app.models.user import User
     from sqlalchemy import select
 
-    # 1. 获取二维码配置
-    res = await client.get("/api/auth/wechat-work/qrcode-config")
-    assert res.status_code == 200
-    config = res.json()
-    state = config["state"]
-
-    # 2. 模拟企微回调(存 code)
-    res = await client.get(
-        f"/api/auth/wechat-work/callback?code=super_code&state={state}",
-        follow_redirects=False,
-    )
-    assert res.status_code == 200
-
-    # 3. 轮询获取 code
-    res = await client.get(f"/api/auth/wechat-work/poll-code?state={state}")
-    assert res.status_code == 200
-    assert res.json()["code"] == "super_code"
-
-    # 4. 用 code 登录
-    with patch.object(wechat_work, "get_access_token", new=AsyncMock(return_value="token")), \
-         patch.object(wechat_work, "auth_get_user_info", new=AsyncMock(return_value={
-             "userid": "super_user",
-             "user_ticket": "ticket_super",
-         })), \
-         patch.object(wechat_work, "auth_get_user_detail", new=AsyncMock(return_value={
-             "userid": "super_user",
-             "name": "Super",
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_user_detail", new=AsyncMock(return_value={
-             "userid": "super_user",
-             "name": "Super",
-             "department": [],
-             "position": None,
-             "mobile": None,
-             "email": None,
-             "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_department_list", new=AsyncMock(return_value=[])):
-        res = await client.post(
-            "/api/auth/wechat-work/login-by-code",
-            json={"code": "super_code"},
-        )
-        assert res.status_code == 200
-        assert res.json()["success"] is True
-
     async with async_session() as session:
-        result = await session.execute(select(User).where(User.username == "super_user"))
+        result = await session.execute(select(User).where(User.id == uid))
         user = result.scalar_one()
         user.role = "super"
         await session.commit()
-
-    return client
+    return c

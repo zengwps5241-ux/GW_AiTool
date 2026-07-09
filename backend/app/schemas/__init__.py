@@ -15,6 +15,17 @@ from app.schemas.feedback import (
     FeedbackIssueListOut,
 )
 from app.schemas.sessions import ChatRequest, CreateSessionRequest, RenameSessionRequest, SessionOut
+from app.schemas.organizations import (
+    OrganizationCreate,
+    OrganizationImportResponse,
+    OrganizationImportResult,
+    OrganizationImportRow,
+    OrganizationOut,
+    OrganizationTreeNode,
+    OrganizationUpdate,
+    UserOrganizationCreate,
+    UserOrganizationOut,
+)
 from app.schemas.team_spaces import (
     TeamSpaceCreateIn,
     TeamSpaceLockIn,
@@ -109,4 +120,13 @@ __all__ = [
     "FeedbackIssueListOut",
     "UsageSummaryOut",
     "UsageUserOut",
+    "OrganizationCreate",
+    "OrganizationUpdate",
+    "OrganizationOut",
+    "OrganizationTreeNode",
+    "UserOrganizationCreate",
+    "UserOrganizationOut",
+    "OrganizationImportRow",
+    "OrganizationImportResult",
+    "OrganizationImportResponse",
 ]

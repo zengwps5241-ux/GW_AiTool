@@ -448,3 +448,69 @@ export interface PluginMeta {
 }
 
 export type AdminTab = "skills" | "plugins" | "categories";
+
+// ─── 组织架构（自建三级：公司→部门→小组）──────────────────────
+
+export type OrganizationType = "company" | "department" | "group";
+
+/** 用户-组织关联信息 */
+export interface UserOrganization {
+  user_id: number;
+  organization_id: number;
+  username: string;
+  display_name: string | null;
+  position_title: string | null;
+  is_primary: boolean;
+}
+
+/** 单个组织节点 */
+export interface Organization {
+  id: number;
+  name: string;
+  type: OrganizationType;
+  parent_id: number | null;
+  head_user_id: number | null;
+  head_user_name: string | null;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 组织树节点（递归） */
+export interface OrganizationTreeNode extends Organization {
+  members: UserOrganization[];
+  children: OrganizationTreeNode[];
+}
+
+/** 创建/更新组织 */
+export interface OrganizationInput {
+  name: string;
+  type: OrganizationType;
+  parent_id?: number | null;
+  head_user_id?: number | null;
+  sort_order?: number;
+}
+
+/** 批量导入单行 */
+export interface OrganizationImportRow {
+  name: string;
+  type: OrganizationType;
+  parent_name?: string | null;
+  head_user_username?: string | null;
+  position_title?: string | null;
+  is_primary?: boolean;
+  sort_order?: number;
+}
+
+/** 批量导入结果 */
+export interface OrganizationImportResult {
+  total: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface OrganizationImportResponse {
+  success: boolean;
+  result: OrganizationImportResult;
+}

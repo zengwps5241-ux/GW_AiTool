@@ -5,6 +5,7 @@ from app.models.conversion_task import ConversionTask
 from app.models.department import Department
 from app.models.feedback import FeedbackAttachment, FeedbackIssue
 from app.models.login_whitelist import LoginWhitelistDepartment, LoginWhitelistUser
+from app.models.organization import Organization, UserOrganization
 from app.models.session import ChatSession
 from app.models.team_space import TeamSpace, TeamSpaceMember
 from app.models.upload_task import UploadTask
@@ -22,6 +23,7 @@ __all__ = [
     "FeedbackIssue",
     "LoginWhitelistDepartment",
     "LoginWhitelistUser",
+    "Organization",
     "PluginBinding",
     "SkillBinding",
     "TeamSpace",
@@ -30,4 +32,5 @@ __all__ = [
     "UsageEvent",
     "UsageResourceEvent",
     "User",
+    "UserOrganization",
 ]

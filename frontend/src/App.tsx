@@ -17,6 +17,7 @@ import BusinessMapPage from "@/pages/BusinessMapPage";
 import MarketingMapPage from "@/pages/MarketingMapPage";
 import VisitRecordsPage from "@/pages/VisitRecordsPage";
 import UserApprovalPage from "@/pages/UserApprovalPage";
+import OrganizationPage from "@/pages/OrganizationPage";
 import SidebarVariantA from "@/components/SidebarVariantA";
 import Topbar, { type BreadcrumbItem } from "@/components/Topbar";
 import FeedbackDialog from "@/components/FeedbackDialog";
@@ -208,6 +209,9 @@ export default function App() {
 
     // 用户审批页面（管理员）
     if (view === "userApproval" && auth.me.role !== "user") return <UserApprovalPage />;
+
+    // 组织架构管理页（管理员）
+    if (view === "organization" && auth.me.role !== "user") return <OrganizationPage />;
 
     if (view === "new" || view === "chat") {
       return (

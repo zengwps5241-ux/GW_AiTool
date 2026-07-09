@@ -21,6 +21,7 @@ for _mod_name in [
     "app.models.department",
     "app.models.feedback",
     "app.models.login_whitelist",
+    "app.models.organization",
     "app.models.usage",
 ]:
     if _mod_name in sys.modules:

@@ -11,6 +11,7 @@ from app.api.routes import (
     conversion_tasks,
     feedback,
     model_settings,
+    organizations,
     sessions,
     team_spaces,
     upload_tasks,
@@ -38,3 +39,4 @@ router.include_router(admin_login_whitelist.router)
 router.include_router(feedback.router)
 router.include_router(model_settings.router)
 router.include_router(admin_usage.router)
+router.include_router(organizations.router)
