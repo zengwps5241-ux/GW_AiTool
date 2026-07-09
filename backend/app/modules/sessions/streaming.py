@@ -16,6 +16,8 @@ from app.core.config import _merged_env, get_settings, user_workspace
 from app.db.session import async_session
 from app.integrations.claude.guard import FileLockHookContext
 from app.integrations.claude.runner import stream_chat
+from app.integrations.claude.defense import apply_output_filter, defense_plugin_active
+from app.integrations.claude.search_tools import SearchToolContext, search_plugin_active
 from app.integrations.claude.tools import DraftToolContext
 from app.integrations.openai import generate_chat_completion
 from app.models import Agent, ChatSession, User
@@ -280,6 +282,14 @@ async def stream_session_chat(
             await queue.put(evt)
 
     async def on_message(evt: dict) -> None:
+        # M3.3.3 防线2：对 LLM 文本产出做确定性指纹过滤（never_visible）。
+        # 仅过滤 assistant_text；思维链（assistant_thinking）不过滤（§8.2）。
+        if (
+            defense_plugin_active(agent)
+            and evt.get("type") == "assistant_text"
+            and evt.get("text")
+        ):
+            evt = {**evt, "text": apply_output_filter(evt["text"])}
         if evt.get("type") == "tool_use":
             tool_uses.append(evt)
         elif evt.get("type") == "tool_result":
@@ -436,6 +446,16 @@ async def stream_session_chat(
                     )
                 if draft_context is not None:
                     stream_kwargs["draft_context"] = draft_context
+            # M3.3.2 consultant-search：项目 Agent 绑定搜索 Plugin 时挂载 3 个搜索工具
+            # （search_web/search_company_registry/fetch_webpage），结果归档个人空间。
+            # workspace_root 来自会话工作区；project/user/session 经闭包注入 handler。
+            if search_plugin_active(agent):
+                stream_kwargs["search_context"] = SearchToolContext(
+                    workspace_root=ws,
+                    project_id=project_id,
+                    user_id=user.id,
+                    source_session_id=session_id,
+                )
             summary = await stream_chat(**stream_kwargs)
             await finalize_usage(summary)
             finish_run_state(summary, summary.error_message)

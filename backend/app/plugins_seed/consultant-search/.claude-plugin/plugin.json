@@ -1,0 +1,5 @@
+{
+  "name": "consultant-search",
+  "version": "1.0.0",
+  "description": "MCP 搜索工具集——search_web / search_company_registry / fetch_webpage 三个进程内 MCP 工具，搜索结果归档到个人空间。"
+}

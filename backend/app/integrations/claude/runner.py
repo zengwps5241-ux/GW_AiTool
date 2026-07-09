@@ -29,6 +29,16 @@ from app.integrations.claude.tools import (
     build_draft_tool_server,
     draft_tool_allowed_names,
 )
+from app.integrations.claude.search_tools import (
+    SEARCH_SERVER_NAME,
+    SearchToolContext,
+    build_search_tool_server,
+    search_tool_allowed_names,
+)
+from app.integrations.claude.defense import (
+    defense_plugin_active,
+    load_dao_layer_prompt,
+)
 from app.models import Agent
 from app.modules.agents.workdir import get_agent_workdir, override_claude_config_dir
 from app.modules.catalog.plugins import resolve_plugin_path  # noqa: F401 — 保留作 fallback,供其它入口复用
@@ -157,6 +167,7 @@ async def stream_chat(
     on_message: Callable[[dict], Awaitable[None]],
     stop_event: asyncio.Event | None = None,
     draft_context: DraftToolContext | None = None,
+    search_context: SearchToolContext | None = None,
 ) -> ChatRunSummary:
     """运行一次对话,把每条 SDK 消息序列化后通过 on_message 回传。
 
@@ -236,6 +247,11 @@ async def stream_chat(
                    "团队空间里的文件增加了并发锁，所以编辑文件时遇到文件正在被其他用户或会话编辑则终止编辑动作并向用户说明。"
                    )
     agent_prompt = agent.system_prompt if agent and agent.system_prompt else ""
+    # M3.3.3 防线1：项目 Agent 绑定 consultant-defense 时，把道层 System Prompt
+    # 前置注入 append（不可被 RAG 覆盖，§7.10 注入模式）。
+    dao_layer = (
+        load_dao_layer_prompt() if defense_plugin_active(agent) else ""
+    )
     builtin_mcp_servers = _builtin_mcp_servers()
     allowed_tools = ["Workflow", "Skill", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "Bash", "WebFetch"]
     if _ZHIPU_WEB_SEARCH_MCP_NAME in builtin_mcp_servers:
@@ -250,11 +266,21 @@ async def stream_chat(
             DRAFT_SERVER_NAME: build_draft_tool_server(draft_context),
         }
         allowed_tools = [*allowed_tools, *draft_tool_allowed_names()]
+    # 搜索工具（M3.3.2）：注入 SearchToolContext 后挂载为进程内 MCP server，
+    # Claude 调用 mcp__consultant_search__search_web/... → 抓取/搜索 → 归档个人空间。
+    if search_context is not None:
+        mcp_servers = {
+            **mcp_servers,
+            SEARCH_SERVER_NAME: build_search_tool_server(search_context),
+        }
+        allowed_tools = [*allowed_tools, *search_tool_allowed_names()]
     options = ClaudeAgentOptions(
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
-            "append":f"{agent_prompt}\n{rule_prompt}"
+            "append": "\n\n".join(
+                p for p in (dao_layer, agent_prompt, rule_prompt) if p
+            ),
         },
         cwd=str(user_workspace),
         resume=claude_session_id,

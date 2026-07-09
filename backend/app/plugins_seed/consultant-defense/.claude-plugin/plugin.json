@@ -1,0 +1,5 @@
+{
+  "name": "consultant-defense",
+  "version": "1.0.0",
+  "description": "防线 Plugin——道层 System Prompt 注入（防线1）+ PostOutputFilter 确定性指纹过滤（防线2），保护方法论与敏感信息。"
+}

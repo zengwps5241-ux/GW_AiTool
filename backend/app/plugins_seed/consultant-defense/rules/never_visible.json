@@ -1,0 +1,38 @@
+[
+  {
+    "id": "draft_tool_internal_name",
+    "type": "substring",
+    "pattern": "mcp__consultant_drafts__",
+    "reason": "草稿工具内部调用名，不应对用户可见"
+  },
+  {
+    "id": "search_tool_internal_name",
+    "type": "substring",
+    "pattern": "mcp__consultant_search__",
+    "reason": "搜索工具内部调用名，不应对用户可见"
+  },
+  {
+    "id": "anthropic_api_key",
+    "type": "regex",
+    "pattern": "sk-ant-[A-Za-z0-9_\\-]{20,}",
+    "reason": "Anthropic API 密钥指纹"
+  },
+  {
+    "id": "generic_api_key",
+    "type": "regex",
+    "pattern": "sk-[A-Za-z0-9]{32,}",
+    "reason": "通用 API 密钥指纹"
+  },
+  {
+    "id": "internal_app_path",
+    "type": "regex",
+    "pattern": "(?i)/app/[A-Za-z0-9_./\\-]+",
+    "reason": "容器内部路径"
+  },
+  {
+    "id": "claude_code_identity",
+    "type": "substring",
+    "pattern": "Claude Code",
+    "reason": "隐藏底层实现身份"
+  }
+]
