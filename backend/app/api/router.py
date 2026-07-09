@@ -9,9 +9,11 @@ from app.api.routes import (
     agents,
     auth,
     conversion_tasks,
+    customers,
     feedback,
     model_settings,
     organizations,
+    projects,
     sessions,
     team_spaces,
     upload_tasks,
@@ -40,3 +42,5 @@ router.include_router(feedback.router)
 router.include_router(model_settings.router)
 router.include_router(admin_usage.router)
 router.include_router(organizations.router)
+router.include_router(customers.router)
+router.include_router(projects.router)

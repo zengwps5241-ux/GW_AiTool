@@ -1,5 +1,5 @@
-// 顶部栏:面包屑 + 主题切换
-import { Fragment } from "react";
+// 顶部栏:面包屑 + 项目选择器 + 主题切换
+import { Fragment, type ReactNode } from "react";
 import type { ThemeMode } from "@/types";
 import { I } from "@/icons";
 
@@ -10,9 +10,11 @@ interface Props {
   theme: ThemeMode;
   onToggleTheme: () => void;
   onOpenFeedback: () => void;
+  /** 中间插槽：用于项目选择器等全局控件 */
+  projectSlot?: ReactNode;
 }
 
-export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedback }: Props) {
+export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedback, projectSlot }: Props) {
   const labelOf = (item: BreadcrumbItem) => (typeof item === "string" ? item : item.label);
 
   return (
@@ -75,6 +77,9 @@ export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedbac
           );
         })}
       </div>
+      {projectSlot && (
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{projectSlot}</div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
           onClick={onOpenFeedback}

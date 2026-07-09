@@ -26,6 +26,20 @@ from app.schemas.organizations import (
     UserOrganizationCreate,
     UserOrganizationOut,
 )
+from app.schemas.customers import (
+    CustomerCreate,
+    CustomerOut,
+    CustomerUpdate,
+)
+from app.schemas.projects import (
+    ProjectCreate,
+    ProjectDepartmentAccessAdd,
+    ProjectDepartmentAccessOut,
+    ProjectMemberAdd,
+    ProjectMemberOut,
+    ProjectOut,
+    ProjectUpdate,
+)
 from app.schemas.team_spaces import (
     TeamSpaceCreateIn,
     TeamSpaceLockIn,
@@ -129,4 +143,14 @@ __all__ = [
     "OrganizationImportRow",
     "OrganizationImportResult",
     "OrganizationImportResponse",
+    "CustomerCreate",
+    "CustomerOut",
+    "CustomerUpdate",
+    "ProjectCreate",
+    "ProjectUpdate",
+    "ProjectOut",
+    "ProjectMemberAdd",
+    "ProjectMemberOut",
+    "ProjectDepartmentAccessAdd",
+    "ProjectDepartmentAccessOut",
 ]

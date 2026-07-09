@@ -2,7 +2,7 @@
 // 导航锁定 SidebarVariantA（分组侧边栏）；业务页面：对话/业务地图/营销地图/拜访记录
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/api/client";
-import type { TeamSpace, ThemeMode, UserMe, ViewName } from "@/types";
+import type { Project, TeamSpace, ThemeMode, UserMe, ViewName } from "@/types";
 import LoginPage from "@/pages/LoginPage";
 import ChatWorkspace from "@/pages/ChatWorkspace";
 import WorkspacePage from "@/pages/WorkspacePage";
@@ -21,6 +21,7 @@ import OrganizationPage from "@/pages/OrganizationPage";
 import SidebarVariantA from "@/components/SidebarVariantA";
 import Topbar, { type BreadcrumbItem } from "@/components/Topbar";
 import FeedbackDialog from "@/components/FeedbackDialog";
+import ProjectSelector from "@/components/ProjectSelector";
 
 type AuthState =
   | { status: "loading" }
@@ -38,6 +39,8 @@ export default function App() {
   const [chatBreadcrumb, setChatBreadcrumb] = useState<BreadcrumbItem[]>(["对话"]);
   const [initialTeamSpaceFilterVersion, setInitialTeamSpaceFilterVersion] = useState(0);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // 全局选中项目（M1.3.9）：业务地图/营销地图/拜访记录/对话 共享
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "dark" ? "dark" : "light";
@@ -294,6 +297,13 @@ export default function App() {
           theme={theme}
           onToggleTheme={toggleTheme}
           onOpenFeedback={() => setFeedbackOpen(true)}
+          projectSlot={
+            <ProjectSelector
+              compact
+              value={selectedProject?.id ?? null}
+              onChange={setSelectedProject}
+            />
+          }
         />
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           {renderPage()}

@@ -514,3 +514,102 @@ export interface OrganizationImportResponse {
   success: boolean;
   result: OrganizationImportResult;
 }
+
+// ─── 客户与项目（M1.3）──────────────────────────────────────────
+
+/** 客户 */
+export interface Customer {
+  id: number;
+  name: string;
+  industry: string | null;
+  scale: string | null;
+  region: string | null;
+  description: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  visibility: "private" | "team";
+  sensitivity_level: string;
+  project_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CustomerInput {
+  name: string;
+  industry?: string | null;
+  scale?: "大型" | "中型" | "小型" | null;
+  region?: string | null;
+  description?: string | null;
+  visibility?: "private" | "team";
+  sensitivity_level?: string;
+}
+
+/** 项目 */
+export type ProjectFdeStage =
+  | "lead_screening"
+  | "visit_preparation"
+  | "onsite_validation"
+  | "retrospective";
+export type ProjectStatus = "active" | "paused" | "completed" | "archived";
+
+export interface Project {
+  id: number;
+  customer_id: number;
+  customer_name: string | null;
+  name: string;
+  agent_id: number | null;
+  project_type: string | null;
+  fde_stage: ProjectFdeStage;
+  status: ProjectStatus;
+  owner_id: number;
+  owner_name: string | null;
+  description: string | null;
+  objectives: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  visibility: "private" | "team";
+  sensitivity_level: string;
+  member_count: number;
+  /** 当前用户在该项目的角色：owner/deputy/admin/none */
+  my_role: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProjectInput {
+  customer_id: number;
+  name: string;
+  project_type?: "诊断" | "试点" | "落地" | null;
+  fde_stage?: ProjectFdeStage;
+  status?: ProjectStatus;
+  description?: string | null;
+  objectives?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  visibility?: "private" | "team";
+  sensitivity_level?: string;
+}
+
+/** 项目成员 */
+export interface ProjectMember {
+  id: number;
+  project_id: number;
+  user_id: number;
+  username: string;
+  display_name: string | null;
+  role: "owner" | "deputy";
+  joined_at: string | null;
+}
+
+/** 项目-部门授权 */
+export interface ProjectDepartmentAccess {
+  id: number;
+  project_id: number;
+  organization_id: number;
+  organization_name: string | null;
+  granted_by: number;
+  granted_by_name: string | null;
+  granted_at: string | null;
+}

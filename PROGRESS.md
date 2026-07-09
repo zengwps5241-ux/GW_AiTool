@@ -37,19 +37,26 @@
   - 20 fail + 3 error 均为**既有环境问题**（企微模块已注释致 Import/Attribute 错误、Windows 符号链接/CRLF/路径分隔符、本地 DB 口令、config 默认值），**与本任务无关，fail 集未扩大**
 - 前端：npm run build 70 modules，0 错误
 
-### M1.3 客户与项目模型 ⏳ 待开始
+### M1.3 客户与项目模型 ✅ 已完成（commit 本会话）
 
-| 任务 | 状态 |
-|------|------|
-| M1.3.1 Customer 模型 | ⏳ |
-| M1.3.2 Project 模型 | ⏳ |
-| M1.3.3 ProjectMember 模型 | ⏳ |
-| M1.3.4 ProjectDepartmentAccess 模型 | ⏳ |
-| M1.3.5 Customer CRUD API | ⏳ |
-| M1.3.6 Project CRUD API | ⏳ |
-| M1.3.7 项目创建自动生成 Agent | ⏳ |
-| M1.3.8 权限中间件 | ⏳ |
-| M1.3.9 前端项目选择器 | ⏳ |
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M1.3.1 Customer 模型 | ✅ | 2026-07-09 | customers 表（Integer PK，决策#10；含 visibility/sensitivity_level；orgStructure 延后，决策#15） |
+| M1.3.2 Project 模型 | ✅ | 2026-07-09 | projects 表（customer_id FK RESTRICT、agent_id、owner_id、fde_stage/status/visibility 等） |
+| M1.3.3 ProjectMember 模型 | ✅ | 2026-07-09 | project_members（owner/deputy，UNIQUE(project,user)） |
+| M1.3.4 ProjectDepartmentAccess 模型 | ✅ | 2026-07-09 | project_department_access（部门授权→成员自动获访问权） |
+| M1.3.5 Customer CRUD API | ✅ | 2026-07-09 | /api/customers CRUD；admin 全部 / 普通用户「自建 ∪ 可访问项目」（决策#14） |
+| M1.3.6 Project CRUD API | ✅ | 2026-07-09 | /api/projects CRUD + 成员管理 + 部门授权（owner 单一不变式） |
+| M1.3.7 项目创建自动生成 Agent | ✅ | 2026-07-09 | 创建项目同事务生成 Agent（consultant_{id} + 7 Skill/3 Plugin，决策#11/#13） |
+| M1.3.8 权限中间件 | ✅ | 2026-07-09 | require_project_member/owner + access.py 纯数据层（决策#12）；admin 越权、部门授权=deputy |
+| M1.3.9 前端项目选择器 | ✅ | 2026-07-09 | ProjectSelector（客户→项目级联 + 新建项目弹窗）+ App 全局 selectedProject，嵌入 Topbar |
+
+**回归测试基线**（commit 后）：
+- 后端全量：488 passed / 20 failed / 2 skipped / 3 errors
+  - 新增测试：test_customers_api.py（16）、test_projects_api.py（18）= 34 全过
+  - 相比 M1.2 基线（454 passed）passed +34（恰好新增），failed/errors 不变 → **fail 集未扩大**（20 fail+3 err 全为既有环境问题）
+- 前端：npm run build 71 modules，0 错误
+
 
 ### M1.4 导航重构 ⏳ 待开始
 

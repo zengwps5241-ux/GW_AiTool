@@ -6,6 +6,8 @@ import type {
   ChatModelSelection,
   ChatEvent,
   ConversionTask,
+  Customer,
+  CustomerInput,
   FeedbackIssueCreated,
   FeedbackIssueDetail,
   FeedbackIssueList,
@@ -21,6 +23,10 @@ import type {
   OrganizationInput,
   OrganizationTreeNode,
   Plugin,
+  Project,
+  ProjectDepartmentAccess,
+  ProjectInput,
+  ProjectMember,
   RunEvent,
   RunningSessionState,
   Session,
@@ -780,6 +786,54 @@ export const api = {
 
   adminUsageDepartments: (q: string) =>
     request<string[]>("/api/admin/usage/departments?" + new URLSearchParams({ q })),
+
+  // ─── 客户管理（M1.3.5）─────────────────────────────────────
+  listCustomers: () => request<Customer[]>("/api/customers"),
+  getCustomer: (id: number) => request<Customer>(`/api/customers/${id}`),
+  createCustomer: (data: CustomerInput) =>
+    request<Customer>("/api/customers", { method: "POST", body: JSON.stringify(data) }),
+  updateCustomer: (id: number, data: Partial<CustomerInput>) =>
+    request<Customer>(`/api/customers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteCustomer: (id: number) =>
+    request<void>(`/api/customers/${id}`, { method: "DELETE" }),
+
+  // ─── 项目管理（M1.3.6）─────────────────────────────────────
+  listProjects: () => request<Project[]>("/api/projects"),
+  getProject: (id: number) => request<Project>(`/api/projects/${id}`),
+  createProject: (data: ProjectInput) =>
+    request<Project>("/api/projects", { method: "POST", body: JSON.stringify(data) }),
+  updateProject: (id: number, data: Partial<ProjectInput>) =>
+    request<Project>(`/api/projects/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteProject: (id: number) =>
+    request<void>(`/api/projects/${id}`, { method: "DELETE" }),
+
+  listProjectMembers: (projectId: number) =>
+    request<ProjectMember[]>(`/api/projects/${projectId}/members`),
+  addProjectMember: (projectId: number, data: { user_id: number; role?: "owner" | "deputy" }) =>
+    request<ProjectMember>(`/api/projects/${projectId}/members`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  removeProjectMember: (projectId: number, userId: number) =>
+    request<void>(`/api/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
+
+  listProjectDeptAccess: (projectId: number) =>
+    request<ProjectDepartmentAccess[]>(`/api/projects/${projectId}/department-access`),
+  grantProjectDeptAccess: (projectId: number, organizationId: number) =>
+    request<ProjectDepartmentAccess>(`/api/projects/${projectId}/department-access`, {
+      method: "POST",
+      body: JSON.stringify({ organization_id: organizationId }),
+    }),
+  revokeProjectDeptAccess: (projectId: number, organizationId: number) =>
+    request<void>(`/api/projects/${projectId}/department-access/${organizationId}`, {
+      method: "DELETE",
+    }),
 };
 
 /**
