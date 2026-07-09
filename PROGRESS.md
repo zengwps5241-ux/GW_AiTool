@@ -219,6 +219,36 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **验证**：纯前端任务，无后端改动 → 无需 pytest 回归。`tsc -b` 通过 + `vite build` 通过（71 模块，构建 1.24s，0 错误）。前端无组件测试基建（既有 9 个测试均为 src/lib 纯函数，本次未触及），UI 渲染以类型检查 + 生产构建验证（同 M3.1.4 前端验证口径）。
 
+### M3.3 三个 Plugin 实施 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M3.3.1 consultant-router | ✅ | 2026-07-10 | 意图路由（斜杠/chip 直达→LLM 分类≥0.7→关键词兜底→chat 兜底）+ 7 类意图 + IntentRoutingLog 新表（commit 30c137f） |
+| M3.3.2 consultant-search | ✅ | 2026-07-10 | search_web/search_company_registry/fetch_webpage 三进程内 MCP 工具 + 个人空间归档（去重）（commit b958e1b） |
+| M3.3.3 consultant-defense | ✅ | 2026-07-10 | 防线1 道层 System Prompt 注入 + 防线2 PostOutputFilter 确定性指纹过滤（commit b958e1b） |
+
+**架构（决策#33）**：三个 Plugin 的「绑定/发现/资产」由 `app/plugins_seed/<name>/` 版本化模板目录承载（`.claude-plugin/plugin.json` + Prompt/规则资产，供 SDK 加载 + scan_plugins 发现 + init_agent_workdir 拷贝），**实际运行逻辑在 app 层 Python 模块**（router.py / search_tools.py / defense.py）接入 streaming/runner。延续 M3.1/M3.2 既定的「app 层逻辑 + seed 模板」模式——SDK 插件 hook 脚本无法干净访问 DB/LLM/Material 且 Windows 脆弱难测，故真实逻辑放 app 层（同决策 #29 草稿工具选进程内 MCP 的理由）。`seed_default_plugins()`（镜像 seed_default_skills）启动时非破坏性播种 3 个 Plugin 到 `claude_data/plugins/`。
+
+**M3.3.1 设计要点**：
+- **三级路由（决策#33）**：路径 A（斜杠/chip 命中已知 Skill）→ 跳过意图识别直达（`confidence_source=chip`）；路径 B（自然语言）→ ① LLM 分类（DeepSeek flash，置信度≥0.7 直接路由，`llm`）→ ② 关键词兜底（命中唯一类路由，`keyword`）→ ③ 多类命中/零命中 → Chat Mode（`chat_fallback`，多类时 `needs_confirmation=True` 供前端未来弹窗）。路由到 Skill 时把提示改写为 `/<skill> <原提示>`，**复用 M3.4.1 斜杠命令触发机制**（scan_agent_commands 已把 skills 暴露为 /command）。
+- **7 类意图**：hypothesis_map→WF07 / current_map_verify→WF10 / stakeholder_card→WF12 / interview_summary→WF09 / visit_plan→WF06 / file_upload→WF02（行为触发，不参与 NL 路由）/ chat。file_upload 与 chat 无关键词、skill=None。
+- **IntentRoutingLog**：每次自然语言输入必入一条（session/project/user + prompt + 三级路由全过程：llm_label/llm_confidence/keyword_hits/llm_raw/confidence_source/final_prompt）。session_id 沿用 usage_events 的 plain String（chat_sessions.id 为 UUID 字符串主键，不加 FK 避免迁移复杂度）。
+- **降级**：未配 DeepSeek 凭据 / LLM 调用失败 → classify 返回 None → 关键词兜底；路由整体异常只记日志不阻断对话（按原始提示继续）。门控：仅 `router_plugin_active(agent)`（项目 Agent）启用。
+- **接入点**：streaming.runner() 在调 stream_chat 前，对项目 Agent 自然语言输入执行 route_user_prompt + log_routing，用 decision.final_prompt 替换下发提示。
+
+**M3.3.2 设计要点**：
+- **三工具 = 进程内 MCP server**（`build_search_tool_server(ctx)`，与 M3.1 草稿工具同模式，决策#29）：`mcp__consultant_search__search_web/search_company_registry/fetch_webpage`。SearchToolContext 闭包注入 workspace_root/project_id/user_id/source_session_id。
+- **外部 HTTP 隔离**：所有联网调用在模块级 `_http_web_search/_http_company_registry/_http_fetch_webpage` + `_*_configured` seam，单测 monkeypatch 覆盖接线/归档/兜底，不依赖真实网络；真实连通性由运营 CC-21 保证。search_web/company_registry 未配置时返回明确兜底（AI 据已有资料作答），fetch_webpage 直接 httpx 抓取（HTML→文本，无需凭据）。
+- **归档 + 去重（§7.8）**：搜索结果写 `<workspace>/公开信息/<safe-slug>.md`，同名文件已存在则跳过（同一关键词不重复归档）。safe_slug 保留中文。
+- **接入点**：streaming 对项目 Agent（search_plugin_active）构造 SearchToolContext（workspace_root=会话工作区）；runner 注入后挂载 MCP server + 加入 allowed_tools。
+
+**M3.3.3 设计要点**：
+- **防线1（道层注入）**：runner 组装 system_prompt.append 时，defense_plugin_active(agent) 则前置 `load_dao_layer_prompt()`（dao_layer.md 全文，含身份/方法论三层道法器/根本准则），不可被 RAG 覆盖（§7.10 注入模式）。append = `"\n\n".join(dao_layer, agent_prompt, rule_prompt)`。
+- **防线2（PostOutputFilter）**：streaming.on_message 对 `assistant_text` 事件应用 `apply_output_filter`（never_visible.json 规则：substring→replace / regex→re.sub，命中替换为 `[已过滤]`，非法正则跳过），**100% 确定性、不依赖 LLM**。思维链 assistant_thinking 不过滤（§8.2）。门控：仅 defense_plugin_active。
+- **资产单一真源**：dao_layer.md / never_visible.json 置于 `app/plugins_seed/consultant-defense/rules/`（版本化），defense.py 经 `_plugins_seed_dir()` 读取。
+
+**回归测试**：test_consultant_router.py（35 过：7 意图结构 / parse_slash / keyword_fallback 唯一·多·零 / _parse_llm_json 合法·fenced·embedded·非法·clamp / route_user_prompt 三级路由全覆盖 / classify_intent_llm env 处理与异常降级 / log_routing 落库 / seed+scan / streaming 集成路由改写+落库）、test_consultant_search.py（24 过：Schema 校验 / list_tools 暴露三工具 / allowed_names / _safe_slug / 归档写入+去重 / _html_to_text / search_web 未配置·已配置归档·失败·非法 / registry 未配置·已配置·无结果 / fetch_webpage 成功·非http·失败 / streaming 集成项目会话挂载·普通会话不挂载）、test_consultant_defense.py（15 过：道层资产 / never_visible 加载 / apply_filter substring·regex·多规则·无命中·空规则·非法正则·默认资产 / defense_plugin_active / seed+scan / streaming 集成 assistant_text 过滤+thinking 不过滤·普通会话不过滤）。全量 **648 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.4.1 基线（574 passed）passed +74（35 router + 24 search + 15 defense），**fail 集未扩大**（20 fail+3 err 全为既有环境问题：企微 ImportError、Windows 路径/符号链接、本地 DB 口令、config 默认值、Claude SDK 真实依赖；与本任务无关）。
+
 
 
 

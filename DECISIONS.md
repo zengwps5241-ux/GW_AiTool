@@ -241,5 +241,17 @@
   - **chip 显隐 = 项目上下文**：仅当 `activeProjectId != null` 显示（空状态取 selectedProject.id / 已进入会话取 currentSession.project_id）。普通会话与「选了项目但停在旧的非项目会话」均不显示——旧会话非项目会话，无项目 Skill，需新建会话才生效（空状态横幅已提示绑定）。streaming 中 chip 禁用。
 - **理由**：斜杠命令是平台既有「Skill 作为命令」的既有路径，chip 直接复用，避免造新触发协议；slash+hint 双重信号兼顾「可靠触发」与「可读意图」；项目会话由既有 ProjectSelector 驱动，零新 UI 入口，与 M3.4.2 后端「createSession 校验成员 + 自动加载项目 Agent」天然衔接。纯前端任务，无后端改动（后端 SessionOut/CreateSessionRequest 早在 M3.4.2 支持 project_id），故以 tsc + vite build 验证（同 M3.1.4 前端口径），不跑 pytest 回归。
 
+## 决策 #33：M3.3 三个 Plugin = 版本化模板目录 + app 层执行模块（M3.3.1/2/3 / §4.3 §7.8 §7.9 §7.10 §8.2）
+
+- **背景**：M3.3 要求实施 3 个 Plugin（consultant-router 意图路由 Hook + IntentRoutingLog / consultant-search 三个 MCP 工具 / consultant-defense 道层注入 + PostOutputFilter）。规格描述为「打包目录含 Hook 脚本 / MCP 配置」。需抉择：做成真正的 Claude SDK 插件（shell/node hook 脚本 + 子进程 MCP）还是延续平台既有的「app 层逻辑 + seed 模板」模式。
+- **选择**：**版本化模板目录 + app 层执行模块**（延续决策 #29/#31/#32）。每个 Plugin 双层落地：
+  - **绑定/发现/资产层** = `app/plugins_seed/<name>/`（`.claude-plugin/plugin.json` + Prompt/规则资产，如 intent_classifier.md / dao_layer.md / never_visible.json）。`seed_default_plugins()`（镜像 `seed_default_skills`）启动时非破坏性播种到 `claude_data/plugins/`，使 `scan_plugins` 发现、`init_agent_workdir` 拷贝、SDK 以 `{"type":"local","path":...}` 加载。`DEFAULT_PROJECT_PLUGINS`（M1.3.7 早已定义）绑定到项目 Agent。
+  - **执行层** = app 层 Python 模块，接入 streaming/runner：router.py（意图路由 + IntentRoutingLog 落库）/ search_tools.py（三进程内 MCP 工具）/ defense.py（道层加载 + 指纹过滤）。
+- **为何不做 shell hook 脚本插件**：① SDK 插件 hook 是可执行脚本（shell/node），Windows 跨平台脆弱、无法干净访问 app 的 DB/ORM/LLM 客户端/Material；② 意图路由需 DB 写日志 + LLM 分类 + 提示改写，搜索需落库归档，防御需读资产 + 确定性过滤——这些都不适合塞进无状态 shell 脚本；③ 与决策 #29（草稿工具选进程内 MCP 而非 PreToolUse hook，因 hook 不能合成结果）同一理由：真实逻辑放 app 层才可测、可维护。模板目录满足「Plugin 目录」交付物 + 绑定/发现机制，app 层满足可测的真实行为。
+- **M3.3.1 三级路由**：路径 A（斜杠/chip 命中已知 Skill）→ chip 直达跳过识别；路径 B（NL）→ LLM 分类（DeepSeek flash，≥0.7 路由）→ 关键词兜底（命中唯一类路由）→ chat 兜底（多类 needs_confirmation）。路由到 Skill 改写为 `/<skill> <原提示>`，**复用 M3.4.1 斜杠命令机制**（零新触发协议）。LLM 未配置/失败 → 关键词兜底；路由异常只记日志不阻断。IntentRoutingLog 每次必入（三级全过程字段），session_id 沿用 usage_events plain String（避免 UUID 字符串主键 FK 迁移复杂度）。
+- **M3.3.2 三工具 = 进程内 MCP**：`build_search_tool_server(ctx)` 与 M3.1 草稿工具同模式（决策#29），非子进程 MCP。外部 HTTP 隔离在 `_http_*` seam 供单测 monkeypatch；search_web/company_registry 未配置返回兜底（§4.3「后续对接」），fetch_webpage 直接抓取。归档 `<workspace>/公开信息/<slug>.md` 同名去重（§7.8）。
+- **M3.3.3 两防线门控**：均按 `defense_plugin_active(agent)`（仅项目 Agent）。防线1 runner 在 system_prompt.append 前置 dao_layer（§7.10 注入不可 RAG）；防线2 streaming.on_message 对 assistant_text 应用 never_visible 确定性过滤（思维链不过滤 §8.2）。资产单一真源 = plugins_seed/rules/。
+- **理由**：双层落地是平台既有模式的自然延伸（M3.1 进程内 MCP + M3.2 seed 模板），零新机制、全链路可单测（不依赖真实 Claude 会话/网络）。可校验性：router 35 / search 24 / defense 15 测试覆盖纯逻辑 + handler + seed/scan + streaming 接线（mock stream_chat）；全量 648 passed、fail 集未扩大。两 Plugin 共享 runner/streaming/conftest 集成点且单提交需自洽，故 M3.3.2+M3.3.3 合并为一个提交（M3.3.1 因改动隔离单独提交）。
+
 
 
