@@ -1,0 +1,316 @@
+"""业务地图 API 测试（M2.1）。
+
+覆盖：
+- 对象 CRUD + 筛选（默认 reviewed；level/map_type；include_drafts）
+- 前置分析 upsert（一个项目一份）
+- 草稿 upsert + 采纳（Owner→reviewed 直接发布 + 版本快照；Deputy→pending_review）
+- 版本列表 + 回滚（自动留存审计快照）
+- 五维健康（节点计算 / 批量重评估 / 手动覆盖）
+- 项目级隔离（非成员 403；回滚仅 Owner）
+"""
+
+import pytest
+
+
+# ─── 辅助 ──────────────────────────────────────────────────────
+
+
+async def _project(client, customer_name="测试客户", project_name="测试项目"):
+    cid = (await client.post("/api/customers", json={"name": customer_name})).json()["id"]
+    return (
+        (await client.post("/api/projects", json={"customer_id": cid, "name": project_name}))
+        .json()["id"]
+    )
+
+
+def _bm(project_id: int) -> str:
+    return f"/api/projects/{project_id}/business-map"
+
+
+# ─── 对象 CRUD + 筛选 ─────────────────────────────────────────
+
+
+async def test_object_crud_and_default_reviewed(logged_in_client):
+    """手动新增对象默认 reviewed（默认列表可见）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+
+    # 创建 L1 对象
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={
+            "level": "L1",
+            "name": "勘探开发域",
+            "map_type": "hypothesis",
+            "payload": {"coreActivities": ["盆地评价"], "capabilityChain": "研究→勘探"},
+        },
+    )
+    assert res.status_code == 201
+    oid = res.json()["id"]
+    assert res.json()["review_status"] == "reviewed"
+
+    # 默认列表（reviewed）含该对象
+    lst = (await logged_in_client.get(f"{base}/objects")).json()
+    assert len(lst) == 1 and lst[0]["id"] == oid
+
+    # 更新
+    res = await logged_in_client.put(
+        f"{base}/objects/{oid}", json={"name": "勘探开发域（更新）"}
+    )
+    assert res.status_code == 200
+    assert res.json()["name"] == "勘探开发域（更新）"
+
+    # 按层级筛选
+    res = await logged_in_client.get(f"{base}/objects", params={"level": "L2"})
+    assert res.json() == []
+
+    # 删除
+    res = await logged_in_client.delete(f"{base}/objects/{oid}")
+    assert res.status_code == 204
+    assert (await logged_in_client.get(f"{base}/objects")).json() == []
+
+
+async def test_object_get_not_found(logged_in_client):
+    pid = await _project(logged_in_client)
+    res = await logged_in_client.get(f"{_bm(pid)}/objects/99999")
+    assert res.status_code == 404
+
+
+# ─── 前置分析 ──────────────────────────────────────────────────
+
+
+async def test_pre_analysis_upsert(logged_in_client):
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+
+    # 初始无
+    assert (await logged_in_client.get(f"{base}/pre-analysis")).json() is None
+
+    # 创建
+    res = await logged_in_client.put(
+        f"{base}/pre-analysis",
+        json={"industry_value_chain": "上游勘探→中游炼化", "customer_position": "行业龙头"},
+    )
+    assert res.status_code == 200
+    assert res.json()["industry_value_chain"].startswith("上游")
+
+    # 再更新（同一份）
+    res = await logged_in_client.put(
+        f"{base}/pre-analysis", json={"customer_position": "市场份额第二"}
+    )
+    assert res.status_code == 200
+    assert res.json()["customer_position"] == "市场份额第二"
+    # 仍只有一份
+    assert (await logged_in_client.get(f"{base}/pre-analysis")).json()["id"] == res.json()["id"]
+
+
+# ─── 草稿 + 采纳 ───────────────────────────────────────────────
+
+
+async def test_draft_adopt_owner_publishes_and_versions(logged_in_client):
+    """Owner 采纳草稿 → 对象 reviewed 直接可见 + 生成版本快照。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+
+    # 创建草稿
+    res = await logged_in_client.put(
+        f"{base}/drafts",
+        json={
+            "draft_data": {
+                "objects": [
+                    {"level": "L1", "name": "草稿L1", "payload": {"coreActivities": ["x"]}},
+                    {"level": "L2", "name": "草稿L2", "parent_id": None},
+                ]
+            }
+        },
+    )
+    assert res.status_code == 200
+    draft_id = res.json()["id"]
+    assert res.json()["status"] == "active"
+
+    # 采纳
+    res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 200
+    result = res.json()
+    assert result["success"] is True
+    assert result["adopted_object_count"] == 2
+    assert result["review_status"] == "reviewed"
+    assert result["version_number"] == 1
+
+    # 对象已进入正式区（默认 reviewed 列表可见）
+    objs = (await logged_in_client.get(f"{base}/objects")).json()
+    assert {o["name"] for o in objs} == {"草稿L1", "草稿L2"}
+
+    # 版本 #1 已生成
+    versions = (await logged_in_client.get(f"{base}/versions")).json()
+    assert len(versions) == 1
+    assert versions[0]["version_number"] == 1
+    assert len(versions[0]["snapshot_data"]["objects"]) == 2
+
+    # 草稿已 adopted，再次采纳应 400
+    res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 400
+
+
+async def test_draft_adopt_deputy_pending_review(
+    logged_in_client, other_logged_in_client
+):
+    """Deputy 采纳 → 对象 pending_review（默认 reviewed 列表不可见）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    # 邀请 bob 为 deputy
+    bob_id = (await other_logged_in_client.get("/api/me")).json()["id"]
+    await logged_in_client.post(
+        f"/api/projects/{pid}/members", json={"user_id": bob_id}
+    )
+
+    # bob 创建草稿并采纳
+    res = await other_logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "deputy产出"}]}}
+    )
+    draft_id = res.json()["id"]
+    res = await other_logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 200
+    assert res.json()["review_status"] == "pending_review"
+
+    # 默认列表（reviewed）看不到
+    objs = (await logged_in_client.get(f"{base}/objects")).json()
+    assert objs == []
+    # include_drafts 可见 pending_review
+    objs = (await logged_in_client.get(f"{base}/objects", params={"include_drafts": True})).json()
+    assert any(o["name"] == "deputy产出" and o["review_status"] == "pending_review" for o in objs)
+
+
+# ─── 版本回滚 ──────────────────────────────────────────────────
+
+
+async def test_version_rollback(logged_in_client):
+    """回滚到历史版本：替换 reviewed 数据 + 留存审计快照。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+
+    # 第一次采纳：对象 A
+    r = await logged_in_client.put(
+        f"{base}/drafts",
+        json={"draft_data": {"objects": [{"level": "L1", "name": "A"}]}},
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+    v1 = (await logged_in_client.get(f"{base}/versions")).json()[0]
+
+    # 第二次采纳：对象 B（A 仍在）
+    r = await logged_in_client.put(
+        f"{base}/drafts",
+        json={"draft_data": {"objects": [{"level": "L1", "name": "B"}]}},
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+    names = {o["name"] for o in (await logged_in_client.get(f"{base}/objects")).json()}
+    assert names == {"A", "B"}
+
+    # 回滚到 v1（只有 A）
+    res = await logged_in_client.post(f"{base}/versions/{v1['id']}/rollback")
+    assert res.status_code == 200
+    names = {o["name"] for o in (await logged_in_client.get(f"{base}/objects")).json()}
+    assert names == {"A"}
+
+    # 版本数：v1 + v2 + 回滚审计快照 = 3
+    versions = (await logged_in_client.get(f"{base}/versions")).json()
+    assert len(versions) == 3
+
+
+async def test_rollback_owner_only(logged_in_client, other_logged_in_client):
+    """Deputy 不能回滚 → 403。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    bob_id = (await other_logged_in_client.get("/api/me")).json()["id"]
+    await logged_in_client.post(
+        f"/api/projects/{pid}/members", json={"user_id": bob_id}
+    )
+    # 先产生一个版本
+    r = await logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "X"}]}}
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+    vid = (await logged_in_client.get(f"{base}/versions")).json()[0]["id"]
+
+    res = await other_logged_in_client.post(f"{base}/versions/{vid}/rollback")
+    assert res.status_code == 403
+
+
+# ─── 五维健康 ──────────────────────────────────────────────────
+
+
+async def test_five_dim_health_compute_and_override(logged_in_client):
+    """节点健康计算（auto）→ 手动覆盖（manual）→ 批量重评估。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+
+    # L1 对象，payload 含部分关键字段
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={
+            "level": "L1",
+            "name": "带健康的L1",
+            "payload": {
+                "coreActivities": ["a"],
+                "capabilityChain": "a→b",
+                "itSystems": [],  # 空，不计入
+                "organization": None,  # 空，不计入
+            },
+        },
+    )
+    oid = res.json()["id"]
+
+    # 计算节点健康（auto）
+    res = await logged_in_client.post(f"{base}/objects/{oid}/health")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["source"] == "auto"
+    assert "L5_数字意识" in body["five_dim_health"]
+    assert body["five_dim_health"]["L5_数字意识"]["score"] in (1, 2, 3, 4, 5)
+
+    # 手动覆盖
+    manual = {"L5_数字意识": {"score": 5, "desc": "手动满分"}}
+    res = await logged_in_client.put(f"{base}/objects/{oid}/health", json=manual)
+    assert res.status_code == 200
+    assert res.json()["source"] == "manual"
+    assert res.json()["five_dim_health"]["L5_数字意识"]["score"] == 5
+
+    # 批量重评估（会重新覆盖为 auto）
+    res = await logged_in_client.post(f"{base}/health/recompute")
+    assert res.status_code == 200
+    assert any(item["object_id"] == oid for item in res.json())
+
+
+async def test_health_l4_not_supported(logged_in_client):
+    """L4 节点不支持五维健康 → 400。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.post(
+        f"{base}/objects", json={"level": "L4", "name": "能力单元"}
+    )
+    oid = res.json()["id"]
+    res = await logged_in_client.post(f"{base}/objects/{oid}/health")
+    assert res.status_code == 400
+
+
+# ─── 项目级隔离 ────────────────────────────────────────────────
+
+
+async def test_business_map_isolation(logged_in_client, other_logged_in_client):
+    """非项目成员不能访问业务地图 → 403。"""
+    pid = await _project(logged_in_client)
+    res = await other_logged_in_client.get(f"{_bm(pid)}/objects")
+    assert res.status_code == 403
+
+
+async def test_business_map_admin_bypass(admin_client, other_logged_in_client):
+    """admin 可访问任意项目的业务地图。"""
+    # bob 建项目
+    cid = (await other_logged_in_client.post("/api/customers", json={"name": "c"})).json()["id"]
+    pid = (
+        await other_logged_in_client.post(
+            "/api/projects", json={"customer_id": cid, "name": "p"}
+        )
+    ).json()["id"]
+    res = await admin_client.get(f"{_bm(pid)}/objects")
+    assert res.status_code == 200

@@ -8,6 +8,7 @@ from app.api.routes import (
     admin_usage,
     agents,
     auth,
+    business_map,
     conversion_tasks,
     customers,
     feedback,
@@ -44,3 +45,4 @@ router.include_router(admin_usage.router)
 router.include_router(organizations.router)
 router.include_router(customers.router)
 router.include_router(projects.router)
+router.include_router(business_map.router)

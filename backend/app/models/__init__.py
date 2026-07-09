@@ -1,5 +1,11 @@
 from app.db.base import Base
 from app.models.agent import Agent
+from app.models.business_map import (
+    BusinessMapDraft,
+    BusinessMapObject,
+    BusinessMapVersion,
+    PreAnalysis,
+)
 from app.models.category import Category, PluginBinding, SkillBinding
 from app.models.conversion_task import ConversionTask
 from app.models.customer import Customer
@@ -17,6 +23,9 @@ from app.models.user import User
 __all__ = [
     "Base",
     "Agent",
+    "BusinessMapDraft",
+    "BusinessMapObject",
+    "BusinessMapVersion",
     "Category",
     "ChatSession",
     "ConversionTask",
@@ -28,6 +37,7 @@ __all__ = [
     "LoginWhitelistUser",
     "Organization",
     "PluginBinding",
+    "PreAnalysis",
     "Project",
     "ProjectDepartmentAccess",
     "ProjectMember",

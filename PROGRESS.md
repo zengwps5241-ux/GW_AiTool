@@ -78,4 +78,20 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 ## Phase 2-5
 
-（Phase 1 完成后展开）
+### M2.1 业务地图数据 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M2.1.1 BusinessMapObject 模型 | ✅ | 2026-07-09 | business_map_objects（L1-L4，JSONB payload，决策#16；parentId/linkedHypothesisId 自引用） |
+| M2.1.2 PreAnalysis 模型 | ✅ | 2026-07-09 | pre_analyses（项目级一份，UNIQUE(project_id)） |
+| M2.1.3 BusinessMapVersion 模型 | ✅ | 2026-07-09 | business_map_versions（采纳快照，JSONB snapshot_data） |
+| M2.1.4 BusinessMapDraft 模型 | ✅ | 2026-07-09 | business_map_drafts（整图一个草稿单元，7天过期） |
+| M2.1.5 BusinessMap CRUD API | ✅ | 2026-07-09 | /objects 全套 CRUD + level/mapType/reviewStatus 筛选（默认 reviewed，决策#17） |
+| M2.1.6 PreAnalysis API | ✅ | 2026-07-09 | /pre-analysis upsert（GET + PUT） |
+| M2.1.7 草稿区 API | ✅ | 2026-07-09 | /drafts 获取/更新 + 采纳（Owner→reviewed / Deputy→pending_review + 版本快照，决策#18） |
+| M2.1.8 版本管理 API | ✅ | 2026-07-09 | /versions 列表/详情/回滚（仅 Owner，审计快照，决策#19） |
+| M2.1.9 五维健康计算服务 | ✅ | 2026-07-09 | health.py 简单规则版（完整度启发式，决策#20/风险#5）+ 计算/批量/手动覆盖 API |
+
+**回归测试**：test_business_map_api.py（11 全过：对象CRUD+筛选 / 前置分析 / 草稿采纳Owner+Deputy / 版本回滚 / 五维健康 / 项目隔离+admin越权）。全量 **499 passed / 20 failed / 2 skipped / 3 errors**，相比 M1.3 基线（488 passed）passed +11（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
+
+
