@@ -183,6 +183,26 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_sessions_project_binding.py（11 全过：绑定项目+自动加载 Agent / 非成员 403 / 不存在 404 / 显式 agent 不被覆盖 / 列表含 project 字段 / `_build_draft_context` 成员·非成员·未绑定 / stream_session_chat 项目会话传 draft_context·普通会话不传 / draft_pending 入 run_state 可回放）。全量 **556 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.1 基线（545 passed）passed +11（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题：企微注释致 ImportError、Windows 路径/符号链接、本地 DB 口令、config 默认值、Claude SDK 真实依赖；与本任务无关）。
 
+### M3.2 七个 Skill 编写 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M3.2.1 WF02 consultant-upload | ✅ | 2026-07-09 | 资料上传与归档：7 类 materialType 分类 + 覆盖度评估 + 用户确认归档（无草稿工具，文件归档） |
+| M3.2.2 WF03 consultant-gap-check | ✅ | 2026-07-09 | 信息缺口识别（辅助 Skill）：覆盖度计算 + 四类缺口维度 + 建议搜索关键词；WF06/WF07 前置自动执行 |
+| M3.2.3 WF06 consultant-visit-plan | ✅ | 2026-07-09 | 拜访前方案：目标/沟通要点/访谈问题/资料清单 + 策略推理；前置 WF03；方案可归档个人空间 |
+| M3.2.4 WF07 consultant-hypothesis-map | ✅ | 2026-07-09 | 假设地图分步生成：5 Step 强制定步（前置分析→L1→L2→L3→L4+跨层一致性）+ L1-L4 字段契约 + 搜索公开信息 → `save_business_map_draft`（map_type=hypothesis） |
+| M3.2.5 WF09 consultant-interview | ✅ | 2026-07-09 | 拜访纪要结构化：四维度证据抽取（客户原话/痛点/角色态度/业务术语）→ `save_visit_record_draft` |
+| M3.2.6 WF10 consultant-verify | ✅ | 2026-07-09 | 假设验证与现状更新：证据匹配 + 逐条对比 + 状态判定规则（强≥3成立…）+ 现状节点关联回假设 → `save_business_map_draft`（map_type=current，推翻入偏差池） |
+| M3.2.7 WF12 consultant-stakeholder | ✅ | 2026-07-09 | 角色卡生成：客观/主观层 + 三维度加权评分（参与度×0.3+影响力×0.4+支持度×0.3）+ Champion 三要素 + 角色去重 → `save_stakeholder_card_draft` |
+
+**设计要点**：
+- **落点 = 版本化模板 + 启动播种（决策#31）**：master SKILL.md 置于包内版本化目录 `app/skills_seed/<name>/`（`claude_data/` 被 gitignore，是运行时数据，直接落那里会随运行时丢失）；新增 `workdir.seed_default_skills()` 在启动 `init_db` 后、`ensure_all_agent_workdirs` 前，把模板**非破坏性**播种到 `claude_data/skills/`（同名已存在则跳过，保留用户后台上传的自定义），使新建项目 Agent 经 `init_agent_workdir` 自动拷贝加载。目录名严格对齐 M1.3.7 `DEFAULT_PROJECT_SKILLS` 的 7 个名字。
+- **草稿工具接线**：4 个产出结构化数据的 Skill（WF07/WF10→business_map、WF09→visit、WF12→stakeholder）SKILL.md 明确指示调用 `mcp__consultant_drafts__save_xxx_draft`，入参对齐 M3.1 工具 Schema（单一真源）；3 个非结构化 Skill（WF02 文件归档 / WF03 文本 / WF06 方案 Markdown）不引用草稿工具，输出走文件或文本。
+- **方法论对齐规格**：WF07 L1-L4 字段契约严格对齐 §5.2 BusinessMapObject payload（5/8/11/9 要素 + 五维健康 + L3 先本体后 AI）；WF12 三维度评分公式与 Champion 三要素对齐 §5.2 StakeholderCard；WF10 状态判定规则对齐 §7.5（强≥3 成立…）；WF03 四类缺口维度（行业/场景/角色/证据）。
+- **约束**：所有 Skill 遵守 runner rule_prompt——不调用 AskUserQuestion（分步确认用纯文本）、不泄露 Skill 元数据、不臆造数据（无依据留空标低置信度）、保持中文。
+
+**回归测试**：test_consultant_skills.py（18 全过：7 文件齐备 / 名称与 DEFAULT_PROJECT_SKILLS 一致 / 每文件 frontmatter+WF 编码 / 4 草稿 Skill 指示正确工具 / 3 非草稿 Skill 不误引 / scan_skills 发现全部 7 个 / seed_default_skills 播种+非破坏性）。全量 **574 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.4.2 基线（556 passed）passed +18（11 绑定 + 7 本任务新增；含 1 seed 测），**fail 集未扩大**（20 fail+3 err 全为既有环境问题，与本任务无关）。
+
 
 
 

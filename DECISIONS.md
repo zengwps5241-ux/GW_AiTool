@@ -222,5 +222,15 @@
   - **publish 走 run_state + SSE**：M3.1 的 publish 回调在 streaming.py 构造为 `publish_draft_event`——草稿「待采纳」事件同走 `run_state_store.append_event` + SSE，使客户端断开重连（`/running/stream`）仍可回放草稿卡片，兑现 M3.1 文档「与 tool_use/tool_result 同走 run_state + SSE」。
 - **理由**：列存 project_id 是最小且可表达的方案（可空=普通会话不变，FK 级联删除安全）；两道成员校验兼顾「创建期清晰报错」与「对话期防御」；publish 入 run_state 补齐 M3.1 的回放韧性。全链路由 mock stream_chat 的接线测试覆盖（不依赖真实 Claude 会话）。
 
+## 决策 #31：M3.2 七个 Skill 落点 = claude_data/skills 模板目录，草稿 Skill 对齐 M3.1 工具 Schema（M3.2 / §4.2 §5.2 §6.2 §7.5）
+
+- **背景**：M3.2 要求编写 7 个 Skill（WF02/03/06/07/09/10/12）的 SKILL.md。需抉择：SKILL.md 放哪里？哪些 Skill 调草稿工具？字段契约写到什么粒度？
+- **选择**：
+  - **落点 = 版本化模板目录 + 启动播种**：master SKILL.md 置于包内版本化目录 `app/skills_seed/<name>/`（而非 `claude_data/skills/`——后者被 `.gitignore` 视为运行时数据，直接落那里模板会随运行时数据丢失且无法版本化）。新增 `workdir.seed_default_skills()`：启动时（`init_db` 后、`ensure_all_agent_workdirs` 前）把 `app/skills_seed/*` **非破坏性**播种到 `claude_data/skills/`（同名已存在则跳过，保留用户经管理后台上传的同名自定义）。播种后 `init_agent_workdir` 即可把 Skill 拷贝进项目 Agent 工作目录，`scan_skills()` 也能扫描到。目录名严格对齐 M1.3.7 `DEFAULT_PROJECT_SKILLS` 的 7 个名字（consultant-upload/-gap-check/-visit-plan/-hypothesis-map/-interview/-verify/-stakeholder）。既有项目 Agent 需 reinit 同步（运营步骤，非本任务）。
+  - **草稿工具接线（4 个结构化 Skill）**：WF07/WF10（假设/现状地图）→ `save_business_map_draft`（map_type=hypothesis/current）；WF09（拜访纪要）→ `save_visit_record_draft`；WF12（角色卡）→ `save_stakeholder_card_draft`。SKILL.md 用代码块示范调用 `mcp__consultant_drafts__save_xxx_draft`，入参与 M3.1 工具 JSON Schema（单一真源）对齐。3 个非结构化 Skill（WF02 文件归档 / WF03 缺口文本 / WF06 方案 Markdown）不引用草稿工具——WF02 走文件移动到个人空间（§6.2）、WF03 输出缺口报告文本、WF06 输出方案 Markdown（可 Write 归档）。
+  - **字段契约内嵌**：把规格 §5.2 的 L1-L4 payload 要素、StakeholderCard 三维度评分公式（参与度×0.3+影响力×0.4+支持度×0.3，Champion 三要素）、§7.5 假设状态判定规则（强≥3 成立…）、§6.2 七类 materialType 直接内嵌进对应 SKILL.md，使 AI 无需另查文档即可产出对齐规格的结构化输出。
+  - **WF07 五步强制定步**：Step1 前置分析+WF03 缺口 → Step2 L1 → Step3 L2 → Step4 L3（先本体后 AI）→ Step5 L4+跨层一致性校验；每步用纯文本询问是否继续（runner rule_prompt 禁用 AskUserQuestion），禁止一次输出四层。
+- **理由**：落点选 claude_data/skills 是平台既有「master 模板→Agent 工作目录拷贝」机制的自然延伸，零新机制；草稿 Skill 对齐 M3.1 Schema 消除「Skill 期望字段 vs 工具校验字段」漂移；字段契约内嵌降低 AI 跑偏（M3.2 风险#3「Skill Prompt 质量」的直接缓解）。可校验性：用文件级测试（存在性/frontmatter/工具引用/scan_skills 发现）覆盖交付物，不依赖真实 Claude 会话。
+
 
 

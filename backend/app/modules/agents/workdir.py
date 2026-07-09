@@ -175,3 +175,28 @@ async def ensure_all_agent_workdirs() -> None:
         workdir = get_agent_workdir(agent.code)
         if not workdir.exists():
             init_agent_workdir(agent)
+
+
+def seed_default_skills() -> None:
+    """把内置 7 个顾问 Skill 模板（app/skills_seed/）播种到 master 目录 claude_data/skills/（M3.2）。
+
+    - 非破坏性：目标已存在同名目录则跳过，保留用户经管理后台上传的同名自定义 Skill。
+    - 在启动 ``init_db`` 之后、``ensure_all_agent_workdirs`` 之前调用，使新建项目 Agent
+      能经 ``init_agent_workdir`` 把这些 Skill 拷贝进各自工作目录。
+    - master 模板版本化存放于包内 ``app/skills_seed/``（claude_data/ 被 gitignore，
+      故运行时目录由本函数从版本化模板播种，避免模板随运行时数据丢失）。
+    """
+    settings = get_settings()
+    # workdir.py 位于 app/modules/agents/，其上三级为 app/，skills_seed 置于 app/skills_seed/
+    seed_root = Path(__file__).resolve().parents[2] / "skills_seed"
+    if not seed_root.exists():
+        return
+    dest_root = settings.claude_data_dir / "skills"
+    dest_root.mkdir(parents=True, exist_ok=True)
+    for src in sorted(seed_root.iterdir()):
+        if not src.is_dir():
+            continue
+        dst = dest_root / src.name
+        if dst.exists():
+            continue  # 已播种或用户自定义，不覆盖
+        shutil.copytree(src, dst)

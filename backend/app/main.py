@@ -16,6 +16,9 @@ async def _lifespan(_: FastAPI):
     app_logging.configure_logging()
     config.apply_environment()
     await init_db()
+    # M3.2：把内置 7 个顾问 Skill 模板播种到 master 目录，供项目 Agent 拷贝加载
+    from app.modules.agents.workdir import seed_default_skills
+    seed_default_skills()
     # 为 DB 中所有 Agent 兜底初始化工作目录(缺则补)
     from app.modules.agents.workdir import ensure_all_agent_workdirs
     await ensure_all_agent_workdirs()
