@@ -58,12 +58,21 @@
 - 前端：npm run build 71 modules，0 错误
 
 
-### M1.4 导航重构 ⏳ 待开始
+### M1.4 导航重构 ✅ 已完成（commit 本会话）
 
-| 任务 | 状态 |
-|------|------|
-| M1.4.1 Sidebar 更新 | ⏳ |
-| M1.4.2 路由更新 | ⏳ |
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M1.4.1 Sidebar 更新 | ✅ | 2026-07-09 | SidebarVariantA 分组对齐 §2.1：作战台(对话/业务地图/营销地图/拜访记录)·文件(个人/团队空间)·管理(智能体/技能/统计/反馈/白名单)·设置(组织架构/用户管理)；用户管理(用户审批)移入「设置」组 |
+| M1.4.2 路由更新 | ✅ | 2026-07-09 | ViewName 类型已含 organization/businessMap/marketingMap/visitRecords/userApproval；App.tsx renderPage + 面包屑已覆盖（用户审批面包屑改「设置/用户管理」） |
+
+> M1.4 Sidebar 分组在 M1.2 阶段(commit dd9a3a0 锁定 Sidebar A)已基本就绪，本次仅做 §2.1 对齐微调。前端 npm run build 71 modules 0 错误。
+
+---
+
+## ✅ Phase 1（地基重构）全部完成
+
+M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 → M1.4 导航重构 全部交付。
+后续 Phase 2（数据模型与 API）依赖 M1.3 的 Project 模型。
 
 ---
 

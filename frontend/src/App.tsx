@@ -173,7 +173,7 @@ export default function App() {
       : view === "visitRecords"
       ? ["拜访记录"]
       : view === "userApproval"
-      ? ["管理", "用户审批"]
+      ? ["设置", "用户管理"]
       : view === "organization"
       ? ["设置", "组织架构"]
       : view === "personalSpace"

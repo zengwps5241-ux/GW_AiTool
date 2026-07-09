@@ -28,16 +28,16 @@ function getNavItems(user: UserMe): NavItem[] {
   ];
   if (user.role !== "user") {
     items.push({ id: "skills", label: "技能管理", icon: I.Puzzle, group: "管理" });
-    items.push({ id: "userApproval", label: "用户审批", icon: I.UserCheck, group: "管理" });
     items.push({ id: "usage", label: "使用统计", icon: I.LayoutDashboard, group: "管理" });
     items.push({ id: "feedback", label: "反馈管理", icon: I.MessageSquare, group: "管理" });
   }
   if (user.role === "super") {
     items.push({ id: "loginWhitelist", label: "用户白名单", icon: I.Users, group: "管理" });
   }
-  // 设置（admin 可见）
+  // 设置（admin 可见，§2.1：组织架构 / 用户管理 等）
   if (user.role !== "user") {
     items.push({ id: "organization", label: "组织架构", icon: I.Building, group: "设置" });
+    items.push({ id: "userApproval", label: "用户管理", icon: I.UserCheck, group: "设置" });
   }
   return items;
 }
