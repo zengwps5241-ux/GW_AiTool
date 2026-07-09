@@ -1,131 +1,162 @@
-// 登录页:企业微信自建二维码扫码登录
-import { useEffect, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
+// 登录页：自建注册登录体系（手机号/用户名+密码）
+import { useState } from "react";
 import { I } from "@/icons";
 import { Btn } from "@/components/ui";
 import { api } from "@/api/client";
 
-type LoginStatus = "loading" | "waiting" | "scanning" | "error";
-const LOGIN_WHITELIST_DENIED_MESSAGE = "当前账号未在登录白名单中，请联系管理员";
+type LoginTab = "login" | "register";
 
-function initialLoginError(): string {
-  const error = new URLSearchParams(window.location.search).get("error");
-  if (error === "login_whitelist_denied") return LOGIN_WHITELIST_DENIED_MESSAGE;
-  if (error === "wechat_auth_failed") return "企业微信登录失败，请重试或联系管理员";
-  return "";
-}
+export default function LoginPage() {
+  const [tab, setTab] = useState<LoginTab>("login");
 
-export default function LoginPage({ mode }: { mode: "qrcode" | "sso" }) {
-  const initialError = initialLoginError();
-  const [qrUrl, setQrUrl] = useState<string>("");
-  const [status, setStatus] = useState<LoginStatus>(initialError ? "error" : "loading");
-  const [errorMsg, setErrorMsg] = useState(initialError);
-  const stateRef = useRef<string>("");
-  const abortRef = useRef(false);
+  // 登录表单
+  const [loginValue, setLoginValue] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
 
-  // 构造 OAuth 二维码 URL
-  const buildQrUrl = (config: {
-    appid: string;
-    redirect_uri: string;
-    state: string;
-    agentid: string;
-    scope: string;
-  }) => {
-    const params = new URLSearchParams();
-    params.set("appid", config.appid);
-    params.set("redirect_uri", config.redirect_uri);
-    params.set("response_type", "code");
-    params.set("scope", config.scope);
-    params.set("state", config.state);
-    params.set("agentid", config.agentid);
-    return `https://open.weixin.qq.com/connect/oauth2/authorize?${params.toString()}#wechat_redirect`;
-  };
+  // 注册表单
+  const [regUsername, setRegUsername] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regDisplayName, setRegDisplayName] = useState("");
+  const [regError, setRegError] = useState("");
+  const [regSuccess, setRegSuccess] = useState("");
+  const [regLoading, setRegLoading] = useState(false);
 
-  // 登录流程:拿到 code 后请求后端登录
-  const doLogin = async (code: string) => {
-    if (abortRef.current) return;
-    setStatus("scanning");
-    try {
-      await api.wechatWorkLoginByCode(code);
-      window.location.reload();
-    } catch (error) {
-      const statusCode = (error as { status?: number }).status;
-      setStatus("error");
-      setErrorMsg(
-        statusCode === 403
-          ? LOGIN_WHITELIST_DENIED_MESSAGE
-          : "登录失败，请刷新二维码重试",
-      );
-    }
-  };
-
-  // 轮询等待扫码结果
-  const pollForCode = async (state: string) => {
-    const maxAttempts = 60; // 最多轮询 60 次(5 分钟)
-    for (let i = 0; i < maxAttempts; i++) {
-      if (abortRef.current) return;
-      await new Promise((r) => setTimeout(r, 5000)); // 每 5 秒轮询一次
-      if (abortRef.current) return;
-      try {
-        const result = await api.wechatWorkPollCode(state);
-        if (result?.code) {
-          await doLogin(result.code);
-          return;
-        }
-      } catch (err: any) {
-        const msg = String(err.message || "");
-        if (msg.includes("410") || msg.includes("expired")) {
-          setStatus("error");
-          setErrorMsg("二维码已过期，请刷新");
-          return;
-        }
-        if (msg.includes("404") || msg.includes("not found")) {
-          setStatus("error");
-          setErrorMsg("无效的请求，请刷新");
-          return;
-        }
-        // 204 或其他网络波动，继续轮询
-      }
-    }
-    setStatus("error");
-    setErrorMsg("等待超时，请刷新二维码");
-  };
-
-  // 刷新二维码
-  const refreshQrCode = async () => {
-    if (abortRef.current) return;
-    setStatus("loading");
-    setErrorMsg("");
-    try {
-      const config = await api.wechatWorkQrCodeConfig();
-      const url = buildQrUrl(config);
-      setQrUrl(url);
-      stateRef.current = config.state;
-      setStatus("waiting");
-      pollForCode(config.state);
-    } catch {
-      setStatus("error");
-      setErrorMsg("获取二维码失败，请刷新重试");
-    }
-  };
-
-  const retryLogin = () => {
-    if (mode === "sso") {
-      window.location.href = "/api/auth/wechat-work/authorize";
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    if (!loginValue.trim() || !loginPassword.trim()) {
+      setLoginError("请输入用户名/手机号和密码");
       return;
     }
-    void refreshQrCode();
+    setLoginLoading(true);
+    try {
+      await api.login(loginValue.trim(), loginPassword);
+      window.location.reload();
+    } catch (error: any) {
+      const status = error?.status;
+      if (status === 401) {
+        setLoginError("用户名或密码错误");
+      } else if (status === 403) {
+        const text = error?.responseText || "";
+        if (text.includes("待审批")) {
+          setLoginError("账号待审批，请联系管理员");
+        } else if (text.includes("禁用")) {
+          setLoginError("账号已被禁用，请联系管理员");
+        } else {
+          setLoginError("无权限登录");
+        }
+      } else {
+        setLoginError("登录失败，请重试");
+      }
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
-  useEffect(() => {
-    abortRef.current = false;
-    if (initialError || mode === "sso") return;
-    refreshQrCode();
-    return () => {
-      abortRef.current = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError("");
+    setRegSuccess("");
+    if (!regUsername.trim() && !regPhone.trim()) {
+      setRegError("用户名和手机号至少填写一个");
+      return;
+    }
+    if (!regPassword.trim() || regPassword.length < 6) {
+      setRegError("密码至少6位");
+      return;
+    }
+    setRegLoading(true);
+    try {
+      const result = await api.register({
+        username: regUsername.trim() || undefined,
+        phone: regPhone.trim() || undefined,
+        password: regPassword,
+        display_name: regDisplayName.trim() || undefined,
+      });
+      setRegSuccess(result.message || "注册成功，请等待管理员审批");
+      setRegUsername("");
+      setRegPhone("");
+      setRegPassword("");
+      setRegDisplayName("");
+    } catch (error: any) {
+      const status = error?.status;
+      if (status === 409) {
+        const text = error?.responseText || "";
+        if (text.includes("用户名已存在")) {
+          setRegError("用户名已存在");
+        } else if (text.includes("手机号已注册")) {
+          setRegError("手机号已注册");
+        } else {
+          setRegError("用户名或手机号已存在");
+        }
+      } else {
+        setRegError("注册失败，请重试");
+      }
+    } finally {
+      setRegLoading(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid var(--line)",
+    background: "var(--surface)",
+    color: "var(--ink-1)",
+    fontSize: 14,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 13,
+    color: "var(--ink-2)",
+    marginBottom: 4,
+    display: "block",
+  };
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "10px 0",
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: active ? 600 : 400,
+    color: active ? "var(--accent)" : "var(--ink-3)",
+    borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+    cursor: "pointer",
+    background: "none",
+    border: "none",
+    borderTop: "none",
+    borderLeft: "none",
+    borderRight: "none",
+    outline: "none",
+  });
+
+  const errorStyle: React.CSSProperties = {
+    background: "var(--danger-soft)",
+    color: "var(--danger)",
+    padding: "8px 12px",
+    borderRadius: 8,
+    fontSize: 13,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  };
+
+  const successStyle: React.CSSProperties = {
+    background: "var(--success-soft, #e8f5e9)",
+    color: "var(--success, #2e7d32)",
+    padding: "8px 12px",
+    borderRadius: 8,
+    fontSize: 13,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  };
 
   return (
     <div
@@ -140,6 +171,7 @@ export default function LoginPage({ mode }: { mode: "qrcode" | "sso" }) {
         gap: 20,
       }}
     >
+      {/* Logo */}
       <div
         style={{
           width: 48,
@@ -155,71 +187,141 @@ export default function LoginPage({ mode }: { mode: "qrcode" | "sso" }) {
       >
         <I.Logo size={26} />
       </div>
-      <div style={{ fontSize: 15, color: "var(--ink-2)" }}>
-        请使用企业微信扫码登录
+      <div style={{ fontSize: 18, fontWeight: 600, color: "var(--ink-1)" }}>
+        AI 顾问作战台
       </div>
 
-      {status === "loading" && (
-        <div style={{ fontSize: 13, color: "var(--ink-3)" }}>加载中…</div>
-      )}
-
-      {qrUrl && status !== "error" && (
-        <div
-          style={{
-            padding: 16,
-            background: "#fff",
-            borderRadius: 8,
-            border: "1px solid var(--line)",
-            lineHeight: 0,
-          }}
-        >
-          <QRCodeSVG value={qrUrl} size={200} level="M" />
+      {/* 登录/注册卡片 */}
+      <div
+        style={{
+          width: 380,
+          background: "var(--surface)",
+          border: "1px solid var(--line)",
+          borderRadius: 12,
+          overflow: "hidden",
+        }}
+      >
+        {/* Tab 切换 */}
+        <div style={{ display: "flex", borderBottom: "1px solid var(--line)" }}>
+          <button style={tabStyle(tab === "login")} onClick={() => setTab("login")}>
+            登录
+          </button>
+          <button style={tabStyle(tab === "register")} onClick={() => setTab("register")}>
+            注册
+          </button>
         </div>
-      )}
 
-      {status === "waiting" && (
-        <div style={{ fontSize: 13, color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 6 }}>
-          <span
-            style={{
-              display: "inline-block",
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "var(--accent)",
-              animation: "pulse 1.5s infinite",
-            }}
-          />
-          等待扫码…
+        <div style={{ padding: "20px 24px" }}>
+          {/* 登录表单 */}
+          {tab === "login" && (
+            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>用户名 / 手机号</label>
+                <input
+                  style={inputStyle}
+                  value={loginValue}
+                  onChange={(e) => setLoginValue(e.target.value)}
+                  placeholder="请输入用户名或手机号"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>密码</label>
+                <input
+                  style={inputStyle}
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="请输入密码"
+                />
+              </div>
+              {loginError && (
+                <div style={errorStyle}>
+                  <I.CircleAlert size={14} />
+                  {loginError}
+                </div>
+              )}
+              <Btn
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={loginLoading}
+                style={{ width: "100%", marginTop: 4 }}
+              >
+                {loginLoading ? "登录中…" : "登录"}
+              </Btn>
+            </form>
+          )}
+
+          {/* 注册表单 */}
+          {tab === "register" && (
+            <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>用户名</label>
+                <input
+                  style={inputStyle}
+                  value={regUsername}
+                  onChange={(e) => setRegUsername(e.target.value)}
+                  placeholder="请输入用户名"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>手机号</label>
+                <input
+                  style={inputStyle}
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                  placeholder="请输入11位手机号"
+                  maxLength={11}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>显示名称</label>
+                <input
+                  style={inputStyle}
+                  value={regDisplayName}
+                  onChange={(e) => setRegDisplayName(e.target.value)}
+                  placeholder="可选，展示名称"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>密码</label>
+                <input
+                  style={inputStyle}
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="至少6位"
+                />
+              </div>
+              {regError && (
+                <div style={errorStyle}>
+                  <I.CircleAlert size={14} />
+                  {regError}
+                </div>
+              )}
+              {regSuccess && (
+                <div style={successStyle}>
+                  <I.CircleCheck size={14} />
+                  {regSuccess}
+                </div>
+              )}
+              <Btn
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={regLoading}
+                style={{ width: "100%", marginTop: 4 }}
+              >
+                {regLoading ? "注册中…" : "注册"}
+              </Btn>
+              <div style={{ fontSize: 12, color: "var(--ink-3)", textAlign: "center" }}>
+                注册后需管理员审批方可使用
+              </div>
+            </form>
+          )}
         </div>
-      )}
-
-      {status === "scanning" && (
-        <div style={{ fontSize: 13, color: "var(--ink-3)" }}>登录中…</div>
-      )}
-
-      {status === "error" && (
-        <>
-          <div
-            style={{
-              background: "var(--danger-soft)",
-              color: "var(--danger)",
-              padding: "10px 14px",
-              borderRadius: 8,
-              fontSize: 13,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              maxWidth: 320,
-            }}
-          >
-            <I.CircleAlert size={14} />
-            {errorMsg}
-          </div>
-          <Btn variant="primary" size="sm" onClick={retryLogin}>
-            {mode === "sso" ? "重新登录" : "刷新二维码"}
-          </Btn>
-        </>
-      )}
+      </div>
     </div>
   );
 }

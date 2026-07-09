@@ -326,6 +326,54 @@ export const I = {
       <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" />
     </Base>
   ),
+  // 地图图标:用于业务地图导航
+  Map: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M3 7L9 4L15 7L21 4V17L15 20L9 17L3 20V7Z" />
+      <path d="M9 4V17" />
+      <path d="M15 7V20" />
+    </Base>
+  ),
+  // 靶心图标:用于营销地图导航
+  Target: (p: IconProps) => (
+    <Base {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+    </Base>
+  ),
+  // 剪贴板列表图标:用于拜访记录导航
+  ClipboardList: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="6" y="4" width="12" height="17" rx="2" />
+      <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+      <path d="M9 11h6" />
+      <path d="M9 15h6" />
+      <path d="M9 8h6" />
+    </Base>
+  ),
+  // 项目切换图标:用于项目选择器
+  Briefcase: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </Base>
+  ),
+  // 用户勾选图标:用于用户审批
+  UserCheck: (p: IconProps) => (
+    <Base {...p}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2 21a7 7 0 0 1 14 0" />
+      <path d="m15 8 3 3 5-6" />
+    </Base>
+  ),
+  // 建筑图标:用于组织架构
+  Building: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+    </Base>
+  ),
 };
 
 export default I;

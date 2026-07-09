@@ -129,11 +129,42 @@ export const api = {
   logout: () =>
     request<void>("/api/auth/logout", { method: "POST" }),
 
-  // 企微登录模式配置
+  // 自建认证 API
+  register: (data: { username?: string; phone?: string; password: string; display_name?: string }) =>
+    request<{ success: boolean; message: string; user_id: number }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  login: (login: string, password: string) =>
+    request<{ success: boolean }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ login, password }),
+    }),
+
+  // 管理员审批
+  listPendingUsers: () =>
+    request<Array<{
+      id: number;
+      username: string;
+      phone: string | null;
+      display_name: string | null;
+      status: string;
+      registration_source: string;
+      created_at: string | null;
+    }>>("/api/admin/pending-users"),
+
+  approveUser: (userId: number, action: "approve" | "reject", reason?: string) =>
+    request<{ success: boolean; user_id: number; status: string }>(`/api/admin/approve-user/${userId}`, {
+      method: "POST",
+      body: JSON.stringify({ action, reason }),
+    }),
+
+  // DEPRECATED: 企微登录模式配置，保留以备未来扩展
   wechatWorkConfig: () =>
     request<{ mode: string }>("/api/auth/wechat-work/config"),
 
-  // 企微自建二维码登录
+  // DEPRECATED: 企微自建二维码登录
   wechatWorkQrCodeConfig: () =>
     request<{
       appid: string;

@@ -1,0 +1,1854 @@
+# AI 顾问作战台 · 需求文档 V1.0
+
+> 基于 MVP 工作方案 V3.1 重构，经全面访谈后产出。本文档是后续开发的真源。
+>
+> 文档版本：V1.0
+> 上一版本：MVP 工作方案 V3.1（已退役为参考）
+> 访谈日期：2026-07-03
+
+---
+
+## 目录
+
+- [一、产品定义](#一产品定义)
+- [二、用户与权限](#二用户与权限)
+- [三、工作流设计（6 个）](#三工作流设计6-个)
+- [四、页面设计（6 个）](#四页面设计6-个)
+- [五、数据对象设计](#五数据对象设计)
+- [六、知识资产库（P5 八 Tab）](#六知识资产库p5-八-tab)
+- [七、核心机制](#七核心机制)
+- [八、用户故事](#八用户故事)
+- [九、方法论文档引用](#九方法论文档引用)
+- [十、LLM 技术能力](#十llm-技术能力)
+
+---
+
+## 一、产品定义
+
+### 1.1 产品名
+
+**AI 顾问作战台**
+
+### 1.2 一句话定位
+
+一个让轻咨询部用户做"客户分析 → 假设地图 → 拜访方案 → 现场验证 → 现状地图 → 营销地图 → 知识沉淀"全流程统一作业的 AI 平台。
+
+### 1.3 使用范围
+
+- 第一阶段仅供轻咨询部内部测试
+- 1-3 名用户
+- 1-2 个种子项目
+
+### 1.4 最小闭环
+
+```
+用户注册/登录 → 创建项目 → 上传资料(WF02)
+    ↓
+生成假设地图 L1→L2→L3→L4 (WF07，基于公开信息搜索)
+    ↓
+生成拜访前方案(WF06) → 去客户现场
+    ↓
+回填拜访纪要(WF09) → 验证假设 & 更新现状(WF10)
+    ↓
+生成/更新营销地图(WF12)
+    ↓
+Chat Mode 复盘 → 知识沉淀 → 进入下一轮
+```
+
+### 1.5 核心原则
+
+1. **P1 是唯一的 AI 交互与审核确认入口**
+2. **P2-P6 只做展示 + 增删改查**，不承担审核功能
+3. **所有 WF 输出支持 Chat 调整**：产出 → 对话修改 → 再产出 → 直到采纳或驳回
+4. **假设地图永久存档**，现状地图独立新建并关联回假设，复盘期可对比
+
+---
+
+## 二、用户与权限
+
+### 2.1 用户注册与登录
+
+- 支持用户名 + 密码注册
+- 支持登录/登出
+- 用户角色：`admin`（可管理种子项目 + 触发词配置）/ `user`（正常使用者）
+
+### 2.2 项目协作模型
+
+| 角色               | 权限                                                         |
+| ------------------ | ------------------------------------------------------------ |
+| **Owner（主手）**  | 创建项目，拉人入项目，审核副手提交的 WF07 产出，自己的 WF07 产出采纳后直接发布到 P3 |
+| **Deputy（副手）** | 跑所有 WF，WF07 产出需 Owner 审核后才能发布到 P3，其他 WF 产出自行确认即可 |
+
+约束：
+
+- 一个项目只有一个 Owner
+- 只有 Owner 能拉人
+- 副手不能拉人
+
+### 2.3 WF07 审核流程
+
+```
+副手跑 WF07 → 副手候选区自审确认 → 进入"待主手审核区"
+    ↓
+Owner P1 收到提醒 → 审核（通过 / 驳回 + 修改意见）
+    ├ 通过 → 发布到 P3 业务地图（标记为 published）
+    └ 驳回 → 退回副手，副手修改后重新提交（保留历史版本）
+```
+
+每次提交保留快照版本，支持 Owner 对比查看演进。最终发布版本标记为 `published`。
+
+---
+
+## 三、工作流设计（6 个）
+
+### 3.1 总览
+
+| 编码     | 名称               | 类型       | 写入             | 说明                                                         |
+| -------- | ------------------ | ---------- | ---------------- | ------------------------------------------------------------ |
+| **WF01** | 指令入口与意图识别 | 路由中间件 | IntentRoutingLog | 三层管线（LLM分类 → 关键词兜底 → 用户确认），非独立 WF，不产生 WorkflowRun |
+| **WF02** | 资料上传与归档     | 独立 WF    | K-MVP01 pending  | 解析文件 → AI 分类（含公开信息类型）→ 评估覆盖度 → 用户确认分类后入库 |
+| **WF03** | 信息缺口识别       | 自动检查点 | 不写库           | WF06/07 执行时自动跑，输出缺口建议（含建议查询关键词 + 建议去现场了解的内容），不产生 WorkflowRun |
+| **WF06** | 拜访前方案生成     | 独立 WF    | K-MVP02 pending  | 产出：拜访目标 + 沟通要点 + 通用访谈问题 + 资料清单。用户按需触发，无前置依赖 |
+| **WF07** | 假设地图分步生成   | 独立 WF    | K-MVP04 pending  | 5 Step：L1→L2→L3→L4→验证问题。基于公开信息搜索，每步确认后可回滚 |
+| **WF09** | 拜访纪要结构化     | 独立 WF    | K-MVP01 pending  | 支持文件上传 + 文本粘贴两种入口。提取证据（客户原话/痛点/角色态度信号/业务术语）→ 不自动触发下游 |
+| **WF10** | 假设验证与现状更新 | 独立 WF    | K-MVP04 pending  | 合并原 WF10a+10b。支持显式（选节点）和隐式（输入/上传材料）两种触发。对比假设 vs 现状 → 用户确认 → 写入现状地图 |
+| **WF12** | 营销地图（完整版） | 独立 WF    | K-MVP05 pending  | 五视图完整版。客观信息层 + 主观信息层 + 三维度量化评分 + 行为分析矩阵 + 话术生成 |
+
+### 3.2 WF01 · 指令入口与意图识别（路由中间件）
+
+**定位**：不是独立工作流。用户没手选工作流时，自动判断走哪个 WF 还是 Chat Mode。
+
+**路由管线**：
+
+```
+路径 A（零层）：指令模板按钮 / 文件拖入
+   → 直接调对应 WF，跳过意图识别
+
+路径 B（自然语言）：
+   用户输入
+      ↓
+   ① LLM 意图分类     置信度 ≥ 0.7 → 直接进 WF
+      ↓ 置信度 < 0.7
+   ② 关键词兜底       命中唯一一类 → 进 WF
+      ↓ 命中多类 或 未命中
+   ③ 用户显式确认     弹窗"你想做 A 还是 B？"
+      ↓ 都不是
+   ④ Chat Mode        通用问答
+```
+
+**7 类意图标签**（对齐 6 个 WF + Chat）：
+
+| 意图标签             | 触发 WF   | 典型关键词                                 |
+| -------------------- | --------- | ------------------------------------------ |
+| `hypothesis_map`     | WF07      | 假设地图、业务地图、L1/L2/L3/L4、业务拆解  |
+| `current_map_verify` | WF10      | 验证假设、是否成立、现状流程、客户真实流程 |
+| `stakeholder_card`   | WF12      | 角色卡、营销地图、决策人、组织架构、谁负责 |
+| `interview_summary`  | WF09      | 会议纪要、访谈整理、拜访记录、客户说了什么 |
+| `visit_plan`         | WF06      | 拜访方案、访谈提纲、拜访准备、沟通要点     |
+| `file_upload`        | WF02      | （行为触发：上传文件/拖入）                |
+| `chat`               | Chat Mode | 通用问答、解释、优化、总结                 |
+
+**写入**：IntentRoutingLog（每次决策必入，含 LLM 分类结果、关键词命中、用户确认选择、最终意图）
+
+### 3.3 WF02 · 资料上传与归档
+
+**触发**：用户拖入/上传文件（PDF/DOCX/Excel/文本）
+
+**处理步骤**：
+
+1. 解析文件内容
+2. AI 分类：判定 materialType（财报/访谈纪要/系统清单/流程图/行业资料/内部模板/公开信息/待分类）
+3. 评估覆盖度贡献 + potentialUnlocks
+4. 写入 K-MVP01 pending
+5. 用户确认 AI 分类结果 → 入库
+
+**关键约束**：
+
+- 资料内容本身不需要"采纳/驳回"——用户上传的东西不需要审核
+- AI 分类结果需要用户确认（低置信度分类默认进"待分类暂存区"）
+- materialType 新增 `public_info`（公开信息），对应 WF07 搜索采集结果
+
+### 3.4 WF03 · 信息缺口识别（自动检查点）
+
+**定位**：不是独立工作流。WF06/07 启动时自动执行。
+
+**检查逻辑**：
+
+1. 扫描已有资料 + 业务地图 + 营销地图的实体覆盖度
+2. 覆盖度 ≥ 60% → 静默通过，不打断
+3. 覆盖度 < 60% → 在 AI 回复中附加"信息缺口提醒"：
+   - 缺什么维度的信息
+   - 建议查询关键词 + 建议查询渠道（含后续 MCP 搜索 Tool 调用）
+   - 建议去现场找什么人了解什么内容
+
+**不产生** WorkflowRun 记录。
+
+### 3.5 WF06 · 拜访前方案生成
+
+**触发**：用户按需手动触发（P1 chip 或意图识别）
+
+**无前置依赖**：不依赖 WF07，用户随时可用
+
+**输出**：
+
+- 拜访目标
+- 沟通要点（非话术——话术依赖角色卡，由 WF12 产出）
+- 通用访谈问题清单
+- 资料清单
+
+**写入**：K-MVP02 pending → P1 确认 → P5 Tab 1 方案库
+
+**与 WF07 验证问题的关系**：WF06 产出通用访谈问题，WF07 Step 5 产出 L3 验证问题。两份问题在 P1 展示时合并为一份完整访谈提纲，用户现场灵活使用。
+
+**Chat 调整**：支持。用户可在 P1 对话中修改任意内容后确认入库。
+
+### 3.6 WF07 · 假设地图分步生成（核心）
+
+**触发**：P1 chip 或意图识别命中 `hypothesis_map`
+
+**前置**：WF03 自动检查（信息缺口提醒附在结果中）
+
+**5 个 Step（强制分步，不可一键跳过）**：
+
+```
+Step 1：生成 L1 公司级价值链（基于公开信息搜索）
+  输出 5-7 个价值链环节，按 5 列要素填写（价值链环节/核心业务活动/能力链/IT系统/组织）
+  ↓ 用户采纳一条 / 修改 / 驳回 → 可回滚重新生成
+
+Step 2：生成 L2 业务域 + 职能域 + 共性技术域
+  - 业务域：挂在对应 L1 下面（parentId = L1 节点 ID）
+  - 职能域 + 共性技术域：横向支撑，不挂任何 L1（parentId = null）
+  按 10 个要素填写（域名称/域类型/域目标/价值流/子场景/核心能力/IT系统/组织岗位/数据实体/脱节点）
+  ↓ 用户采纳 / 修改 / 驳回
+
+Step 3：生成 L3 细分场景
+  基于已采纳 L2 生成，每个场景按 11 个要素填写（含 AI Agent 机会 + 本体抽取）
+  执行 L2→L3 downward 一致性校验
+  ↓ 用户采纳 / 修改 / 驳回
+
+Step 4：生成 L4 人才地图
+  基于已采纳 L3 生成，按 9 个要素填写（能力名称/能力类型/掌握程度/当前达标率/人才差距等）
+  第一版基于公开信息生成，标记为假设，供现场顾问预览和验证
+  ↓ 用户采纳 / 修改 / 驳回
+
+Step 5：生成待验证问题
+  基于已采纳 L3/L4 节点自动生成，每条问题关联节点 ID
+  ↓ 合并进 WF06 的访谈提纲，形成完整问题清单
+```
+
+**关键约束**：
+
+- 每次跑 WF07 实时搜索公开信息（确保最新），搜索结果存入 Material（materialType=public_info）
+- 读取法层规则做跨层一致性校验（L1→L2 downward、L2→L3 downward）
+- 每步允许中断、回滚到上一步重新生成
+- 假设节点永久存档，不可覆盖
+
+**L2 展示结构**：
+
+- 业务域：挂在对应 L1 价值链环节下，树形展开
+- 职能域 + 共性技术域：独立"横向支撑域"区域，不挂任何 L1
+
+**方法论文档引用**：
+
+- L1 字段：`docs/01-current/L1公司级价值链地图设计文档V1.2.docx`
+- L2 字段：`docs/01-current/L2业务域_职能域_共性技术域地图设计文档.docx`
+- L3 字段：`docs/01-current/L3细分场景地图设计文档.docx`
+- L4 字段：`docs/01-current/L4人才地图设计文档（完整版）.docx`
+- 字段契约：`docs/04-techdoc/BUSINESS_MAP_L1_L4_FIELD_CONTRACT.md`
+
+**版本管理**：
+
+- 每次提交保留快照版本
+- Owner 可对比副手提交的不同版本
+- 最终发布版本标记为 `published`
+
+**Chat 调整**：支持。用户可在 P1 对话中针对任意 L1/L2/L3/L4 节点提出修改指令。
+
+### 3.7 WF09 · 拜访纪要结构化
+
+**触发**（两种入口）：
+
+- 上传文件 → WF02 分类为"访谈纪要"→ 自动触发 WF09
+- 直接粘贴纪要文本 → 意图识别命中 `interview_summary` → 触发 WF09
+
+**处理步骤**：
+
+1. 文档解析 + 结构化抽取
+2. 提取要素：客户原话（带 speaker + timestamp）、业务痛点、流程描述、系统使用情况、角色态度信号、新业务术语
+3. 每条抽取项写为 EvidenceSource 对象，进 K-MVP01 pending
+4. 自动创建 VisitRecord（会议日期/参与人/摘要/原始文本）
+5. Chat Mode 提及"今天见了xx"→ 自动记录一句话 VisitRecord
+
+**不自动触发下游 WF**：
+
+- WF09 完成后，P6 页面上提供手动按钮：
+  - "基于本次纪要验证假设"→ 手动触发 WF10
+  - "基于本次纪要生成/更新角色卡"→ 手动触发 WF12
+- 理由：用户必须先 review 解析结果是否准确，再决定是否跑下游
+
+**写入**：仅 K-MVP01 pending（证据库），不直接写业务地图/角色卡
+
+**Chat 调整**：支持。
+
+### 3.8 WF10 · 假设验证与现状更新
+
+**合并原 WF10a + WF10b** 为一个统一工作流。
+
+**触发**（两种入口）：
+
+- **显式**：用户在 P3 点击某个 L3 假设节点，选"验证"
+- **隐式**：用户直接上传材料或在 P1 对话框输入验证内容 → 意图识别命中 `current_map_verify` → 触发 WF10
+
+**前置检查**：触发时检查是否有假设地图节点。若无，提示"请先生成假设地图（WF07）"。
+
+**处理步骤**：
+
+```
+1. AI 接收证据输入（上传材料 / 文本描述）
+2. 自动匹配证据关联到相关 L3 假设节点
+3. 逐条输出对比：
+   假设：xxxx
+   现状：xxxx（证据来源：xxxx）
+   建议状态：成立 / 部分成立 / 推翻 / 待补充
+4. 用户逐条确认 → 同步写入现状地图（mapType=current）
+   - 原假设节点永久保留，不修改
+   - 现状节点新建，通过 linkedHypothesisId 关联回假设
+   - verificationStatus = 推翻 的假设节点自动标记进偏差池
+```
+
+**写入**：K-MVP04 pending → P1 确认 → 现状地图
+
+**Chat 调整**：支持。
+
+### 3.9 WF12 · 营销地图（完整版）
+
+**触发**（两种入口）：
+
+- P1 chip 或意图识别命中 `stakeholder_card`
+- P6 页面手动点击"基于本次纪要生成/更新角色卡"
+
+**参考文档**：`docs/01-current/营销地图设计文档（完整版 V2.0）.docx`
+
+**输出内容**：
+
+**客观信息层**（完整版）：
+
+- 基础信息：姓名/职位/部门/汇报对象/角色类型/决策权类型
+- 个人背景：教育/过往公司/项目经验/性格特点/沟通偏好/内部盟友对手/外部关系
+- 历史合作：与我方历史/与竞品历史
+
+**主观信息层**（完整版）：
+
+- 立场 + 利益诉求（显性KPI + 隐性个人诉求）
+- 态度细节（对我方方案的看法 + 对竞品的态度）
+- 支持程度三维度量化评分（AI 自动打分）：
+  - 参与度（权重 0.3）× 影响力（权重 0.4）× 支持度（权重 0.3）
+  - 综合评分 1-10 分，对应等级：Champion(8-10) / 倾向我方(5-7) / 中立(3-4) / 反对(1-2)
+- 核心顾虑 + 影响杠杆
+
+**行为分析矩阵**：
+
+- 观察行为 → AI 解读 → 建议下一步动作
+- 双数据源：WF09 自动提取 + 用户手动记录
+
+**话术生成**：
+
+- 按五类角色（经济决策者/技术评估者/使用者/教练/采购财务）× 多个场景生成沟通话术
+- 提取客户原话 → 对应话术 → 入库 P5 Tab 5 话术库
+
+**五视图**（P4 展示）：
+
+| 视图           | 数据源       | 说明                   |
+| -------------- | ------------ | ---------------------- |
+| 组织架构图     | 客观信息层   | 树形结构，标注汇报关系 |
+| 决策链角色表   | 客观信息层   | 表格渲染               |
+| 角色-立场矩阵  | 主观信息层   | 横轴立场 × 纵轴影响力  |
+| 采购流程时间线 | 用户手动填写 | 五阶段模板，AI 不生成  |
+| 角色卡牌       | 全部数据     | 每角色一张深度卡片     |
+
+**第一版不做**：
+
+- Champion 自动识别（后续基于三维度评分自动标记）
+
+**角色去重**：发现重名或相似角色（如"王强"vs"王主任"）→ 生成 person_disambiguation 候选，要求用户确认是否同一人。是 → 更新已有角色卡；否 → 新建独立角色。
+
+**态度变化追踪**：每次更新不覆盖原态度，记录 `stanceChangeLog`（from→to→时间→原因）。
+
+**写入**：K-MVP05 pending → P1 确认 → P4 营销地图
+
+**Chat 调整**：支持。
+
+---
+
+## 四、页面设计（6 个）
+
+### 4.1 核心原则
+
+> **P1 是唯一的 AI 交互与审核确认入口。P2-P6 只做展示 + 增删改查。**
+
+### 4.2 P1 · AI 顾问作战台（主入口）
+
+**定位**：唯一 AI 交互入口，对标豆包式聊天界面。
+
+**布局**：左栏（ConversationSidebar）+ 中间主区（ChatStream）+ 底部输入区（ChatComposer）
+
+| 区域   | 内容                                                         |
+| ------ | ------------------------------------------------------------ |
+| 左栏   | 项目切换 + 客户信息 + 历史会话列表 + 新对话按钮              |
+| 顶部栏 | 当前会话标题 + 项目阶段（fdeStage）                          |
+| 中间   | ChatStream：用户消息 + AI 回复（含候选结果卡 + 可展开思考依据 + 来源证据） |
+| 中间   | 各类 banner：WF07 待审核提醒（Owner 可见）、角色消歧确认、WF09 角色一键生成条 |
+| 底部   | ChatComposer：工作流 chips + 文本输入 + 附件暂存 + 发送/停止按钮 |
+
+**工作流 chips**（精简为 5 个）：
+
+| chip                | 对应 WF | 阶段高亮        |
+| ------------------- | ------- | --------------- |
+| 生成拜访前方案      | WF06    | 拜访准备        |
+| 生成假设地图        | WF07    | 线索期/拜访准备 |
+| 整理拜访纪要        | WF09    | 驻场期          |
+| 验证假设 & 更新现状 | WF10    | 驻场期          |
+| 营销地图（角色卡）  | WF12    | 驻场期/复盘期   |
+
+**Chat Mode**：不装填工作流 chip 即可自由对话。提供"标记为有价值"按钮 → 直接进 P5 Tab 6 知识库。
+
+**交互闭环**：
+
+```
+用户输入 / 装填 WF chip
+    ↓
+WF 执行 → AI 产出候选结果
+    ↓
+用户不满意 → Chat 调整（自然语言修改指令）
+    ↓
+AI 重新生成 → 展示 diff → 再次确认
+    ↓
+用户采纳 → 进正式库 → 对应页面可见
+用户驳回 → 进偏差池/驳回池
+```
+
+**WF07 待审核提醒**（Owner 专属）：
+
+- 副手提交后，Owner P1 顶部通知区显示"待审核的假设地图（X 份）"
+- 点击进入审核视图：查看完整 L1-L4 地图 → 通过/驳回
+- 通过 → 发布到 P3
+- 驳回 → 附修改意见 → 退回副手
+
+**文件上传**：拖入文件 → 触发 WF02（资料归档 + AI 分类）
+
+### 4.3 P2 · 客户项目工作台
+
+**定位**：跨项目状态总览。纯展示，无 AI 交互，无审核。
+
+**布局**：
+
+```
+顶部：项目统计概览
+中部：项目卡片网格，按 fdeStage 分组
+  ┌─[线索期]──┐ ┌─[拜访准备]──┐ ┌─[驻场期]──┐ ┌─[复盘期]──┐
+  │  项目A    │ │  项目B      │ │  项目C    │ │  项目D    │
+  └───────────┘ └─────────────┘ └───────────┘ └───────────┘
+```
+
+**每张项目卡片字段**：
+
+- 客户名/项目名
+- 当前阶段（fdeStage）
+- 已上传资料数 / 已生成方案数
+- 假设地图节点数（L1/L2/L3/L4 分别）
+- 已验证 L3 数 / 角色卡数
+- **下一步建议**（基于状态机规则，非 AI 生成）：
+
+| 状态                   | 建议                     |
+| ---------------------- | ------------------------ |
+| 无资料                 | "请先上传客户资料"       |
+| 有资料、无假设地图     | "建议生成假设地图"       |
+| 有假设地图、无拜访纪要 | "建议生成拜访前方案"     |
+| 有拜访纪要、未验证     | "建议验证假设并更新现状" |
+| 已验证、无角色卡       | "建议生成营销地图"       |
+
+### 4.4 P3 · 业务地图页
+
+**定位**：业务地图展示 + 增删改查。纯展示，审核在 P1 完成。
+
+**布局**：
+
+```
+顶部：客户/项目/当前阶段/地图统计
+Tab 1：假设地图（mapType=hypothesis）
+Tab 2：现状地图（mapType=current）
+右侧：详情面板（点击节点展开）
+```
+
+**假设地图 Tab 展示结构**：
+
+```
+L1 价值链（横向泳道，5-7 个环节）
+  ├─ 勘探 → 开发 → 生产 → 运输 → 销售
+
+L2 业务域（挂在对应 L1 下，树形可展开）
+  ├─ 勘探域、开发域、生产域...
+
+L2 横向支撑域（独立区域，不挂 L1）
+  ├─ [职能域] HR、财务、物资管理
+  ├─ [共性技术域] AI平台、数据治理、安全
+
+L3 细分场景（挂在 L2 下，可展开）
+  └─ 点击 L2 节点展开 L3 列表
+
+L4 人才地图（挂在 L3 下）
+  └─ 点击 L3 节点展开关联人才能力
+```
+
+**现状地图 Tab**：结构相同，节点多出 `verificationStatus` 标记 + `linkedHypothesisId`（可点击跳回原假设节点）。
+
+**节点详情面板**（按层级差异化）：
+
+| 层级 | 展示字段                                                     |
+| ---- | ------------------------------------------------------------ |
+| L1   | 核心业务活动 / 能力链 / IT系统 / 组织                        |
+| L2   | 域类型标签 + 域目标(SMART) + 价值流 + 子场景 + 脱节点 + 数据实体 |
+| L3   | 业务流程 + 关键活动 + AI机会 + 本体抽取 + 痛点（带指标）     |
+| L4   | 能力类型 / 掌握程度 / 当前达标率 / 人才差距分析              |
+
+**节点状态标签**：mapType / verificationStatus / reviewStatus / confidenceLevel / sourceType
+
+**操作按钮**：[采纳] [驳回] [修改]（操作在 P1 完成，P3 只读展示已确认数据）
+
+**右侧证据 Tab**：只读。每条证据显示 evidenceType / evidenceStrength / originalText / speakerOrAuthor / timestamp / 跳转到原始 Material 链接。
+
+### 4.5 P4 · 营销地图页
+
+**定位**：营销地图展示 + 增删改查。纯展示，审核在 P1 完成。
+
+**布局**：
+
+```
+顶部：项目选择 | 角色总数 / Champion 数 / 最近更新时间
+
+Tab 切换：
+[组织架构] [决策链] [立场矩阵] [采购时间线] [角色卡]
+
+角色卡 Tab 内：
+  左侧：角色列表（按部门分组）
+  中间：单角色详情卡
+  右侧：关联 L3 场景 / 拜访记录
+```
+
+**五个视图**：
+
+| 视图           | 内容                                | 数据源                        |
+| -------------- | ----------------------------------- | ----------------------------- |
+| 组织架构图     | 树形结构，标注汇报关系、关键岗位    | 客观信息层（部门 + 角色关联） |
+| 决策链角色表   | 表格，所有关键角色及其基本信息      | 客观信息层                    |
+| 角色-立场矩阵  | 横轴立场 × 纵轴影响力，散点图       | 主观信息层                    |
+| 采购流程时间线 | 五阶段模板，数据由用户手动填写      | 用户手动                      |
+| 角色卡牌       | 每角色一张深度卡，客观+主观全部字段 | 全部数据                      |
+
+**操作**：支持手动新增/编辑/删除角色卡（直接进正式库，不走候选区）。
+
+### 4.6 P5 · 知识资产库
+
+**定位**：所有非业务地图/营销地图的知识资产集中管理。展示 + 增删改查。
+
+**8 个 Tab**：
+
+| #    | Tab      | 数据来源                              | 内容                                                         |
+| ---- | -------- | ------------------------------------- | ------------------------------------------------------------ |
+| 1    | 方案库   | WF06 产出 + 手动新建                  | 拜访前方案，支持版本树回看、关联地图节点                     |
+| 2    | 资料库   | WF02 上传 + WF07 公开信息采集         | Material 对象。materialType 子分类：财报/访谈纪要/系统清单/流程图/行业资料/内部模板/公开信息/待分类 |
+| 3    | 会议纪要 | WF09 自动创建 + P6 手动 + Chat 一句话 | VisitRecord 对象，按时间倒序                                 |
+| 4    | 证据库   | WF09 产出（P1 确认后）                | EvidenceSource。支持按角色/类型/强度筛选                     |
+| 5    | 话术库   | WF12 产出（P1 确认后）                | 五类角色 × 多场景沟通话术，按角色/场景筛选                   |
+| 6    | 知识库   | Chat Mode 标记（直接进）+ 复盘沉淀    | 分类：方案模板/地图模板/访谈问题/复盘经验/话术参考/其他      |
+| 7    | 偏差池   | WF10 验证推翻 + 驳回节点              | 假设偏差记录，复盘期输入                                     |
+| 8    | 方法论库 | K-MVP03 术层+器层（只读）             | Prompt 模板/画布 schema/方法论规则展示                       |
+
+**关于"标记为有价值"**：Chat Mode 中用户手动标记 → 直接进 Tab 6 知识库，**不走 P1 候选区审核**（用户已人工判断）。
+
+### 4.7 P6 · 拜访记录管理
+
+**定位**：拜访记录展示 + 增删改查。纯展示，审核在 P1 完成。
+
+**布局**：
+
+```
+顶部：项目选择 | 拜访次数 / 涉及角色数
+
+拜访记录列表（按时间倒序）
+每张卡片：
+  - 拜访日期 / 类型（现场/电话/视频/邮件/一句话）
+  - 参与人（我方 + 客户方，关联角色卡）
+  - 关联证据数 / 关联假设验证数 / 关联角色卡数
+  - 点击展开 → 查看本次拜访产出的全部证据
+```
+
+**三种创建入口**：
+
+| 入口           | 行为                                    | VisitRecord 内容                      |
+| -------------- | --------------------------------------- | ------------------------------------- |
+| P1 触发 WF09   | 上传纪要/粘贴文本 → AI 结构化 → P1 确认 | 完整：摘要 + 参与人 + 证据 + 角色信号 |
+| P6 手动新增    | 用户手动填写                            | 用户自定义填写                        |
+| Chat Mode 提及 | 用户说"今天见了王主任" → 自动记录       | 一句话原始文本                        |
+
+**操作**：[新增拜访记录] [查看详情] [编辑] [删除]
+
+---
+
+## 五、数据对象设计
+
+### 5.1 User
+
+```json
+{
+  "userId": "auto",
+  "username": "string",
+  "passwordHash": "string",
+  "displayName": "string",
+  "role": "admin / user",
+  "createdAt": "ts"
+}
+```
+
+### 5.2 Customer
+
+```json
+{
+  "customerId": "auto",
+  "name": "string",
+  "industry": "string",
+  "scale": "大型 / 中型 / 小型",
+  "region": "string",
+  "description": "string",
+  "tags": ["string"],
+  "orgStructure": {
+    "departments": [
+      {
+        "name": "string",
+        "parent": "string",
+        "headRole": "string",
+        "stakeholderCardIds": ["uuid"]
+      }
+    ]
+  },
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.3 Project
+
+```json
+{
+  "projectId": "auto",
+  "customerId": "uuid",
+  "name": "string",
+  "projectType": "诊断 / 试点 / 落地",
+  "fdeStage": "lead_screening / visit_preparation / onsite_validation / retrospective",
+  "status": "active / paused / completed / archived",
+  "owner": "uid",
+  "description": "string",
+  "objectives": "string",
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.4 ProjectMember
+
+```json
+{
+  "projectId": "uuid",
+  "userId": "uid",
+  "role": "owner / deputy",
+  "joinedAt": "ts"
+}
+```
+
+### 5.5 Material
+
+```json
+{
+  "materialId": "auto",
+  "projectId": "uuid",
+  "customerId": "uuid",
+  "fileName": "string",
+  "fileType": "pdf / docx / xlsx / text",
+  "fileSize": 2048,
+  "uploadedBy": "uid",
+  "uploadedAt": "ts",
+  "userDescription": "string",
+  "parsedContent": "string",
+  "summary": "string",
+  "extractedEntities": [
+    {"type": "person / system / process", "value": "string", "context": "string"}
+  ],
+  "materialType": "财报 / 访谈纪要 / 系统清单 / 流程图 / 行业资料 / 内部模板 / 公开信息 / 待分类",
+  "classificationConfidence": "高 / 中 / 低",
+  "targetKnowledgeBase": "K-MVP01 / K-MVP03 / 待分类暂存区",
+  "coverageContribution": {
+    "industry": 0.1,
+    "value_chain": 0.3,
+    "key_roles": 0.2,
+    "systems": 0.4
+  },
+  "potentialUnlocks": ["pendingIntentId"],
+  "reviewStatus": "draft / pending_review / reviewed / rejected",
+  "reviewedBy": "uid or null",
+  "reviewedAt": "ts or null",
+  "sourceType": "用户上传 / 公开信息搜索 / 外部查询",
+  "sourceRef": "string",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.6 AISolution
+
+```json
+{
+  "solutionId": "auto",
+  "projectId": "uuid",
+  "customerId": "uuid",
+  "title": "string",
+  "solutionType": "拜访前方案 / 访谈提纲 / 汇报材料 / 项目复盘 / 手动创建",
+  "content": "string (Markdown)",
+  "structuredContent": {},
+  "version": "1.0.0",
+  "previousVersionId": "uuid or null",
+  "versionTree": [
+    {"version": "string", "snapshotId": "uuid"}
+  ],
+  "usedMaterialIds": ["uuid"],
+  "usedTemplateId": "uuid or null",
+  "linkedMapObjectIds": ["uuid"],
+  "linkedStakeholderIds": ["uuid"],
+  "reviewStatus": "draft / pending_review / reviewed / rejected",
+  "reviewedBy": "uid or null",
+  "reviewedAt": "ts or null",
+  "rejectionReason": "string or null",
+  "isReusable": false,
+  "isKnowledgeCandidate": false,
+  "candidateType": "方案模板候选 / 业务地图模板候选 / 访谈问题候选 / 复盘经验候选 / null",
+  "sourceType": "AI生成 / 用户手动 / Chat标记",
+  "confidenceLevel": "高 / 中 / 低",
+  "generatedByAI": true,
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.7 VisitRecord
+
+```json
+{
+  "visitRecordId": "auto",
+  "projectId": "uuid",
+  "customerId": "uuid",
+  "visitDate": "2026-06-17",
+  "visitType": "现场访谈 / 电话沟通 / 视频会议 / 邮件交流 / 一句话记录",
+  "participants": [
+    {"role": "internal", "userId": "uid1"},
+    {"role": "customer", "name": "string", "stakeholderCardId": "uuid or null"}
+  ],
+  "summary": "string",
+  "rawContent": "string",
+  "source": "wf09 / manual / chat",
+  "linkedEvidenceIds": ["uuid"],
+  "linkedStakeholderIds": ["uuid"],
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts"
+}
+```
+
+### 5.8 BusinessMapObject
+
+```json
+{
+  "objectId": "auto",
+  "projectId": "uuid",
+  "level": "L1 / L2 / L3 / L4",
+  "name": "string",
+  "parentId": "uuid or null (L1为null; L2职能域/共性技术域为null)",
+  "mapType": "hypothesis / current",
+  "verificationStatus": "未验证 / 成立 / 部分成立 / 推翻 / 待补充",
+  "linkedHypothesisId": "uuid or null (current节点必填)",
+  "payload": {
+    "// L1": "coreBusinessActivities[] / capabilityChain[] / itSystems[] / organization[]",
+    "// L2": "domainType / domainGoal[] / valueFlow[] / subScenarios[] / coreCapabilities[] / itSystems[] / orgRoles{} / dataEntities[] / bottlenecks[]",
+    "// L3": "scenarioName / businessGoal[] / processFlow[] / keyActivities[] / capabilityUnits[] / dataFlow[] / roles[] / systems[] / painPoints[] / ontology{} / aiOpportunities[]",
+    "// L4": "scenario / keyActivity / capabilityName / capabilityType[] / capabilityDescription / levelRequired / role[] / currentCoverage / gapAnalysis"
+  },
+  "reviewStatus": "draft / pending_review / reviewed / rejected",
+  "reviewedBy": "uid or null",
+  "reviewedAt": "ts or null",
+  "rejectionReason": "string or null",
+  "sourceType": "搜索采集 / 用户上传 / 行业模板 / 模型知识",
+  "sourceRef": ["uuid"],
+  "confidenceLevel": "高 / 中 / 低",
+  "generatedByAI": true,
+  "evidenceIds": ["uuid"],
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+  "audience": "internal",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.9 EvidenceSource
+
+```json
+{
+  "evidenceId": "auto",
+  "projectId": "uuid",
+  "sourceMaterialId": "uuid (Material或VisitRecord)",
+  "evidenceType": "客户原话 / 行为观察 / 文档摘录 / 他人转述 / 用户推断 / 角色态度信号 / 业务术语",
+  "evidenceStrength": "强 / 中 / 弱",
+  "isVerifiable": true,
+  "originalText": "string",
+  "context": "string",
+  "speakerOrAuthor": "string",
+  "timestamp": "ts",
+  "reviewStatus": "draft / pending_review / reviewed / rejected",
+  "extractedByAI": true,
+  "linkedObjectType": "hypothesis_node / current_node / stakeholder_card",
+  "linkedObjectIds": ["uuid"],
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.10 StakeholderCard
+
+```json
+{
+  "cardId": "auto",
+  "projectId": "uuid",
+  "customerId": "uuid",
+
+  "// 客观信息层": "",
+  "name": "string",
+  "title": "string",
+  "department": "string",
+  "reportsTo": "string",
+  "roleType": "economic_decision_maker / technical_evaluator / user / coach_supporter / procurement_finance",
+  "decisionAuthority": "最终批准 / 技术否决 / 预算否决 / 使用推荐 / 无",
+
+  "background": {
+    "education": "string",
+    "pastCompanies": ["string"],
+    "projectExperience": "string",
+    "personality": "技术理想主义 / 激进 / 稳健 / 细节导向 / 宏观导向",
+    "communicationPreference": "邮件 / 微信 / 面谈 / 技术文档",
+    "internalAllies": ["string"],
+    "internalOpponents": ["string"],
+    "externalRelations": ["string"]
+  },
+
+  "historyWithUs": {
+    "pastProjects": ["string"],
+    "contactRecords": ["string"],
+    "satisfaction": "未接触 / 一般 / 满意 / 不满意"
+  },
+  "historyWithCompetitors": {
+    "pastVendors": ["string"],
+    "notes": "string"
+  },
+
+  "// 主观信息层": "",
+  "currentStance": "supportive / leaning_support / neutral / leaning_against / against / unknown",
+  "stanceEvidenceIds": ["uuid"],
+
+  "explicitKpi": ["string"],
+  "implicitMotivation": ["string"],
+
+  "attitudeToUs": {"view": "string", "confidence": "高 / 中 / 低"},
+  "attitudeToCompetitors": {"view": "string", "confidence": "高 / 中 / 低"},
+
+  "supportScore": {
+    "engagement": {"score": 4, "basis": "string"},
+    "influence": {"score": 4, "basis": "string"},
+    "supportiveness": {"score": 3, "basis": "string"},
+    "composite": 4,
+    "level": "Champion / 倾向我方 / 中立 / 反对",
+    "scoredBy": "ai / manual",
+    "scoredAt": "ts"
+  },
+
+  "coreConcerns": ["string"],
+  "influenceLever": "string",
+
+  "// 行为分析": "",
+  "behaviorLog": [
+    {
+      "observedAt": "date",
+      "behavior": "string",
+      "interpretation": "string",
+      "suggestedAction": "string",
+      "source": "wf09 / manual"
+    }
+  ],
+
+  "// 态度变化历史": "",
+  "stanceChangeLog": [
+    {
+      "from": "string",
+      "to": "string",
+      "changedAt": "ts",
+      "reason": "string"
+    }
+  ],
+
+  "// 关联": "",
+  "linkedL3Ids": ["uuid"],
+  "linkedVisitRecordIds": ["uuid"],
+
+  "// 评审": "",
+  "reviewStatus": "draft / pending_review / reviewed / rejected",
+  "reviewedBy": "uid or null",
+  "reviewedAt": "ts or null",
+  "rejectionReason": "string or null",
+
+  "sourceType": "拜访纪要 / 资料 / 公开信息 / 用户手动",
+  "confidenceLevel": "高 / 中 / 低",
+  "generatedByAI": true,
+
+  "createdBy": "uid",
+  "createdAt": "ts",
+  "updatedAt": "ts",
+
+  "customerVisible": false,
+  "sensitivityLevel": "internal"
+}
+```
+
+### 5.11 WorkflowRun
+
+```json
+{
+  "runId": "auto",
+  "workflowCode": "MVP-WF02 / MVP-WF06 / MVP-WF07 / MVP-WF09 / MVP-WF10 / MVP-WF12",
+  "projectId": "uuid",
+  "customerId": "uuid",
+  "triggeredBy": "user / system",
+  "triggerCommandId": "uuid or null",
+  "intentLogId": "uuid or null",
+  "inputSnapshot": {},
+  "outputSnapshot": {},
+  "status": "running / paused / cancelled / failed / succeeded",
+  "terminationReason": "string or null",
+  "failureReason": "string or null",
+  "failureRetryCount": 0,
+  "createdAt": "ts",
+  "startedAt": "ts",
+  "completedAt": "ts or null"
+}
+```
+
+### 5.12 审计表
+
+**IntentRoutingLog**：意图路由全链路决策日志（WF01 每次必入）
+
+**SimpleReviewLog**：评审操作日志。targetObjectType 枚举：hypothesis_node / current_node / stakeholder_card / ai_solution / knowledge_candidate / evidence
+
+**IntentTriggerConfig**：触发词配置表。支持热加载，用户可在管理页面增删改触发词。
+
+---
+
+## 六、知识资产库（P5 八 Tab）
+
+| #    | Tab      | 数据对象                                                     | 来源                        | 审核             |
+| ---- | -------- | ------------------------------------------------------------ | --------------------------- | ---------------- |
+| 1    | 方案库   | AISolution                                                   | WF06 + 手动                 | P1               |
+| 2    | 资料库   | Material                                                     | WF02 + WF07搜索             | P1（分类确认）   |
+| 3    | 会议纪要 | VisitRecord                                                  | WF09 + P6手动 + Chat        | 无需审核         |
+| 4    | 证据库   | EvidenceSource                                               | WF09                        | P1               |
+| 5    | 话术库   | TalkScript（关联StakeholderCard）                            | WF12                        | P1               |
+| 6    | 知识库   | AISolution（isKnowledgeCandidate=true）                      | Chat标记(直接进) + 复盘沉淀 | Chat标记跳过审核 |
+| 7    | 偏差池   | BusinessMapObject（verificationStatus=推翻/reviewStatus=rejected） | WF10 + 驳回                 | P1               |
+| 8    | 方法论库 | K-MVP03 术层+器层（只读）                                    | seed 数据                   | 研发管理         |
+
+---
+
+## 七、核心机制
+
+### 7.1 候选区（Pending Area）统一规则
+
+1. 所有 WF AI 产出先进候选区（pending）
+2. 用户在 P1 确认：采纳 / 驳回 / Chat 调整后再确认
+3. 采纳 → 自动迁移到正式区，对应页面可见
+4. 驳回 → 进对应偏差池/驳回池，不删除
+5. Chat 调整 → 循环直到采纳或驳回
+
+### 7.2 Chat 调整机制
+
+所有 WF 产出在"采纳"之前，支持通过自然语言继续对话调整：
+
+```
+WF 产出 → P1 展示候选结果
+    ↓
+用户不满意 → 在输入框自然语言描述修改需求
+    ↓
+AI 基于原文 + 用户指令重新生成 → 展示 diff 对比
+    ↓
+用户确认 → 更新候选 → 再次问"是否采纳？"
+    ↓
+可多次循环 → 直到采纳或驳回
+```
+
+对所有 6 个 WF 均适用。
+
+### 7.3 WF07 版本管理与审核
+
+- 每次提交保留快照版本（含 Owner 提交和 Deputy 提交）
+- 副手提交 → Owner 审核通过 → 发布到 P3（标记 published）
+- Owner 提交 → 采纳后直接发布到 P3
+- Owner 审核时可对比多个版本
+
+### 7.4 搜索公开信息
+
+- WF07 每次执行实时搜索（确保信息最新）
+- 搜索结果存入 Material（materialType=public_info）
+- 同一项目内已搜关键词不重复搜（增量搜索）
+
+### 7.5 防线 1 + 防线 2（保留不变）
+
+- 防线 1：道层 System Prompt 注入（`skills/dao_layer.md` 全文，不可覆盖）
+- 防线 2：PostOutputFilter（100% 确定性指纹匹配，不依赖 LLM）
+
+### 7.6 方法论三层使用模式（保留不变）
+
+| 模式           | 适用层 | 说明                               |
+| -------------- | ------ | ---------------------------------- |
+| 注入（Inject） | 道层   | 永远在 System Prompt 里，不可 RAG  |
+| 结构化读取     | 法层   | 全量读取，不走 RAG（缺片段就错乱） |
+| RAG 检索       | 器层   | 参考资料性质，Top-K 召回           |
+
+---
+
+## 八、用户故事
+
+### 8.1 WF02 · 资料上传与归档
+
+**故事 1：首次上传客户资料**
+
+> 我是顾问，刚拿到客户发来的 3 份文件（公司介绍 PDF、组织架构 Excel、去年年报 PDF）。我把它们拖进 P1 输入区，系统自动解析内容、分类归档。AI 告诉我其中 2 份分类置信度高（公司介绍→行业资料，年报→财报），1 份置信度低（组织架构 Excel 被标记为"待分类"）。我把"待分类"那份手动改为"系统清单"，确认后全部资料出现在 P5 资料库。
+
+**故事 2：WF03 缺口提醒**
+
+> 上传完资料后，我点"生成假设地图"，系统自动跑 WF03 检查。AI 回复说："当前资料覆盖度约 45%，缺少行业价值链信息、关键系统信息。建议：① 搜索'中海油 勘探 开发 生产 价值链'；② 去现场了解信息化部门的系统清单。"我决定先去现场，先不生成假设地图。
+
+#### 执行拆解：WF02 资料上传与归档
+
+```
+触发
+  └── 用户拖入/上传文件（PDF/DOCX/Excel/文本）到 P1
+        ↓
+[Step 1] 文件接收与解析
+  ├── 验证文件格式（仅支持 PDF/DOCX/Excel/文本）
+  ├── 按格式调用不同 parser 提取文本（parsedContent）
+  ├── 生成文件摘要（summary）—— 短文本，非 LLM 生成
+  └── 创建 Material 对象：
+      ├── fileName / fileType / fileSize / filePath
+      ├── uploadedBy / uploadedAt
+      ├── reviewStatus = "draft"
+      └── sourceType = "用户上传"
+        ↓
+[Step 2] LLM 调用：资料分类（deepseek-v4-flash，simple task）
+  ├── System Prompt：道层 + WF02 PromptTemplate
+  │   + 法层 RULE-ENUM-MATERIALTYPE-V1（7 种资料类型定义）
+  ├── User Prompt：文件摘要 + parsedContent 前 2000 字
+  ├── 结构化输出（JSON mode）：
+  │   {
+  │     "materialType": "财报 / 访谈纪要 / 系统清单 / 流程图 / 行业资料 / 内部模板 / 公开信息 / 待分类",
+  │     "classificationConfidence": "高 / 中 / 低",
+  │     "targetKnowledgeBase": "K-MVP01 / K-MVP03器层 / 待分类暂存区",
+  │     "extractedEntities": [
+  │       {"type": "person", "value": "王主任", "context": "..."},
+  │       {"type": "system", "value": "OA系统", "context": "..."}
+  │     ],
+  │     "coverageContribution": {
+  │       "industry": 0.1,    // 对行业维度的覆盖增量
+  │       "value_chain": 0.3, // 对价值链维度的覆盖增量
+  │       "key_roles": 0.2,   // 对关键角色维度的覆盖增量
+  │       "systems": 0.4      // 对系统维度的覆盖增量
+  │     },
+  │     "potentialUnlocks": ["PendingIntentId1", "PendingIntentId5"]
+  │   }
+  └── classificationConfidence = "低" 时 → targetKnowledgeBase 默认"待分类暂存区"
+        ↓
+[Step 3] 更新 Material + 展示分类结果
+  ├── 更新 Material：
+  │   ├── materialType / classificationConfidence / targetKnowledgeBase
+  │   ├── extractedEntities / coverageContribution / potentialUnlocks
+  │   └── reviewStatus → "pending_review"（仅分类结果需要确认）
+  ├── P1 展示分类结果：
+  │   ├── 高/中置信度 → 绿色/黄色标签，用户可一键确认
+  │   └── 低置信度 → 红色标签，提供下拉框让用户手动选择分类
+  └── 资料内容本身不需要审核——用户上传的东西不"驳回"
+        ↓
+[Step 4] 用户确认分类
+  ├── 用户确认 AI 分类 → reviewStatus = "reviewed" → 进 P5 Tab 2 资料库
+  ├── 用户修改分类 → 更新 materialType → reviewStatus = "reviewed"
+  └── 触发 new_material_uploaded 事件（供后续 Reevaluator 扩展用，当前无消费者）
+        ↓
+[Step 5] 文件路由推荐（若资料类型为"访谈纪要"）
+  ├── materialType = "访谈纪要" + classificationConfidence ≥ "中"
+  └── → P1 弹出 FileWorkflowRecommendationCard：「检测到访谈纪要，是否立即整理？」
+      └── 用户点击 → 触发 WF09
+```
+
+---
+
+### 8.2 WF06 · 拜访前方案生成
+
+**故事 3：拜访准备**
+
+> 我下周要去中海油拜访王主任，但我还没做假设地图（想先去了解一下再画地图）。我点"生成拜访前方案"，AI 基于已有资料生成了一份拜访方案：拜访目标是了解公文流转现状和信创需求，附带了通用访谈问题（关注流程、痛点、系统）。我看了觉得问题清单少了信创相关的问题，在 Chat 里说"加 3 个信创相关的问题"，AI 补充后我采纳入库。方案出现在 P5 方案库。
+
+#### 执行拆解：WF06 拜访前方案生成
+
+```
+触发
+  └── P1 chip「生成拜访前方案」或意图识别命中 visit_plan
+        ↓
+[Step 0] WF03 自动前置检查
+  ├── 同 WF07 Step 0，扫描资料覆盖度
+  └── 覆盖度不足时在结果中附加缺口提醒，不阻断
+        ↓
+[Step 1] 收集输入上下文
+  ├── 当前项目 Customer/Project 基础信息
+  ├── 已上传的资料摘要列表（Material.summary）
+  ├── 已生成的假设地图摘要（如有 L1/L2/L3 节点，提供业务背景）
+  ├── 已有的拜访记录（VisitRecord）→ 了解历史拜访情况
+  └── 用户输入的额外信息（拜访目的、想关注的方向等）
+        ↓
+[Step 2] LLM 调用：生成拜访前方案
+  ├── System Prompt：道层 + WF06 PromptTemplate
+  │   + 术层 TOOL-STRATEGY-PENETRATION（价值穿透画布）
+  ├── User Prompt：Step 1 收集的上下文
+  ├── Model：deepseek-v4-pro（complex task，需要策略推理）
+  ├── enable_thinking：true
+  ├── 结构化输出（JSON mode）：
+  │   {
+  │     "visitObjective": "了解公文流转现状，确认信创迁移可行性与时间窗口",
+  │     "communicationPoints": [
+  │       "当前公文审批流程的完整链路（从起草到归档）",
+  │       "OA 系统使用频率及与纸质流程的关系",
+  │       "信创迁移的时间压力与技术顾虑"
+  │     ],
+  │     "interviewQuestions": [
+  │       {
+  │         "question": "贵公司公文审批从起草到归档大概经过几个环节？",
+  │         "category": "流程确认",
+  │         "expectedInfo": "了解审批链路的完整性与瓶颈"
+  │       }
+  │     ],
+  │     "materialChecklist": [
+  │       "公文系统操作手册（如有）",
+  │       "信息化建设规划文档"
+  │     ]
+  │   }
+  └── 返回 reasoning_content → 展示"AI 为什么建议这些沟通要点"
+        ↓
+[Step 3] P1 展示方案 + 用户操作
+  ├── 展示拜访目标 + 沟通要点 + 通用访谈问题 + 资料清单
+  ├── 可 Chat 调整（如"加 3 个信创相关的问题"）→ 回到 Step 2
+  ├── 采纳 → AISolution 写入 K-MVP02 pending → reviewed → P5 Tab 1 方案库
+  └── 驳回 → 不进正式库
+        ↓
+[Step 4] 关联已生成的验证问题
+  ├── 若项目已有 WF07 Step 5 的验证问题 → 自动合并展示
+  └── P1 上展示为"完整访谈提纲"（通用问题 + L3 验证问题），用户现场使用
+```
+
+---
+
+### 8.3 WF07 · 假设地图生成
+
+**故事 4：完整生成假设地图**
+
+> 我是项目 Owner，准备为中石油项目生成假设地图。我点"生成假设地图"，系统自动搜索公开信息（企查查、官网、搜索），Step 1 先出 L1 价值链（勘探→开发→生产→运输→销售），我看了觉得合理，点采纳。Step 2 出 L2 域：业务域（勘探域、开发域...）挂在对应 L1 下，职能域（HR、财务）和共性技术域（AI平台、安全）在独立区域展示。我调整了"开发域"的子场景，点采纳。Step 3 出 L3 细分场景，每个场景有 AI 机会分析。Step 4 出 L4 人才地图（基于公开信息，当前覆盖率标"待验证"）。Step 5 自动生成验证问题清单。全部确认后，完整假设地图发布到 P3。
+
+**故事 5：Chat 调整假设地图**
+
+> L3 里"公文审批"场景的业务流程少了一步"领导签发"，我在 Chat 里说"公文审批的流程加一步领导签发，放在套红之后、用印之前"。AI 重新生成了该 L3 节点，展示 diff（新增了第 5 步"领导签发"），我确认后更新候选。
+
+**故事 6：副手提交审核**
+
+> 我是副手，跑 WF07 生成了假设地图，自己审了一遍觉得没问题，点采纳。系统提示"已提交，等待项目主手审核"。Owner 在 P1 顶部看到"待审核的假设地图（1 份）"，点进去看了 L1→L4 完整地图，觉得 L2 少了一个"物资管理域"，驳回并附修改意见。我在 P1 看到驳回通知，Chat 里说"加一个 L2 物资管理域"，AI 重新生成，我再次提交。Owner 审核通过，假设地图发布到 P3。
+
+#### 执行拆解：WF07 假设地图分步生成
+
+```
+触发（两种入口）
+  ├── 上传文件 → WF02 分类为「访谈纪要」→ 自动触发 WF09
+  └── 粘贴纪要文本 → 意图识别命中 interview_summary → 触发 WF09
+        ↓
+[Step 1] 输入预处理
+  ├── 文件上传路径：
+  │   ├── WF02 已完成文件解析（parsedContent）
+  │   ├── 获取 Material.parsedContent 作为输入文本
+  │   └── 获取 Material.materialId 作为来源引用
+  └── 文本粘贴路径：
+      ├── 用户粘贴的原始文本作为输入
+      └── 自动创建 Material（materialType=访谈纪要，sourceType=用户上传）
+          → 存入 K-MVP01 pending
+        ↓
+[Step 2] 自动创建 VisitRecord
+  ├── visitDate：从文本中提取日期 or 当前日期
+  ├── visitType：「现场访谈」（默认）或根据内容推断
+  ├── rawContent：原始全文
+  ├── source：「wf09」
+  └── 写入 VisitRecord 表（不经过候选区审核——这是"发生了什么"的记录）
+        ↓
+[Step 3] LLM 调用：结构化抽取
+  ├── System Prompt：道层 + WF09 PromptTemplate + 法层 RULE-FIVE-DIM-V1
+  ├── User Prompt：原始纪要文本
+  ├── Model：deepseek-v4-flash（simple task，信息抽取不需要深度推理）
+  ├── 结构化输出（JSON mode）：
+  │   {
+  │     "evidences": [
+  │       {
+  │         "evidenceType": "客户原话 / 行为观察 / 角色态度信号 / 业务术语",
+  │         "originalText": "原文片段",
+  │         "speakerOrAuthor": "王主任",
+  │         "context": "上下文（前后两句）",
+  │         "evidenceStrength": "强 / 中 / 弱（基于表述明确程度判断）",
+  │         "timestamp": "原文中的时间 or null"
+  │       }
+  │     ],
+  │     "participants": [
+  │       {"name": "王主任", "role": "客户方", "stakeholderHint": "技术评估者"}
+  │     ],
+  │     "painPointSignals": ["痛点描述1", "痛点描述2"],
+  │     "processSignals": ["流程描述1"],
+  │     "systemSignals": ["系统相关描述"],
+  │     "newTerms": ["新业务术语"],
+  │     "meetingDate": "2026-06-17",
+  │     "summary": "50字以内的会议摘要"
+  │   }
+  └── 返回 reasoning_content（思维链）供前端展示
+        ↓
+[Step 4] 写入候选区
+  ├── 每条 EvidenceSource 对象 → K-MVP01 pending
+  │   ├── sourceMaterialId → VisitRecord.visitRecordId
+  │   ├── linkedObjectType → null（尚未关联到假设节点或角色卡）
+  │   └── reviewStatus → pending_review
+  ├── 更新 VisitRecord：
+  │   ├── summary → LLM 生成的摘要
+  │   ├── participants → LLM 识别的参与人（关联已有 StakeholderCard 若匹配）
+  │   └── linkedEvidenceIds → 本次产出的证据 ID 列表
+  └── 触发 new_evidence_added 事件（供后续扩展用，当前第一版无消费者）
+        ↓
+[Step 5] P1 展示候选结果 + 用户操作
+  ├── 在聊天区展示「拜访纪要整理结果」Markdown：
+  │   ├── 会议基本信息（日期/参与人/证据条数）
+  │   ├── 关键事实与原话（逐条，带 speaker + 强度）
+  │   ├── 业务痛点线索
+  │   ├── 角色线索
+  │   └── 需求/术语线索
+  ├── 用户在下方逐条审核证据：
+  │   ├── 可修改 originalText（纠正 AI 误识别）
+  │   ├── 可调整 evidenceStrength
+  │   ├── 可修改 evidenceType
+  │   └── 可删除误抽取的条目
+  ├── 用户可 Chat 调整（如"把第3条的speaker改成李总"）
+  ├── 采纳 → reviewStatus = reviewed → 证据进 P5 Tab 4 证据库
+  └── 驳回 → reviewStatus = rejected → 不进正式库
+        ↓
+[Step 6] P6 后续操作（用户手动触发，非自动）
+  ├── P6 拜访记录详情页显示本次 VisitRecord + 已确认证据列表
+  ├── 手动按钮：「基于本次纪要验证假设」→ 触发 WF10
+  └── 手动按钮：「基于本次纪要生成/更新角色卡」→ 触发 WF12
+```
+
+### 8.4 WF09 · 拜访纪要结构化
+
+**故事 7：上传纪要文件**
+
+> 拜访完王主任，我拿到会议纪要 word 文件。拖进 P1，系统自动识别为访谈纪要，跑 WF09 解析。AI 输出了：① 3 条客户原话（带 speaker+时间戳）；② 2 个业务痛点；③ 发现了"纸电并行"这个新业务术语；④ 识别到王主任的态度偏支持。我逐条审核证据，纠正了一条 AI 误判的角色态度（王主任对某个话题其实是担忧而不是支持），然后采纳入库。
+
+**故事 8：直接粘贴纪要**
+
+> 我没带纪要文件，但记得关键内容。在 P1 粘贴"今天见了李总，他说目前系统最大的问题是数据不互通，财务和业务数据对不上"。意图识别命中 interview_summary → 触发 WF09 → AI 抽取：客户原话、痛点"数据孤岛"、角色态度"对现状不满"。我确认后入库。P6 自动创建了一条拜访记录。
+
+**故事 9：Chat 一句话记录**
+
+> 我在 P1 Chat Mode 随口说"今天跟孙工聊了几句，他对我们的运维方案挺感兴趣的"。系统自动创建了一条一句话 VisitRecord。后续我可以在 P6 补充详情。
+
+#### 执行拆解：WF09 拜访纪要结构化
+
+```
+触发（两种入口）
+  ├── 上传文件 → WF02 分类为「访谈纪要」→ P1 弹出推荐卡片 → 用户确认触发 WF09
+  └── 粘贴纪要文本 → 意图识别命中 interview_summary → 触发 WF09
+        ↓
+[Step 1] 输入预处理
+  ├── 文件上传路径：
+  │   ├── WF02 已完成文件解析（parsedContent）
+  │   ├── 获取 Material.parsedContent 作为输入文本
+  │   └── 获取 Material.materialId 作为来源引用
+  └── 文本粘贴路径：
+      ├── 用户粘贴的原始文本作为输入
+      └── 自动创建 Material（materialType=访谈纪要，sourceType=用户上传）
+          → 存入 K-MVP01 pending
+        ↓
+[Step 2] 自动创建 VisitRecord
+  ├── visitDate：从文本中提取日期 or 当前日期
+  ├── visitType：「现场访谈」（默认）或根据内容推断
+  ├── rawContent：原始全文
+  ├── source：「wf09」
+  └── 写入 VisitRecord 表（不经过候选区审核——这是"发生了什么"的记录）
+        ↓
+[Step 3] LLM 调用：结构化抽取
+  ├── System Prompt：道层 + WF09 PromptTemplate + 法层 RULE-FIVE-DIM-V1
+  ├── User Prompt：原始纪要文本
+  ├── Model：deepseek-v4-flash（simple task，信息抽取不需要深度推理）
+  ├── 结构化输出（JSON mode）：
+  │   {
+  │     "evidences": [
+  │       {
+  │         "evidenceType": "客户原话 / 行为观察 / 角色态度信号 / 业务术语",
+  │         "originalText": "原文片段",
+  │         "speakerOrAuthor": "王主任",
+  │         "context": "上下文（前后两句）",
+  │         "evidenceStrength": "强 / 中 / 弱（基于表述明确程度判断）",
+  │         "timestamp": "原文中的时间 or null"
+  │       }
+  │     ],
+  │     "participants": [
+  │       {"name": "王主任", "role": "客户方", "stakeholderHint": "技术评估者"}
+  │     ],
+  │     "painPointSignals": ["痛点描述1", "痛点描述2"],
+  │     "processSignals": ["流程描述1"],
+  │     "systemSignals": ["系统相关描述"],
+  │     "newTerms": ["新业务术语"],
+  │     "meetingDate": "2026-06-17",
+  │     "summary": "50字以内的会议摘要"
+  │   }
+  └── 返回 reasoning_content（思维链）供前端展示
+        ↓
+[Step 4] 写入候选区
+  ├── 每条 EvidenceSource 对象 → K-MVP01 pending
+  │   ├── sourceMaterialId → VisitRecord.visitRecordId
+  │   ├── linkedObjectType → null（尚未关联到假设节点或角色卡）
+  │   └── reviewStatus → pending_review
+  ├── 更新 VisitRecord：
+  │   ├── summary → LLM 生成的摘要
+  │   ├── participants → LLM 识别的参与人（关联已有 StakeholderCard 若匹配）
+  │   └── linkedEvidenceIds → 本次产出的证据 ID 列表
+  └── 原始纪要自动存 Material（materialType=访谈纪要），P5 Tab 2 资料库可见
+        ↓
+[Step 5] P1 展示候选结果 + 用户操作
+  ├── 在聊天区展示「拜访纪要整理结果」Markdown：
+  │   ├── 会议基本信息（日期/参与人/证据条数）
+  │   ├── 关键事实与原话（逐条，带 speaker + 强度）
+  │   ├── 业务痛点线索
+  │   ├── 角色线索
+  │   └── 需求/术语线索
+  ├── 用户在下方逐条审核证据：
+  │   ├── 可修改 originalText（纠正 AI 误识别）
+  │   ├── 可调整 evidenceStrength
+  │   ├── 可修改 evidenceType
+  │   └── 可删除误抽取的条目
+  ├── 用户可 Chat 调整（如"把第3条的speaker改成李总"）
+  ├── 采纳 → reviewStatus = reviewed → 证据进 P5 Tab 4 证据库
+  └── 驳回 → reviewStatus = rejected → 不进正式库
+        ↓
+[Step 6] P6 后续操作（用户手动触发，非自动）
+  ├── P6 拜访记录详情页显示本次 VisitRecord + 已确认证据列表
+  ├── 手动按钮：「基于本次纪要验证假设」→ 触发 WF10
+  └── 手动按钮：「基于本次纪要生成/更新角色卡」→ 触发 WF12
+```
+
+---
+
+### 8.5 WF10 · 假设验证与现状更新
+
+**故事 10：逐条验证 L3 节点**
+
+> 回到办公室，我对照拜访纪要开始验证假设地图。我点"验证假设 & 更新现状"，系统匹配到 3 个 L3 节点有相关证据。AI 逐条展示对比：
+>
+> - 假设"公文审批需纸质签字"→ 证据"王主任说现在就是打印出来签"→ 建议状态：成立
+> - 假设"档案管理有电子归档"→ 证据"王主任说归档还是纸质存档为主"→ 建议状态：推翻
+> - 假设"OA系统已实现移动审批"→ 证据不足 → 建议状态：待补充
+>
+> 我确认了前两条，第三条标记"待补充"留到下次拜访。确认后，已验证节点写入现状地图（P3 Tab 2），推翻的节点自动进 P5 偏差池。
+
+**故事 11：直接粘贴证据验证**
+
+> 我不想一个个选节点。P1 输入"我们见到了财务总监赵总，他说预算控制在 500 万以内，分两期投入"。意图识别命中 current_map_verify → 触发 WF10。AI 自动匹配到 L3 节点"预算审批"和角色"赵总"，出对比结果。我确认后现状地图同步更新。
+
+#### 执行拆解：WF10 假设验证与现状更新
+
+```
+触发（两种入口）
+  ├── 显式：用户在 P3 点击某个 L3 假设节点，选「验证」
+  └── 隐式：用户在 P1 输入/上传材料 → 意图识别命中 current_map_verify
+        ↓
+[Step 0] 前置检查
+  ├── 查询项目是否有 hypothesis 节点（mapType=hypothesis, level=L3）
+  ├── 若无 → 提示"请先生成假设地图（WF07）"，中断
+  └── 若有 → 继续
+        ↓
+[Step 1] 收集输入
+  ├── 用户指定的 L3 节点 ID（显式触发时）
+  ├── 用户输入的文本 / 上传的材料（隐式触发时）
+  └── 若无指定节点 → 获取全部未验证 L3 hypothesis 节点
+        ↓
+[Step 2] LLM 调用：证据匹配
+  ├── System Prompt：道层 + WF10 PromptTemplate + 法层 RULE-ENUM-VERIFICATION-V1
+  ├── User Prompt：用户输入文本 + 待验证 L3 节点列表 + 已有 EvidenceSource
+  ├── Model：deepseek-v4-pro（complex task，需要对比推理）
+  ├── enable_thinking：true（展示"AI 为什么认为匹配"）
+  ├── 输出结构：
+  │   [
+  │     {
+  │       "hypothesisNodeId": "MAP-L3-005",
+  │       "hypothesisSummary": "公文审批需纸质签字",
+  │       "matchedEvidenceText": "王主任说现在就是打印出来签",
+  │       "matchedEvidenceSource": "EVD-001（0617_王主任访谈纪要）",
+  │       "suggestedStatus": "成立 / 部分成立 / 推翻 / 待补充",
+  │       "confidence": "高 / 中 / 低",
+  │       "reasoning": "证据明确确认假设内容，无歧义"
+  │     }
+  │   ]
+  └── 无法匹配的节点状态标记为"待补充"
+        ↓
+[Step 3] P1 展示对比结果
+  ├── 逐条展示：假设 vs 证据 vs 建议状态
+  ├── 每条附带：置信度 + 推理依据（来自 thinking trace）
+  ├── 用户逐条确认：成立/部分成立/推翻/待补充（可覆盖 AI 建议）
+  └── 用户可 Chat 调整（如"这条证据不够强，改待补充"）
+        ↓
+[Step 4] 写入现状地图（用户确认后）
+  ├── 对于每个确认的 L3 节点：
+  │   ├── 新建 BusinessMapObject 节点
+  │   │   ├── mapType = "current"
+  │   │   ├── level = "L3"
+  │   │   ├── parentId = 同 L2 的 parentId
+  │   │   ├── linkedHypothesisId = 原假设节点 ID
+  │   │   ├── verificationStatus = 用户确认的状态
+  │   │   ├── payload = 基于假设 payload + 验证证据更新
+  │   │   └── evidenceIds = 匹配到的证据 ID 列表
+  │   └── 原假设节点（hypothesis）保持不变，不修改
+  ├── verificationStatus = "推翻" 的节点 → 自动标记进偏差池（P5 Tab 7）
+  └── 写入 K-MVP04 pending → 用户在 P1 确认 → reviewed → P3 现状地图 Tab 可见
+        ↓
+[Step 5] 关联 L1/L2 现状节点（级联生成）
+  ├── 若某个 L2 下的 L3 节点全部验证完成 → 提示可生成 L2 现状节点
+  ├── 若某个 L1 下的 L2 节点全部验证完成 → 提示可生成 L1 现状节点
+  └── 级联生成时同样走候选区 + P1 确认
+```
+
+---
+
+### 8.6 WF12 · 营销地图
+
+**故事 12：生成角色卡**
+
+> 拜访后我在 P6 点"基于本次纪要生成角色卡"。AI 基于已采纳的证据生成王主任的角色卡：客观信息（教育背景/过往公司/沟通偏好从公开信息+推断得出）+ 主观信息（态度倾向支持、支持度评分 7 分）+ 行为分析（本次拜访中主动询问细节、做笔记→判断有真实兴趣→建议提供技术白皮书）。我检查后采纳，角色卡出现在 P4 营销地图。
+
+**故事 13：更新已有角色卡**
+
+> 第二次拜访王主任，他的态度从"倾向支持"变为"公开推动"。我跑 WF09 处理纪要 → 手动跑 WF12。系统检测到"王主任"已存在，提示"是否更新已有角色卡？"。我确认，AI 生成更新建议：态度从 leaning_support→supportive，新增一条 stanceChangeLog 记录。我采纳，角色卡更新，历史态度保留可查。
+
+**故事 14：角色消歧**
+
+> 第一次拜访纪要里提到"王强"，第二次是"王主任"。WF12 检测到这两个名字可能是同一人（同部门、相似上下文），生成 person_disambiguation 候选，展示"王强 vs 王主任，相似度 85%"，我确认是同一人，更新已有角色卡。
+
+#### 执行拆解：WF12 营销地图生成
+
+```
+触发（两种入口）
+  ├── P1 chip「营销地图（角色卡）」或意图识别命中 stakeholder_card
+  └── P6 手动点击「基于本次纪要生成/更新角色卡」
+        ↓
+[Step 1] 收集输入上下文
+  ├── 从 K-MVP01 获取已采纳的 EvidenceSource（按 projectId 过滤）
+  ├── 从公开信息 Material 获取行业/公司背景
+  └── 从已有 StakeholderCard 获取已存在角色列表（用于去重）
+        ↓
+[Step 2] LLM 调用：角色识别与去重
+  ├── System Prompt：道层 + WF12 PromptTemplate
+  ├── User Prompt：证据列表 + 已有角色列表
+  ├── Model：deepseek-v4-pro（complex task，需要深度推理）
+  ├── enable_thinking：true
+  ├── 输出：识别到的角色列表 + 与已有角色的匹配度
+  └── 若检测到疑似重复 → 生成 person_disambiguation 候选
+        ↓
+[Step 3] 人物消歧（若有）
+  ├── 在 P1 展示消歧候选："王强 vs 王主任，相似度 85%"
+  ├── 用户选择：更新已有 / 新建独立 / 不是同一人 / 跳过
+  └── 消歧结果确定后进入 Step 4
+        ↓
+[Step 4] LLM 调用：分层生成角色卡
+  ├── 客观信息层
+  │   ├── 基础信息（姓名/职位/部门/汇报对象/角色类型/决策权类型）
+  │   ├── 个人背景（教育/过往公司/项目经验/性格/沟通偏好/人际关系）
+  │   └── 历史合作（与我方历史/与竞品历史）
+  ├── 主观信息层
+  │   ├── 立场 + 利益诉求（显性KPI + 隐性个人诉求）
+  │   ├── 态度细节（对我方看法 + 对竞品看法）
+  │   ├── 支持程度三维度量化评分（AI 自动打分，1-10 分）
+  │   ├── 核心顾虑 + 影响杠杆
+  │   └── 态度变化历史（若为更新已有角色）
+  ├── 行为分析矩阵
+  │   └── 观察行为 → AI 解读 → 建议下一步动作
+  └── 话术生成
+      └── 按五类角色 × 多场景生成沟通话术（提取客户原话 → 对应话术）
+        ↓
+[Step 5] 数据来源标注
+  ├── 每个字段标注 sourceType（拜访纪要/资料/公开信息/用户手动/模型推断）
+  ├── 关联 evidenceIds（可溯源到 EvidenceSource）
+  └── 无法确定的字段标注"待验证"
+        ↓
+[Step 6] 写入候选区
+  ├── StakeholderCard 对象数组 → K-MVP05 pending
+  ├── 话术对象 → 关联 StakeholderCard，待确认后进 P5 Tab 5 话术库
+  └── reviewStatus = pending_review
+        ↓
+[Step 7] P1 展示候选结果 + 用户操作
+  ├── 展示完整角色卡（客观+主观+行为分析+话术）
+  ├── 用户可 Chat 调整（如"把王主任的性格改为务实型"）→ 回到 Step 4
+  ├── 采纳 → reviewStatus = reviewed → P4 营销地图可见 + 话术进 P5
+  └── 驳回 → reviewStatus = rejected → 不进正式库
+```
+
+---
+
+### 8.7 跨工作流故事
+
+**故事 15：全闭环跑通**
+
+> 我从零开始一个新项目：注册登录 → 创建项目 → 拉同事做副手 → 上传客户资料 → 生成假设地图（副手提交，我审核通过发布）→ 生成拜访前方案 → 去客户现场 → 回填拜访纪要 → 验证假设更新现状 → 生成角色卡 → 在 P3 对比"假设 vs 现状"→ Chat Mode 复盘 → 标记有价值经验进 P5 知识库。完整的"假设→验证→现状→角色→复盘"闭环跑通。
+
+---
+
+## 九、方法论文档引用
+
+### 9.1 必读设计文档
+
+| 文档                                                         | 用途                           |
+| ------------------------------------------------------------ | ------------------------------ |
+| `docs/01-current/L1公司级价值链地图设计文档V1.2.docx`        | L1 字段要素与规范              |
+| `docs/01-current/L2业务域_职能域_共性技术域地图设计文档.docx` | L2 字段要素与规范              |
+| `docs/01-current/L3细分场景地图设计文档.docx`                | L3 字段要素与规范              |
+| `docs/01-current/L4人才地图设计文档（完整版）.docx`          | L4 字段要素与规范              |
+| `docs/01-current/营销地图设计文档（完整版 V2.0）.docx`       | 营销地图完整字段与五视图       |
+| `docs/04-techdoc/BUSINESS_MAP_L1_L4_FIELD_CONTRACT.md`       | L1-L4 字段契约（唯一字段真源） |
+
+### 9.2 Seed 数据
+
+| 文件                              | 内容                                |
+| --------------------------------- | ----------------------------------- |
+| `skills/dao_layer.md`             | 道层 System Prompt 注入文本         |
+| `seed/methodology_rule.json`      | 法层 13 条 MethodologyRule          |
+| `seed/tool_template.json`         | 术层 7 张画布 JSON Schema           |
+| `seed/prompt_templates.json`      | 器层 11 个 PromptTemplate（需更新） |
+| `seed/intent_trigger_config.json` | 触发词配置（需更新）                |
+
+### 9.3 与 V3.1 的关键变化
+
+| V3.1                       | V1.0（本文档）           | 原因                                  |
+| -------------------------- | ------------------------ | ------------------------------------- |
+| WF04 外部信息半自动获取    | 合并进 WF03              | 后续 MCP 搜索 Tool 直接调用           |
+| WF05 客户初步分析          | 砍掉                     | 被 WF07 Step 1 覆盖；痛点前置是坏实践 |
+| WF08 待验证问题            | 合并进 WF07 Step 5       | 逻辑上就是 WF07 尾部延伸              |
+| WF10a/WF10b 分开           | 合并为 WF10              | 同一交互循环的两段                    |
+| WF11 假设偏差沉淀          | 合并为 WF10 数据规则     | 不需要独立 WF                         |
+| WF12 轻量版角色卡          | WF12 营销地图完整版      | 营销地图 V2.0 完整版                  |
+| 12 个 WF                   | 6 个独立 WF              | 精简                                  |
+| ChainOrchestrator 自动编排 | 无自动编排规则           | 全部改为用户手动触发                  |
+| Gatekeeper + PendingIntent | WF10 内联前置检查        | 第一版不需要独立机制                  |
+| L1→L2→L3                   | L1→L2→L3→L4              | L4 进第一版                           |
+| 单一用户                   | Owner + Deputy 协作      | 支持多角色协作                        |
+| 无版本管理                 | WF07 版本快照 + 审核流程 | 副手提交需 Owner 审核                 |
+
+---
+
+## 十、LLM 技术能力
+
+本章定义 AI 顾问作战台底层 LLM 的三项技术能力需求。当前项目基于 DeepSeek API（OpenAI 兼容 SDK），已配置 `deepseek-v4-pro`（复杂任务）/ `deepseek-v4-flash`（简单任务）双档路由。
+
+### 10.1 能力总览
+
+| #    | 能力                   | 当前状态                                                    | 优先级 | 说明                                           |
+| ---- | ---------------------- | ----------------------------------------------------------- | ------ | ---------------------------------------------- |
+| 1    | 深度思考               | ⚠️ 代码有 `enable_thinking` 参数但未实际使用                 | P0     | DeepSeek V4 Pro 支持 thinking 模式，返回思维链 |
+| 2    | 公开信息搜索           | ⚠️ `web_research/` 管线已就绪，WF07 的 `NoopProvider` 未替换 | P0     | WF07 生成假设地图时必须搜索公开信息            |
+| 3    | MCP / Function Calling | ❌ 完全未实现                                                | P1     | LLM 主动调用外部工具（搜索/企查查/官网抓取）   |
+
+### 10.2 深度思考（Deep Thinking）
+
+#### 10.2.1 需求描述
+
+用户在 P1 与 AI 交互时，AI 应展示其推理过程（思维链 / Chain of Thought），类似 DeepSeek 官网的"深度思考"模式。用户可以看到 AI 是如何一步步得出结论的，增强可信度和可调试性。
+
+#### 10.2.2 适用场景
+
+- 所有 WF 执行过程（WF02/06/07/09/10/12）
+- Chat Mode 复杂问答
+- WF07 假设地图生成（最需要——用户需要理解 AI 为什么把某个环节放在 L1 价值链的某个位置）
+
+#### 10.2.3 技术方案
+
+**后端改动（`wrapper.py`）**：
+
+1. `call()` 和 `chat()` 方法启用 `extra_body = {"thinking": True}`
+2. 提取 DeepSeek 返回的 `reasoning_content` 字段（思维链文本）
+3. 返回值从纯文本改为包含 `reasoning` 的结构：
+
+```python
+# 当前返回值
+return text  # str
+
+# 改造后返回值
+return {
+    "text": "最终回答...",
+    "reasoning": "我先分析...然后判断...最后得出结论...",  # 可为 null
+    "usage": {...}
+}
+```
+
+4. `reasoning_content` 是 DeepSeek thinking 模式的原生返回字段，不需要额外处理——直接透传给前端
+
+**前端改动（P1 ChatStream）**：
+
+1. 在 AI 消息气泡上方渲染"思考过程"折叠面板
+2. 面板样式：灰色背景、左侧带竖线标记、默认折叠、点击展开
+3. 展开后显示完整思维链文本（Markdown 渲染）
+4. 参考效果：DeepSeek 官网 Chat 界面的思考过程展示
+
+**注意**：思维链内容**不经过** PostOutputFilter（防线 2）。思维链是 AI 的"内部推理"，不需要过滤 never_visible 内容——因为思维链本身不应该被当作"给用户看的内容"，且过滤会破坏推理连贯性。
+
+### 10.3 公开信息搜索（Web Search）
+
+#### 10.3.1 需求描述
+
+WF07 生成假设地图时，必须基于公开信息搜索（企查查工商信息、官网内容、搜索引擎结果）填充 L1-L4 节点，而非仅依赖 AI 模型内部知识。搜索结果作为 EvidenceItem 存入 Material（materialType=public_info），确保来源可追溯。
+
+#### 10.3.2 适用场景
+
+| 场景                     | 搜索内容                              | 用途                             |
+| ------------------------ | ------------------------------------- | -------------------------------- |
+| WF07 Step 1（L1 价值链） | 公司全称 + 主营业务/业务板块/组织架构 | 推断 L1 价值链环节               |
+| WF07 Step 2（L2 域）     | 公司 + 信息化/数字化/IT系统           | 推断 L2 业务域/职能域/共性技术域 |
+| WF07 Step 3（L3 场景）   | 行业 + 业务流程/痛点                  | 推断 L3 细分场景                 |
+| WF07 Step 4（L4 人才）   | 公司 + 招聘/岗位/人才需求             | 推断 L4 人才能力需求             |
+| WF03 信息缺口识别        | 缺口维度关键词                        | 补充缺失信息                     |
+
+#### 10.3.3 技术方案
+
+项目已有完整的 `web_research/` 管线（`backend/app/web_research/`），当前状态：
+
+```
+已就绪：
+  ✅ Planner（LLM 分解搜索查询）
+  ✅ Search Providers（Tavily / Firecrawl / Bing）
+  ✅ Fetch Providers（网页抓取）
+  ✅ Orchestrator（搜索+抓取+合成）
+  ✅ .env.local 已配置 Firecrawl API Key
+
+未完成：
+  ❌ company_intelligence/providers.py 的 NoopProvider 未替换
+  ❌ WF07 未调用 web_research 管线
+```
+
+**改动**：
+
+1. 在 `company_intelligence/providers.py` 中实现 `WebSearchProvider`，直接复用 `web_research/orchestrator.py`：
+
+```python
+class WebSearchProvider(BaseProvider):
+    """公开信息搜索 provider —— 复用 web_research 管线。"""
+    name = "web_search"
+
+    async def search(self, session, *, company_name, project_id, user_input):
+        from app.web_research.orchestrator import WebResearchOrchestrator
+        orchestrator = WebResearchOrchestrator(session)
+        result = await orchestrator.research(
+            question=f"{company_name} 公司 主营业务 组织架构 信息化 数字化",
+            max_snippets=10,
+        )
+        return ProviderResult(
+            evidence=[
+                EvidenceItem(
+                    source_type="web_search",
+                    title=item.title,
+                    snippet=item.snippet,
+                    url=item.url,
+                    confidence="medium",
+                )
+                for item in result.items
+            ]
+        )
+```
+
+2. WF07 调用 `WebSearchProvider.search()` 获取公开证据，填入 `companyContext.publicEvidence`
+3. 搜索结果同时存入 Material（materialType=public_info），P5 Tab 2 资料库可见
+4. 同一项目内去重：已搜过的（公司名 + 关键词）组合不重复搜索
+
+**搜索源优先级**：
+
+1. 官网（公司官网内容权威性最高）
+2. 企查查/天眼查（工商信息）——后续封装 MCP Tool 接入
+3. 搜索引擎（Bing/Firecrawl/Tavily）——通用补充
+
+### 10.4 MCP / Function Calling
+
+#### 10.4.1 需求描述
+
+LLM 应能主动调用外部工具（搜索、企查查查询、官网抓取），而非所有外部数据都由系统在 LLM 调用前准备好。Function Calling 让 LLM 自己判断"什么时候需要查什么"，提高信息获取的灵活性和准确性。
+
+#### 10.4.2 适用场景
+
+| 场景                                    | LLM 判断         | 调用 Tool                 | 返回结果                    |
+| --------------------------------------- | ---------------- | ------------------------- | --------------------------- |
+| WF07 用户说"帮我查一下中石油的工商信息" | 需要查询工商信息 | `search_company_registry` | 企查查/天眼查返回的工商数据 |
+| WF03 发现缺口后                         | 需要搜索补缺     | `search_web`              | 搜索引擎结果                |
+| WF07 用户给了一个官网 URL               | 需要抓取网页内容 | `fetch_webpage`           | 网页正文 Markdown           |
+| WF12 用户说"查一下王主任的背景"         | 需要搜索人物信息 | `search_person`           | 公开人物信息                |
+
+#### 10.4.3 技术方案
+
+**方案选择**：使用 DeepSeek 原生支持的 OpenAI 兼容 **Function Calling**（而非 Anthropic MCP 协议）。理由：
+
+- DeepSeek API 原生支持 OpenAI function calling 格式
+- 不需要架设 MCP Server 桥接层
+- 项目已在用 OpenAI SDK，改造成本最低
+
+**后端改动**：
+
+1. `wrapper.py` 新增 `call_with_tools()` 方法：
+
+```python
+async def call_with_tools(
+    self,
+    task_id: str,
+    messages: list[dict],
+    tools: list[dict],  # OpenAI function definitions
+    session: AsyncSession | None = None,
+) -> dict:
+    """支持 function calling 的 LLM 调用。"""
+    # 1. 首次调用：LLM 返回 tool_calls 或直接回答
+    resp = await self.client.chat.completions.create(
+        model=model,
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+    )
+    msg = resp.choices[0].message
+    
+    # 2. 如果 LLM 要求调用 tool
+    if msg.tool_calls:
+        # 执行 tool → 收集结果 → 回传
+        tool_results = []
+        for tc in msg.tool_calls:
+            result = await self._execute_tool(tc.function.name, tc.function.arguments)
+            tool_results.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps(result, ensure_ascii=False),
+            })
+        
+        # 3. 第二次调用：LLM 基于 tool 结果生成最终回答
+        messages.extend(tool_results)
+        resp2 = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+        )
+        return {"text": resp2.choices[0].message.content, "tool_calls": msg.tool_calls}
+    
+    return {"text": msg.content, "tool_calls": None}
+```
+
+2. 定义首批 tools（`backend/app/llm/tools.py`）：
+
+```python
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "搜索公开信息，返回相关网页片段",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词"},
+                    "max_results": {"type": "integer", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_company_registry",
+            "description": "查询企业工商信息（企查查/天眼查）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "company_name": {"type": "string", "description": "企业全称"},
+                },
+                "required": ["company_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_webpage",
+            "description": "抓取指定 URL 的网页内容并转为 Markdown",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "网页 URL"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+]
+```
+
+3. Tool 执行器：复用已有的 `web_research/` 管线实现 `search_web` 和 `fetch_webpage`。`search_company_registry` 后续接企查查/天眼查 API。
+
+**为什么 MCP 后置**：
+
+- Function Calling 满足所有当前需求，且 DeepSeek 原生支持
+- MCP 协议的优势在于跨模型/跨工具的标准化——但第一版只有一个模型（DeepSeek），标准化收益不大
+- 等 tools 数量增长到 5+ 并且需要跨项目复用时，再迁移到 MCP Server 架构
+
+### 10.5 实施优先级
+
+| 步骤       | 内容                      | 依赖                        | 改动范围                           |
+| ---------- | ------------------------- | --------------------------- | ---------------------------------- |
+| **Step 1** | 深度思考                  | 无                          | `wrapper.py` + P1 ChatStream       |
+| **Step 2** | WF07 接 Web Search        | 无（web_research 管线已有） | `providers.py` + WF07 service      |
+| **Step 3** | Function Calling 基础框架 | Step 1, Step 2              | `wrapper.py` 新增方法 + `tools.py` |
+| **Step 4** | 企查查/天眼查 MCP Tool    | Step 3                      | 新增 API 对接                      |
+
+Step 1 和 Step 2 无依赖关系，可并行实施。Step 3 依赖前两步的经验来设计 tool 定义。Step 4 在 Function Calling 框架就绪后接入。
+
+---
+
+> 本文档基于 2026-07-03 全面访谈产出，替代 MVP 工作方案 V3.1 作为开发真源。所有 V3.1 中的非本文档内容以本文档为准。

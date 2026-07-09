@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, JSON, String, func
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,7 +15,20 @@ class User(Base):
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
 
-    # 企业微信认证相关字段
+    # 手机号（唯一，用于手机号+密码登录）
+    phone: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+
+    # 用户状态：pending_approval=待审批 / active=正常 / disabled=禁用
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="active"
+    )
+
+    # 注册来源：self_register=自助注册 / admin_create=管理员创建
+    registration_source: Mapped[str] = mapped_column(
+        String, nullable=False, default="admin_create"
+    )
+
+    # DEPRECATED: 企微认证相关字段，保留以备未来扩展
     wechat_user_id: Mapped[str | None] = mapped_column(
         String, unique=True, nullable=True
     )

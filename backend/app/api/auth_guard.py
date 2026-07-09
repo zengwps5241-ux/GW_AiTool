@@ -14,6 +14,9 @@ from app.models import User
 _PUBLIC_API_PATHS = {
     "/api/health",
     "/api/auth/logout",
+    "/api/auth/register",
+    "/api/auth/login",
+    # DEPRECATED: 企微认证路径，保留以备未来扩展
     "/api/auth/wechat-work/config",
     "/api/auth/wechat-work/authorize",
     "/api/auth/wechat-work/qrcode-config",

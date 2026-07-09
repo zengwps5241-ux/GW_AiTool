@@ -3,6 +3,9 @@
 export interface UserMe {
   id: number | null;
   username: string;
+  phone?: string | null;
+  status?: string;
+  registration_source?: string;
   wechat_user_id?: string | null;
   display_name: string | null;
   avatar_url: string | null;
@@ -228,7 +231,12 @@ export type ViewName =
   | "skills"
   | "feedback"
   | "usage"
-  | "loginWhitelist";
+  | "loginWhitelist"
+  | "businessMap"
+  | "marketingMap"
+  | "visitRecords"
+  | "organization"
+  | "userApproval";
 
 export interface UsageOverview {
   call_count: number;

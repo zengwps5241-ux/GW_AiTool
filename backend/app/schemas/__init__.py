@@ -1,4 +1,10 @@
-from app.schemas.auth import UserOut
+from app.schemas.auth import (
+    UserOut,
+    RegisterRequest,
+    LoginRequest,
+    PendingUserOut,
+    ApproveRequest,
+)
 from app.schemas.agents import AgentCommandOut, AgentOut, CreateAgentRequest, UpdateAgentRequest
 from app.schemas.conversion_tasks import ConversionRetryIn, ConversionTaskOut
 from app.schemas.feedback import (
@@ -50,6 +56,10 @@ from app.schemas.workspace_tasks import WorkspaceTaskOut
 
 __all__ = [
     "UserOut",
+    "RegisterRequest",
+    "LoginRequest",
+    "PendingUserOut",
+    "ApproveRequest",
     "AgentOut",
     "AgentCommandOut",
     "CreateAgentRequest",

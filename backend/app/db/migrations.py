@@ -133,6 +133,21 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN role VARCHAR NOT NULL DEFAULT 'user'"
             ))
 
+        # 自建认证体系新增字段
+        for col, col_type in [
+            ("phone", "VARCHAR UNIQUE NULL"),
+            ("status", "VARCHAR NOT NULL DEFAULT 'active'"),
+            ("registration_source", "VARCHAR NOT NULL DEFAULT 'admin_create'"),
+        ]:
+            result = await conn.execute(text(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                f"WHERE table_name='users' AND column_name='{col}'"
+            ))
+            if result.scalar() == 0:
+                await conn.execute(text(
+                    f"ALTER TABLE users ADD COLUMN {col} {col_type}"
+                ))
+
         # departments 表
         result = await conn.execute(text(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='departments'"

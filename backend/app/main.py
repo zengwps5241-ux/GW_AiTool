@@ -19,11 +19,11 @@ async def _lifespan(_: FastAPI):
     # 为 DB 中所有 Agent 兜底初始化工作目录(缺则补)
     from app.modules.agents.workdir import ensure_all_agent_workdirs
     await ensure_all_agent_workdirs()
-    # 同步企微部门数据
-    from app.db.session import async_session
-    from app.modules.auth.departments import sync_departments
-    async with async_session() as db:
-        await sync_departments(db)
+    # DEPRECATED: 企微部门同步已停用，切换为自建组织架构
+    # from app.db.session import async_session
+    # from app.modules.auth.departments import sync_departments
+    # async with async_session() as db:
+    #     await sync_departments(db)
     from app.modules.conversions.service import (
         enqueue_pending_conversion_tasks,
         start_conversion_task_dispatcher,
