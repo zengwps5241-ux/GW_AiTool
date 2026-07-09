@@ -12,6 +12,12 @@ from app.models.customer import Customer
 from app.models.department import Department
 from app.models.feedback import FeedbackAttachment, FeedbackIssue
 from app.models.login_whitelist import LoginWhitelistDepartment, LoginWhitelistUser
+from app.models.marketing_map import (
+    KnowledgeBase,
+    StakeholderCard,
+    StakeholderRelation,
+    TalkScript,
+)
 from app.models.organization import Organization, UserOrganization
 from app.models.project import Project, ProjectDepartmentAccess, ProjectMember
 from app.models.session import ChatSession
@@ -33,6 +39,7 @@ __all__ = [
     "Department",
     "FeedbackAttachment",
     "FeedbackIssue",
+    "KnowledgeBase",
     "LoginWhitelistDepartment",
     "LoginWhitelistUser",
     "Organization",
@@ -41,6 +48,9 @@ __all__ = [
     "Project",
     "ProjectDepartmentAccess",
     "ProjectMember",
+    "StakeholderCard",
+    "StakeholderRelation",
+    "TalkScript",
     "SkillBinding",
     "TeamSpace",
     "TeamSpaceMember",

@@ -12,6 +12,7 @@ from app.api.routes import (
     conversion_tasks,
     customers,
     feedback,
+    marketing_map,
     model_settings,
     organizations,
     projects,
@@ -46,3 +47,4 @@ router.include_router(organizations.router)
 router.include_router(customers.router)
 router.include_router(projects.router)
 router.include_router(business_map.router)
+router.include_router(marketing_map.router)

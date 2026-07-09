@@ -94,4 +94,22 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_business_map_api.py（11 全过：对象CRUD+筛选 / 前置分析 / 草稿采纳Owner+Deputy / 版本回滚 / 五维健康 / 项目隔离+admin越权）。全量 **499 passed / 20 failed / 2 skipped / 3 errors**，相比 M1.3 基线（488 passed）passed +11（恰好新增），**fail 集未扩大**（20 fail+3 err 全为既有环境问题）。
 
+### M2.2 营销地图数据 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M2.2.1 StakeholderCard 模型 | ✅ | 2026-07-09 | stakeholder_cards（客观层/主观层/behaviors/stanceChangeLog JSONB，决策#21） |
+| M2.2.2 StakeholderRelation 模型 | ✅ | 2026-07-09 | stakeholder_relations（reports_to/influences/collaborates/opposes，决策#22） |
+| M2.2.3 TalkScript 模型 | ✅ | 2026-07-09 | talk_scripts（五类角色×场景，isTemplate 通用模板） |
+| M2.2.4 KnowledgeBase 模型 | ✅ | 2026-07-09 | knowledge_base（项目级，决策#24；三类 category） |
+| M2.2.5 StakeholderCard CRUD API | ✅ | 2026-07-09 | 全套 + department/role_type/stance(JSONB) 筛选 + 综合评分自动计算 |
+| M2.2.6 StakeholderRelation CRUD API | ✅ | 2026-07-09 | CRUD + 防自环 + 关系网络图 /graph（nodes+edges） |
+| M2.2.7 TalkScript CRUD API | ✅ | 2026-07-09 | 全套 + role_type/scenario 筛选 |
+| M2.2.8 KnowledgeBase CRUD API | ✅ | 2026-07-09 | 全套 + category 筛选 |
+| M2.2.9 态度变化自动记录 | ✅ | 2026-07-09 | record_stance_change 服务函数 + 手动 API（M2.3 证据联动复用，决策#23） |
+
+**回归测试**：test_marketing_map_api.py（12 全过：角色卡+综合评分+筛选 / 态度变化 / 关系+图 / 话术+模板 / 知识库 / 项目隔离+admin越权）。全量 **511 passed / 20 failed / 2 skipped / 3 errors**，相比 M2.1 基线（499 passed）passed +12（恰好新增），**fail 集未扩大**。
+
+
+
 
