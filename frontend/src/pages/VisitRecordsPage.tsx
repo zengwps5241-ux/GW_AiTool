@@ -38,6 +38,17 @@ const strengthColor = (s: string): string =>
 
 const STRENGTHS = ["强", "中", "弱"] as const;
 
+/** 证据类型枚举（§2.5 / §7.5） */
+const EVIDENCE_TYPES = ["客户原话", "行为观察", "角色态度信号", "业务术语"] as const;
+
+/** 证据类型 → 展示标签（带图标） */
+const evidenceTypeLabel: Record<string, string> = {
+  客户原话: "💬 客户原话",
+  行为观察: "👁️ 行为观察",
+  角色态度信号: "🎯 态度信号",
+  业务术语: "📖 业务术语",
+};
+
 interface Props {
   /** 全局选中项目（Topbar ProjectSelector 驱动） */
   project: Project | null;
@@ -51,6 +62,9 @@ export default function VisitRecordsPage({ project }: Props) {
   const [evidences, setEvidences] = useState<EvidenceSource[]>([]);
   const [cards, setCards] = useState<StakeholderCard[]>([]);
   const [expandedVisitId, setExpandedVisitId] = useState<number | null>(null);
+  const [filterType, setFilterType] = useState<string>("全部");
+  const [filterStrength, setFilterStrength] = useState<string>("全部");
+  const [filterRole, setFilterRole] = useState<string>("全部");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,9 +104,12 @@ export default function VisitRecordsPage({ project }: Props) {
     refresh();
   }, [refresh]);
 
-  // 切换项目时收起展开的拜访卡
+  // 切换项目时收起展开的拜访卡 + 重置筛选
   useEffect(() => {
     setExpandedVisitId(null);
+    setFilterType("全部");
+    setFilterStrength("全部");
+    setFilterRole("全部");
   }, [projectId]);
 
   // 角色 ID → 姓名映射（解析客户方参与人）
@@ -101,6 +118,38 @@ export default function VisitRecordsPage({ project }: Props) {
     cards.forEach((c) => m.set(c.id, c.name));
     return m;
   }, [cards]);
+
+  // 拜访 ID → 日期（证据结果列表展示来源拜访日期）
+  const visitDateMap = useMemo(() => {
+    const m = new Map<number, string>();
+    visits.forEach((v) => {
+      if (v.visit_date) m.set(v.id, v.visit_date);
+    });
+    return m;
+  }, [visits]);
+
+  // 证据筛选：涉及角色候选（来自已确认证据的来源角色名）
+  const roleOptions = useMemo(
+    () =>
+      [
+        ...new Set(
+          evidences
+            .map((e) => e.source_role_name)
+            .filter((n): n is string => Boolean(n)),
+        ),
+      ] as string[],
+    [evidences],
+  );
+
+  // 筛选后的证据（类型 / 强度 / 角色）
+  const filteredEvidences = useMemo(
+    () =>
+      evidences
+        .filter((e) => filterType === "全部" || e.evidence_type === filterType)
+        .filter((e) => filterStrength === "全部" || e.strength === filterStrength)
+        .filter((e) => filterRole === "全部" || e.source_role_name === filterRole),
+    [evidences, filterType, filterStrength, filterRole],
+  );
 
   // 派生：统计栏 + 证据强度分布
   const stats = useMemo(() => {
@@ -213,23 +262,103 @@ export default function VisitRecordsPage({ project }: Props) {
           )}
         </div>
 
-        {/* 右：证据概览面板（M4.3.3 将升级为完整筛选面板） */}
-        <Card style={{ width: 320, padding: 20, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 0 }}>
+        {/* 右：证据筛选面板 */}
+        <Card style={{ width: 320, padding: 20, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 0, maxHeight: "calc(100vh - 140px)", overflow: "auto" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 16 }}>
-            证据概览
+            证据筛选
           </div>
 
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: 28, fontWeight: 700, color: "var(--ink)" }}>{stats.totalEvidence}</span>
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>条已确认证据</span>
-          </div>
-
-          {/* 强度分布 */}
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
-              强度分布
+          {/* 类型筛选 */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={filterLabelStyle}>证据类型</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {(["全部", ...EVIDENCE_TYPES] as string[]).map((t) => (
+                <button key={t} onClick={() => setFilterType(t)} style={filterChipStyle(filterType === t)}>
+                  {t === "全部" ? "全部" : evidenceTypeLabel[t] ?? t}
+                </button>
+              ))}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
+          </div>
+
+          {/* 强度筛选 */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={filterLabelStyle}>证据强度</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["全部", ...STRENGTHS] as string[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilterStrength(s)}
+                  style={{
+                    ...filterChipStyle(filterStrength === s),
+                    color: filterStrength === s ? "var(--accent)" : s === "强" ? "var(--success)" : s === "中" ? "var(--warn)" : "var(--ink-2)",
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 角色筛选 */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={filterLabelStyle}>关联角色</div>
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              style={{
+                width: "100%", fontFamily: "inherit", fontSize: 12, background: "var(--surface)",
+                border: "1px solid var(--line)", borderRadius: 6, padding: "6px 10px", color: "var(--ink)",
+              }}
+            >
+              <option value="全部">全部角色</option>
+              {roleOptions.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 筛选结果 */}
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-2)", marginBottom: 10 }}>
+              筛选结果（{filteredEvidences.length}条）
+            </div>
+            {filteredEvidences.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--ink-3)", textAlign: "center", padding: 20 }}>
+                {evidences.length === 0 ? "暂无已确认证据" : "无匹配证据"}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {filteredEvidences.map((e) => {
+                  const vd = e.visit_record_id != null ? visitDateMap.get(e.visit_record_id) : null;
+                  return (
+                    <div key={e.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 11 }}>
+                      <div style={{ display: "flex", gap: 4, marginBottom: 4, flexWrap: "wrap" }}>
+                        {vd && (
+                          <span style={metaTagStyle({ bg: "var(--bg-3)", color: "var(--ink-3)" })}>{vd}</span>
+                        )}
+                        {e.source_role_name && (
+                          <span style={metaTagStyle({ bg: "var(--info-soft)", color: "var(--info)" })}>{e.source_role_name}</span>
+                        )}
+                        <span style={metaTagStyle({ bg: strengthColor(e.strength) + "18", color: strengthColor(e.strength), weight: 500 })}>
+                          {e.strength}
+                        </span>
+                      </div>
+                      <div style={{ lineHeight: 1.5, color: "var(--ink-2)" }}>
+                        {e.content.length > 80 ? e.content.slice(0, 80) + "…" : e.content}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 强度统计 */}
+          <div style={{ marginTop: 16, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
+              证据统计（共 {stats.totalEvidence} 条）
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
               {stats.strengthCounts.map(({ strength, count }) => (
                 <div key={strength} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
@@ -368,3 +497,29 @@ const retryBtnStyle: React.CSSProperties = {
   border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-2)",
   cursor: "pointer", fontFamily: "inherit",
 };
+
+const filterLabelStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 500, color: "var(--ink-3)", marginBottom: 5,
+};
+
+/** 筛选 chip 按钮：active 高亮（accent） */
+const filterChipStyle = (active: boolean): React.CSSProperties => ({
+  padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, fontFamily: "inherit",
+  border: active ? "1px solid var(--accent)" : "1px solid var(--line)",
+  background: active ? "var(--accent-soft)" : "transparent",
+  color: active ? "var(--accent)" : "var(--ink-2)",
+  cursor: "pointer", transition: "all 120ms",
+});
+
+/** 证据条目 meta 小标签 */
+const metaTagStyle = ({
+  bg,
+  color,
+  weight,
+}: {
+  bg: string;
+  color: string;
+  weight?: number;
+}): React.CSSProperties => ({
+  padding: "0 5px", borderRadius: 3, fontSize: 9, background: bg, color, fontWeight: weight,
+});
