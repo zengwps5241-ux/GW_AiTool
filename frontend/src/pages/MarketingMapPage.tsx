@@ -250,6 +250,14 @@ export default function MarketingMapPage({ project }: Props) {
             onSelect={setSelectedCardId}
             onChanged={refresh}
           />
+        ) : subView === "org" ? (
+          <OrgChartView
+            cards={cards}
+            onJump={(id) => {
+              setSelectedCardId(id);
+              setSubView("cards");
+            }}
+          />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -431,6 +439,128 @@ function ScoreRow({ card }: { card: StakeholderCard }) {
         <div style={{ fontSize: 10, color: "var(--accent)", marginTop: 2, fontWeight: 600 }}>综合评分</div>
       </div>
     </div>
+  );
+}
+
+// ─── 组织架构图视图（M4.2.2：树形 + 汇报关系 + 关键岗位） ──────
+// 层级由每张角色卡的 reports_to 文本字段推导（name 匹配父卡）；
+// 同名卡取首张为规范父卡；渲染时全局 visited 防环。
+// 关系网络图（M4.2.8）用 StakeholderRelation 四类边，与此处层级视图互补。
+
+function OrgChartView({
+  cards,
+  onJump,
+}: {
+  cards: StakeholderCard[];
+  onJump: (id: number) => void;
+}) {
+  if (cards.length === 0) {
+    return (
+      <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+        <I.Building size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>暂无角色卡</div>
+        <div>建立角色卡并填写「汇报对象」后，此处自动生成组织架构树。</div>
+      </Card>
+    );
+  }
+
+  // name → 规范父卡 id（同名取首张）
+  const nameToCardId = new Map<string, number>();
+  for (const c of cards) {
+    if (c.name && !nameToCardId.has(c.name)) nameToCardId.set(c.name, c.id);
+  }
+
+  // childrenMap：父卡 id → 子卡列表；roots：无父卡的卡
+  const childrenMap = new Map<number, StakeholderCard[]>();
+  const roots: StakeholderCard[] = [];
+  for (const c of cards) {
+    const parentName = c.reports_to?.trim();
+    const parentId = parentName ? nameToCardId.get(parentName) : undefined;
+    if (parentId != null && parentId !== c.id) {
+      const arr = childrenMap.get(parentId) ?? [];
+      arr.push(c);
+      childrenMap.set(parentId, arr);
+    } else {
+      roots.push(c);
+    }
+  }
+
+  // 根按汇报对象分组（同一上级标题聚合）
+  const groupKey = (c: StakeholderCard) => c.reports_to?.trim() || "（未标注汇报关系）";
+  const rootGroups = new Map<string, StakeholderCard[]>();
+  for (const r of roots) {
+    const key = groupKey(r);
+    const arr = rootGroups.get(key) ?? [];
+    arr.push(r);
+    rootGroups.set(key, arr);
+  }
+
+  const visited = new Set<number>();
+
+  const renderNode = (card: StakeholderCard, depth: number): React.ReactNode => {
+    if (visited.has(card.id)) return null;
+    visited.add(card.id);
+    const children = childrenMap.get(card.id) ?? [];
+    const rt = card.role_type;
+    const isKey = card.decision_power === "最终决策" || rt === "economic_decision_maker";
+    return (
+      <div key={card.id} style={{ marginBottom: 6 }}>
+        <button
+          onClick={() => onJump(card.id)}
+          style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+            width: "100%", textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+            background: isKey ? "var(--accent-soft)" : "var(--bg-2)",
+            border: `1px solid ${isKey ? "var(--accent)" : "var(--line)"}`,
+            borderRadius: depth === 0 ? 10 : 8, fontSize: 13,
+          }}
+        >
+          <div style={{
+            width: 30, height: 30, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 13, fontWeight: 700, color: "#FFFCF5",
+            background: rt ? ROLE_TYPE_COLOR[rt] : "var(--ink-3)", flexShrink: 0,
+          }}>
+            {card.name[0]}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {card.name}
+              {card.position && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--ink-3)", marginLeft: 6 }}>{card.position}</span>}
+            </div>
+            {card.department && <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{card.department}</div>}
+          </div>
+          {rt && <Tag tone="accent">{ROLE_TYPE_LABELS[rt]}</Tag>}
+          {card.decision_power && <Tag tone="info">{card.decision_power}</Tag>}
+          {isKey && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)" }}>★ 关键</span>}
+        </button>
+        {children.length > 0 && (
+          <div style={{ marginLeft: 18, marginTop: 4, paddingLeft: 16, borderLeft: "2px solid var(--line)" }}>
+            {children.map((ch) => renderNode(ch, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card style={{ padding: 20, overflow: "auto", maxWidth: 720 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)", marginBottom: 4 }}>组织架构图</div>
+      <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 16 }}>
+        按角色卡「汇报对象」自动构建汇报关系树；标 ★ 为关键岗位（最终决策 / 经济决策人）。点击节点跳转角色卡详情。
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {Array.from(rootGroups.entries()).map(([title, groupRoots]) => (
+          <div key={title}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+              {title === "（未标注汇报关系）" ? title : `汇报至：${title}`}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {groupRoots.map((r) => renderNode(r, 0))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
