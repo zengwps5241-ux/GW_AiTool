@@ -7,9 +7,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
+import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
 import type {
   BehaviorEntry,
+  KnowledgeBase,
+  KnowledgeCategory,
   Project,
   ProcurementStage,
   ProcurementStageStatus,
@@ -282,6 +285,8 @@ export default function MarketingMapPage({ project }: Props) {
           />
         ) : subView === "timeline" ? (
           <ProcurementTimelineView projectId={project.id} cards={cards} />
+        ) : subView === "knowledge" ? (
+          <KnowledgeBaseView projectId={project.id} />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -1450,6 +1455,262 @@ function ProcurementTimelineView({
   );
 }
 
+// ─── 知识库视图（M4.2.7：三板块 + CRUD + Markdown 富文本，§2.4 §5.2） ──
+// 三分类：角色识别速查 / 行为分析速查 / 新人培养流程（KnowledgeCategory）。
+// 跨客户通用方法论沉淀，项目内团队共享。内容支持 Markdown 渲染（复用 MarkdownView）。
+// 标准参考内容来自《营销地图设计文档V2.0》附录（.docx），由团队手动沉淀或后续后端种子导入。
+
+/** 知识库三板块分类元数据 */
+const KB_CATEGORIES: { key: KnowledgeCategory; label: string; icon: keyof typeof I; desc: string; hint: string }[] = [
+  {
+    key: "role_recognition",
+    label: "角色识别速查",
+    icon: "UserCheck",
+    desc: "五类角色的典型职位、核心关注、身体语言、话语特征、典型回应、识别信号",
+    hint: "建议为每类角色（经济决策人 / 技术评估人 / 终端用户 / 教练支持者 / 采购财务）各建一条，沉淀识别要点。",
+  },
+  {
+    key: "behavior_quick_ref",
+    label: "行为分析速查",
+    icon: "Activity",
+    desc: "常见观察行为 → 可能解读 → 建议下一步动作",
+    hint: "每条记录一个观察行为及其解读与建议动作，沉淀 8 条以上形成速查库。",
+  },
+  {
+    key: "onboarding_guide",
+    label: "新人培养流程",
+    icon: "Book",
+    desc: "理论学习 → 模拟演练 → 跟岗实践 → 独立拜访",
+    hint: "建议按四阶段各建一条：理论学习(1 周)、模拟演练(2 天)、跟岗实践(2 周)、独立拜访(持续)。",
+  },
+];
+
+function KnowledgeBaseView({ projectId }: { projectId: number }) {
+  const toast = useToast();
+  const [entries, setEntries] = useState<KnowledgeBase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editor, setEditor] = useState<{ category: KnowledgeCategory; entry: KnowledgeBase | null } | null>(null);
+  const [open, setOpen] = useState<Record<KnowledgeCategory, boolean>>({
+    role_recognition: true,
+    behavior_quick_ref: true,
+    onboarding_guide: true,
+  });
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setEntries(await api.listKnowledgeBase(projectId));
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "加载知识库失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const handleDelete = async (id: number, title: string) => {
+    if (!window.confirm(`确认删除「${title}」？`)) return;
+    try {
+      await api.deleteKnowledgeBase(projectId, id);
+      toast.showToast("已删除", "success");
+      refresh();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 960 }}>
+      {/* 顶部说明 */}
+      <Card style={{ padding: "14px 18px", fontSize: 12, color: "var(--ink-3)", lineHeight: 1.6 }}>
+        <b style={{ color: "var(--ink-2)" }}>📚 知识库</b> · 跨客户通用方法论沉淀（角色识别 / 行为速查 / 入职指南），
+        支持 Markdown 富文本，项目内团队共享。点击「+ 新增」沉淀经验，内容实时保存到该项目。
+      </Card>
+
+      {loading ? (
+        <Card style={{ padding: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
+          <Spinner size={16} /> 加载知识库…
+        </Card>
+      ) : (
+        KB_CATEGORIES.map((cat) => {
+          const Icon = I[cat.icon];
+          const list = entries.filter((e) => e.category === cat.key);
+          const isOpen = open[cat.key];
+          return (
+            <Card key={cat.key} style={{ padding: 0, overflow: "hidden" }}>
+              {/* 分类头（可折叠） */}
+              <div
+                onClick={() => setOpen((o) => ({ ...o, [cat.key]: !o[cat.key] }))}
+                style={kbCatHeaderStyle}
+              >
+                <I.ChevronDown size={14} style={{ transform: isOpen ? "none" : "rotate(-90deg)", transition: "transform 120ms", flexShrink: 0 }} />
+                <Icon size={15} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                <span style={{ fontWeight: 600, color: "var(--ink)", fontSize: 13 }}>{cat.label}</span>
+                <Tag tone="neutral">{list.length}</Tag>
+                <span style={kbCatDescStyle}>{cat.desc}</span>
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditor({ category: cat.key, entry: null });
+                  }}
+                  style={kbAddBtnStyle}
+                >
+                  <I.Plus size={13} /> 新增
+                </button>
+              </div>
+              {/* 分类内容 */}
+              {isOpen && (
+                <div style={{ padding: "6px 0" }}>
+                  {list.length === 0 ? (
+                    <div style={kbEmptyStyle}>
+                      <Icon size={26} style={{ color: "var(--ink-4)", marginBottom: 6 }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", marginBottom: 4 }}>暂无内容</div>
+                      <div style={{ maxWidth: 460, lineHeight: 1.7 }}>{cat.hint}</div>
+                    </div>
+                  ) : (
+                    list.map((e) => (
+                      <div key={e.id} style={kbEntryStyle}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", fontFamily: "var(--serif)" }}>{e.title}</span>
+                          <div style={{ flex: 1 }} />
+                          <button onClick={() => setEditor({ category: cat.key, entry: e })} style={iconBtnStyle} title="编辑">
+                            <I.Edit size={13} />
+                          </button>
+                          <button onClick={() => handleDelete(e.id, e.title)} style={iconBtnStyle} title="删除">
+                            <I.Trash size={13} />
+                          </button>
+                        </div>
+                        <MarkdownView text={e.content} />
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })
+      )}
+
+      {editor && (
+        <KBEntryEditor
+          projectId={projectId}
+          category={editor.category}
+          entry={editor.entry}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 知识库条目编辑器（新建/编辑，Markdown 编辑 + 预览切换） */
+function KBEntryEditor({
+  projectId,
+  category,
+  entry,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  category: KnowledgeCategory;
+  entry: KnowledgeBase | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const cat = KB_CATEGORIES.find((c) => c.key === category)!;
+  const [title, setTitle] = useState(entry?.title ?? "");
+  const [content, setContent] = useState(entry?.content ?? "");
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  const save = async () => {
+    if (!title.trim() || !content.trim()) {
+      toast.showToast("标题和内容不能为空", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (entry) {
+        await api.updateKnowledgeBase(projectId, entry.id, { title: title.trim(), content });
+      } else {
+        await api.createKnowledgeBase(projectId, { category, title: title.trim(), content });
+      }
+      toast.showToast(entry ? "已更新" : "已新增", "success");
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 640, maxHeight: "85vh", overflow: "auto" }}>
+        {/* 头部 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>
+            {entry ? "编辑条目" : "新增条目"}
+          </span>
+          <Tag tone="accent">{cat.label}</Tag>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle} title="关闭">✕</button>
+        </div>
+
+        {/* 标题 */}
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <span style={miniLabelStyle}>标题</span>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={`如：${category === "role_recognition" ? "经济决策人 识别要点" : category === "behavior_quick_ref" ? "提前准备详细问题清单" : "理论学习阶段"}`}
+            style={{ ...textareaStyle, height: "auto", padding: "7px 10px", fontWeight: 500 }}
+          />
+        </label>
+
+        {/* 内容（编辑 / 预览切换） */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={miniLabelStyle}>内容（支持 Markdown）</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setPreview((p) => !p)} style={linkBtnStyle}>
+            {preview ? "✎ 编辑" : "👁 预览"}
+          </button>
+        </div>
+        {preview ? (
+          <div style={{ ...textareaStyle, minHeight: 240, overflow: "auto" }}>
+            {content.trim() ? <MarkdownView text={content} /> : <span style={{ color: "var(--ink-4)" }}>（无内容）</span>}
+          </div>
+        ) : (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={"支持 Markdown：\n## 小标题\n- 要点一\n- 要点二\n\n**强调** 与 [链接](url)"}
+            rows={12}
+            style={{ ...textareaStyle, minHeight: 240 }}
+          />
+        )}
+
+        {/* 底部操作 */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={kbGhostBtnStyle}>取消</button>
+          <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 占位视图（后续 M4.2.x 替换） ──────────────────────────────
 
 const PLACEHOLDER_TASK: Record<SubView, { task: string; desc: string }> = {
@@ -1716,6 +1977,100 @@ const clamp2Style: React.CSSProperties = {
   WebkitLineClamp: 2,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
+};
+
+// ─── 知识库视图样式（M4.2.7）──────────────────────────────────
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.35)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1000,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--line)",
+  borderRadius: 12,
+  padding: 20,
+  boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+};
+
+/** 知识库分类头（可折叠 + 新增按钮） */
+const kbCatHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "12px 16px",
+  borderBottom: "1px solid var(--line)",
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+const kbCatDescStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--ink-4)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const kbAddBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 3,
+  padding: "4px 10px",
+  fontSize: 11,
+  fontWeight: 600,
+  border: "1px solid var(--accent)",
+  background: "var(--accent-soft)",
+  color: "var(--accent)",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  flexShrink: 0,
+};
+
+const kbEmptyStyle: React.CSSProperties = {
+  padding: "24px 20px",
+  textAlign: "center",
+  color: "var(--ink-3)",
+  fontSize: 12,
+};
+
+const kbEntryStyle: React.CSSProperties = {
+  padding: "14px 18px",
+  borderBottom: "1px solid var(--line)",
+};
+
+/** 图标按钮（编辑/删除/关闭） */
+const iconBtnStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 24,
+  height: 24,
+  borderRadius: 6,
+  color: "var(--ink-3)",
+  fontSize: 13,
+};
+
+/** 次要按钮（取消） */
+const kbGhostBtnStyle: React.CSSProperties = {
+  padding: "7px 16px",
+  fontSize: 12,
+  fontWeight: 600,
+  border: "1px solid var(--line)",
+  background: "transparent",
+  color: "var(--ink-2)",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 // ─── 采购时间线视图样式（M4.2.5）──────────────────────────────

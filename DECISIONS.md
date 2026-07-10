@@ -303,6 +303,15 @@
 - **为何 visit 单独按卡拉取而非父级一次拉全**：拜访记录是项目级大列表（可能数十条），且只在选中某卡时需要该卡子集。父级 MarketingMapPage 已拉 cards+scripts（角色卡/话术是营销地图核心、多视图共享）；拜访记录是 M4.3 拜访页的主场，营销地图只在角色卡右侧面板需要「本卡关联」子集 → 在 CardsView 内 useEffect[current.id] 按 card_id 拉取最经济，切换角色时 cancelled flag 防竞态。
 - **理由**：5 子 Tab 严格对齐 §5.2 四大子节 + 话术子 Tab 规格全字段；confidence 条件渲染兼容历史卡 null；右侧三项中拜访/话术用真实后端数据（M2.3/M2.2 已就绪），L3 诚实空态避免造假。与 #35/#36/#37 一致的工程范式（全局选择器 / snake_case+camelCase 分层 / 子任务独立提交 / 纯前端 tsc+build 校验）。可校验性：真机 GET stakeholder-cards（卡 id=1 客观全 7 字段 + 主观全字段 + 2 behaviors observation/interpretation/suggestedAction）+ visit-records?card_id=1（HTTP 200 [] 空态）+ talk-scripts（HTTP 200 [] 空态）全链路通；tsc -b 0 错 + vite build 72 模块过。纯前端无后端改动 → fail 集不涉及前端必然未扩大。
 
+## 决策 #39：M4.2.7 知识库视图 — 三板块 CRUD + Markdown 富文本，不臆造附录种子（§2.4 §5.2）
+
+- **背景**：M4.2.7「知识库视图 | 三板块（角色识别/行为速查/入职指南），支持丰富格式」。后端 KnowledgeBase（M2.2）= 项目级（project_id + category[role_recognition/behavior_quick_ref/onboarding_guide] + title + content[Text]），全套 CRUD 已就绪，**无种子逻辑**，dev 库为空。规格称内容「跨客户通用 / 团队共享资产 / 来源于《营销地图设计文档V2.0》附录」。抉择：① 标准参考内容怎么来——前端臆造种子 vs 后端种子 vs 团队手动；② 丰富格式用什么渲染。
+- **选择 A — 完整 CRUD + Markdown 富文本，不臆造附录种子**：KnowledgeBaseView 三分类可折叠 Card（角色识别速查/行为分析速查/新人培养流程），每分类列该 category 的条目（title + content 富文本），条目级编辑/删除，分类级「+ 新增」。编辑走 KBEntryEditor 弹窗（标题 input + 内容 textarea，**编辑/预览切换**），保存调 create/update。**为何不臆造种子**：规格明示内容来源于设计文档附录（.docx），而该附录**未解析入库**；角色识别 6 维度×5 类、行为速查 8 条+ 的具体内容只有附录里有，凭空撰写会是缺乏依据的杜撰（违反「不造假数据」原则，同 #38 L3 诚实空态）。故 M4.2.7 只交付承载载体（CRUD 视图），标准附录内容由团队手动沉淀或**后续后端种子任务**（仿 skills/plugins_seed 解析附录 md 入库）批量导入——决策记录此为后续工作。
+- **选择 B — 复用 MarkdownView 渲染富文本（非自造渲染器）**：「支持丰富格式」用既存 `components/workspace/MarkdownView`（marked 引擎，breaks:true，支持标题/列表/粗体/表格/代码）。basePath 省略时图片重写为 no-op，工作区无关内容正常渲染。`.md-content` CSS 全局已加载（WorkspacePreview 同源）。编辑器提供「✎ 编辑 / 👁 预览」切换，让用户即时看到 Markdown 渲染效果。**安全姿态**：marked 不做 HTML sanitize，但内容为项目成员（已认证内部用户）创作，与 WorkspacePreview 对工作区文件的危险等级一致，沿用既有 posture 不新增风险面。
+- **选择 C — 空态给规格化引导（非泛泛「暂无数据」）**：每分类空态显示「暂无内容」+ 该分类应含内容的规格提示（角色识别：为五类角色各建一条；行为速查：8 条以上；新人培养：四阶段各建一条，理论学习 1 周/模拟演练 2 天/跟岗实践 2 周/独立拜访）。提示文案直接来自 §2.4 规格，引导团队按方法论结构沉淀，弥补无种子的初始空白。
+- **为何 KnowledgeBase 是项目级而非全局共享**：规格说「跨客户通用」，但 M2.2 数据模型是 project_id 作用域（每项目独立 KB）。这是 M2.2 既定事实（决策#24），M4.2.7 前端如实映射——按项目渲染该项目 KB。真正的「跨客户通用共享」需后端改造（全局 KB 表 + 项目引用），超出本前端视图任务范围，记录为后续考量。
+- **理由**：CRUD + Markdown 是知识库的完整功能闭环（团队可即时沉淀方法论经验）；不臆造附录种子守住「不造假」底线（同 #38）；复用 MarkdownView 零新依赖；空态规格化引导对接方法论结构。与 #35-#38 一致的工程范式（全局选择器 / 子任务独立提交 / 纯前端 tsc+build）。可校验性：真机 KB CRUD 全链路（create HTTP 201 id=1 → update HTTP 200 title→v2 → list 回读 → delete HTTP 204 → list count=0）+ tsc -b 0 错 + vite build 过。（curl 中文+换行 body 在 Windows Git Bash 编码失败，纯 shell 测试假象，前端 fetch 用 UTF-8 不受影响，已用 ASCII body 验证全链路。）纯前端无后端改动 → fail 集不涉及前端必然未扩大。
+
 
 
 
