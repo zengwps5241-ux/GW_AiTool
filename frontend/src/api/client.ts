@@ -10,6 +10,7 @@ import type {
   ChatEvent,
   AdoptResult,
   ConversionTask,
+  EvidenceSource,
   Customer,
   CustomerInput,
   FeedbackIssueCreated,
@@ -938,6 +939,33 @@ export const api = {
       `/api/projects/${projectId}/business-map/objects/${objectId}/health`,
       { method: "PUT", body: JSON.stringify(fiveDimHealth) },
     ),
+
+  // ─── 拜访/证据（M2.3 / M4.1.10 关联证据）─────────────────────
+  listEvidence: (
+    projectId: number,
+    params?: {
+      visit_id?: number;
+      evidence_type?: string;
+      strength?: string;
+      source_role_id?: number;
+      related_hypothesis_id?: number;
+      review_status?: string;
+      include_drafts?: boolean;
+    },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.visit_id != null) qs.set("visit_id", String(params.visit_id));
+    if (params?.evidence_type) qs.set("evidence_type", params.evidence_type);
+    if (params?.strength) qs.set("strength", params.strength);
+    if (params?.source_role_id != null) qs.set("source_role_id", String(params.source_role_id));
+    if (params?.related_hypothesis_id != null) qs.set("related_hypothesis_id", String(params.related_hypothesis_id));
+    if (params?.review_status) qs.set("review_status", params.review_status);
+    if (params?.include_drafts) qs.set("include_drafts", "true");
+    const query = qs.toString();
+    return request<EvidenceSource[]>(
+      `/api/projects/${projectId}/evidence-sources${query ? "?" + query : ""}`,
+    );
+  },
 };
 
 /**

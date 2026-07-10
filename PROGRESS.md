@@ -340,6 +340,21 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 **设计要点**：snapshot_data 结构 = `{objects:[{level,name,map_type,verification_status,...}]}`（后端 _snapshot_reviewed_objects + 采纳/回滚均此结构，已确认）。回滚后端 require_project_owner（owner 或 admin），前端按 my_role 控制「回滚」按钮显隐，非授权角色右侧说明栏提示「无回滚权限」。回滚仅替换 reviewed 正式数据（§7.4），后端自动留存审计快照（可再回滚回来）。复用 M2.1.8 版本 API。
 **回归**：纯前端，tsc -b 0 错 + vite build 通过（1.65s）。
 
+### M4.1.10 关联证据展示（跳转拜访记录）✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| 证据列表展示 | ✅ | 2026-07-10 | NodeEvidenceSection：按 related_hypothesis_id 拉证据（listEvidence），展示类型/强度/内容/来源角色；现状节点取其 linked_hypothesis_id |
+| 跳转拜访记录 | ✅ | 2026-07-10 | 「查看拜访记录 →」→ onOpenVisitRecords → App setView("visitRecords") |
+
+**设计要点**：证据联动走后端 §7.5 `related_hypothesis_id`（证据为整数 ID，非规格 §5.2 的 uuid 字符串——以后端实现为准）；假设节点用 node.id 查，现状节点用 node.linked_hypothesis_id 查（其验证的假设的证据）。无关联假设的节点（如独立 L4）显示「无证据联动」提示。新增 types: EvidenceSource + api: listEvidence（visit/evidence 首次接线，供 M4.3 复用）。VisitRecordsPage 仍为原型（M4.3 待做），跳转先到位。
+**回归**：纯前端，tsc -b 0 错 + vite build 通过（1.48s）。
+
+### ✅ M4.1 业务地图页面 — 全部完成
+
+10 子任务全部交付（M4.1.1-5 合并为「骨架+树+假设/现状/偏差」一个提交，M4.1.6/7/8/9/10 各独立提交），BusinessMapPage 原型完整替换为消费真实后端 API 的页面：项目上下文栏 + 层级统计 + 6 子视图 Tab（假设/现状/偏差/前置分析/五维健康/版本管理）+ L1-L4 树形 + 层级差异化详情 + 节点 CRUD + 五维健康重算/覆盖 + 版本回滚 + 关联证据跳转。前端 tsc -b 0 错，vite build 全程通过。后端零改动（M2.1/M2.3 API 早已就绪）。
+
+
 
 
 

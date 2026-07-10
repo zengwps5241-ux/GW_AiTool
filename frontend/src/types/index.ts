@@ -806,3 +806,28 @@ export interface FiveDimHealthOut {
   five_dim_health: FiveDimHealth;
   source: "auto" | "manual" | string;
 }
+
+/** 证据源（M2.3 / §7.5 证据验证联动） */
+export interface EvidenceSource {
+  id: number;
+  project_id: number;
+  visit_record_id: number;
+  evidence_type: string; // 客户原话 / 行为观察 / 角色态度信号 / 业务术语
+  strength: string; // 强 / 中 / 弱
+  strength_note: string | null;
+  content: string;
+  source_role_id: number | null;
+  source_role_name: string | null;
+  related_hypothesis_id: number | null;
+  related_hypothesis_name: string | null;
+  implied_from_stance: string | null;
+  implied_to_stance: string | null;
+  review_status: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}

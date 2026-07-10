@@ -207,7 +207,12 @@ export default function App() {
   const renderPage = () => {
     // 业务地图页面（M4.1）：消费全局 selectedProject
     if (view === "businessMap")
-      return <BusinessMapPage project={selectedProject} />;
+      return (
+        <BusinessMapPage
+          project={selectedProject}
+          onOpenVisitRecords={() => setView("visitRecords")}
+        />
+      );
     if (view === "marketingMap") return <MarketingMapPage />;
     if (view === "visitRecords") return <VisitRecordsPage />;
 

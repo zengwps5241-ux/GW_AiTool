@@ -13,6 +13,7 @@ import type {
   BusinessMapPayload,
   BusinessMapType,
   BusinessMapVersion,
+  EvidenceSource,
   FiveDimHealth,
   PreAnalysis,
   PreAnalysisInput,
@@ -61,7 +62,7 @@ interface Props {
 
 // ─── 页面组件 ─────────────────────────────────────────────────
 
-export default function BusinessMapPage({ project }: Props) {
+export default function BusinessMapPage({ project, onOpenVisitRecords }: Props) {
   const toast = useToast();
   const [objects, setObjects] = useState<BusinessMapObject[]>([]);
   const [loading, setLoading] = useState(false);
@@ -450,6 +451,7 @@ export default function BusinessMapPage({ project }: Props) {
                   onJump={(id) => setSelectedId(id)}
                   onEdit={(node) => setNodeEdit({ mode: "edit", node })}
                   onDelete={(node) => setDeleteTarget(node)}
+                  onOpenVisitRecords={onOpenVisitRecords}
                 />
               ) : (
                 <div style={{ fontSize: 13, color: "var(--ink-3)", textAlign: "center", paddingTop: 40 }}>
@@ -1053,12 +1055,14 @@ function NodeDetail({
   onJump,
   onEdit,
   onDelete,
+  onOpenVisitRecords,
 }: {
   node: BusinessMapObject;
   allObjects: BusinessMapObject[];
   onJump: (id: number) => void;
   onEdit: (node: BusinessMapObject) => void;
   onDelete: (node: BusinessMapObject) => void;
+  onOpenVisitRecords?: () => void;
 }) {
   const p: BusinessMapPayload = node.payload ?? {};
   const color = LEVEL_COLOR[node.level] ?? "var(--ink-3)";
@@ -1166,6 +1170,97 @@ function NodeDetail({
           </div>
         )}
       </div>
+
+      {/* 关联证据（M4.1.10） */}
+      <NodeEvidenceSection
+        projectId={node.project_id}
+        hypothesisId={node.map_type === "current" ? node.linked_hypothesis_id : node.id}
+        onOpenVisitRecords={onOpenVisitRecords}
+      />
+    </div>
+  );
+}
+
+// ─── 关联证据（M4.1.10：节点详情内证据列表 + 跳转拜访记录） ────
+
+function NodeEvidenceSection({
+  projectId,
+  hypothesisId,
+  onOpenVisitRecords,
+}: {
+  projectId: number;
+  hypothesisId: number | null;
+  onOpenVisitRecords?: () => void;
+}) {
+  const [evidence, setEvidence] = useState<EvidenceSource[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (hypothesisId == null) {
+      setEvidence([]);
+      return;
+    }
+    let alive = true;
+    setLoading(true);
+    api
+      .listEvidence(projectId, { related_hypothesis_id: hypothesisId })
+      .then((list) => {
+        if (alive) setEvidence(list);
+      })
+      .catch(() => {
+        if (alive) setEvidence([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectId, hypothesisId]);
+
+  return (
+    <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>
+          🔗 关联证据（{evidence.length}）
+        </span>
+        {onOpenVisitRecords && (
+          <button onClick={onOpenVisitRecords} style={linkBtnStyle}>
+            查看拜访记录 →
+          </button>
+        )}
+      </div>
+      {hypothesisId == null ? (
+        <div style={{ fontSize: 11, color: "var(--ink-4)" }}>
+          该节点非假设节点且未关联假设，暂无证据联动。
+        </div>
+      ) : loading ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-3)", fontSize: 11 }}>
+          <Spinner size={12} /> 加载证据…
+        </div>
+      ) : evidence.length === 0 ? (
+        <div style={{ fontSize: 11, color: "var(--ink-4)" }}>
+          暂无关联证据。在拜访记录中新增证据并关联本假设节点（§7.5 证据验证联动）。
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {evidence.map((ev) => (
+            <div key={ev.id} style={{ padding: 10, background: "var(--bg-2)", borderRadius: 8, border: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                <Tag tone="neutral">{ev.evidence_type}</Tag>
+                <Tag tone={ev.strength === "强" ? "success" : ev.strength === "中" ? "warn" : "neutral"}>
+                  强度：{ev.strength}
+                </Tag>
+                {ev.source_role_name && <span style={{ fontSize: 10, color: "var(--ink-3)" }}>👤 {ev.source_role_name}</span>}
+                {ev.review_status !== "reviewed" && (
+                  <span style={{ fontSize: 10, color: "var(--warn)" }}>{ev.review_status}</span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-2)", lineHeight: 1.55 }}>{ev.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
