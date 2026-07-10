@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
 import { I } from "@/icons";
-import type { EvidenceSource, Project, VisitRecord } from "@/types";
+import type { EvidenceSource, Project, StakeholderCard, VisitRecord } from "@/types";
 
 // ─── 常量 ─────────────────────────────────────────────────────
 
@@ -49,6 +49,8 @@ export default function VisitRecordsPage({ project }: Props) {
   const toast = useToast();
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [evidences, setEvidences] = useState<EvidenceSource[]>([]);
+  const [cards, setCards] = useState<StakeholderCard[]>([]);
+  const [expandedVisitId, setExpandedVisitId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,18 +61,22 @@ export default function VisitRecordsPage({ project }: Props) {
     if (projectId == null) {
       setVisits([]);
       setEvidences([]);
+      setCards([]);
       setError(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const [v, e] = await Promise.all([
+      const [v, e, c] = await Promise.all([
         api.listVisitRecords(projectId, { review_status: "reviewed" }),
         api.listEvidence(projectId, { review_status: "reviewed" }),
+        // 角色卡用于把 participants_client 的角色 ID 解析为姓名（§2.5 参与人关联 StakeholderCard）
+        api.listStakeholderCards(projectId, { review_status: "reviewed" }),
       ]);
       setVisits(v);
       setEvidences(e);
+      setCards(c);
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : "加载拜访记录失败";
       setError(msg);
@@ -83,6 +89,18 @@ export default function VisitRecordsPage({ project }: Props) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // 切换项目时收起展开的拜访卡
+  useEffect(() => {
+    setExpandedVisitId(null);
+  }, [projectId]);
+
+  // 角色 ID → 姓名映射（解析客户方参与人）
+  const cardMap = useMemo(() => {
+    const m = new Map<number, string>();
+    cards.forEach((c) => m.set(c.id, c.name));
+    return m;
+  }, [cards]);
 
   // 派生：统计栏 + 证据强度分布
   const stats = useMemo(() => {
@@ -181,7 +199,17 @@ export default function VisitRecordsPage({ project }: Props) {
               </div>
             </Card>
           ) : (
-            sortedVisits.map((v) => <VisitRow key={v.id} visit={v} />)
+            sortedVisits.map((v) => (
+              <VisitRow
+                key={v.id}
+                visit={v}
+                cardMap={cardMap}
+                expanded={expandedVisitId === v.id}
+                onToggle={() =>
+                  setExpandedVisitId(expandedVisitId === v.id ? null : v.id)
+                }
+              />
+            ))
           )}
         </div>
 
@@ -225,15 +253,39 @@ export default function VisitRecordsPage({ project }: Props) {
   );
 }
 
-// ─── 拜访记录行（M4.3.1 基础卡，M4.3.2 升级完整字段 + 展开占位）─────
+// ─── 拜访记录卡（M4.3.2 完整折叠字段 + 可展开基本信息；M4.3.4 追加洞察/证据）─
 
-function VisitRow({ visit }: { visit: VisitRecord }) {
+function VisitRow({
+  visit,
+  cardMap,
+  expanded,
+  onToggle,
+}: {
+  visit: VisitRecord;
+  cardMap: Map<number, string>;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const date = visit.visit_date;
-  const ourCount = visit.participants_our?.length ?? 0;
-  const clientCount = visit.participants_client?.length ?? 0;
+  const ourNames = visit.participants_our?.join("、") || null;
+  // 客户方参与人为角色卡 ID，解析为姓名（未知则回退显示编号）
+  const clientNames = (visit.participants_client ?? [])
+    .map((id) => cardMap.get(id) ?? `角色#${id}`)
+    .join("、");
+  const relatedCardCount = visit.related_card_ids?.length ?? 0;
+
   return (
-    <Card style={{ padding: "16px 20px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      {/* 折叠头部（可点击展开） */}
+      <div
+        onClick={onToggle}
+        style={{
+          padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 14,
+          transition: "background 120ms",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-2)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
         {/* 日期 */}
         <div style={{ textAlign: "center", flexShrink: 0, width: 56 }}>
           {date ? (
@@ -252,22 +304,43 @@ function VisitRow({ visit }: { visit: VisitRecord }) {
         }}>
           {visit.visit_type}
         </span>
-        {/* 摘要 */}
+        {/* 摘要 + 参与人/地点/时长 */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {visit.summary ? (visit.summary.length > 50 ? visit.summary.slice(0, 50) + "…" : visit.summary) : "（无摘要）"}
           </div>
-          <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2, display: "flex", gap: 10 }}>
-            <span><I.Users size={11} style={{ verticalAlign: -1, marginRight: 3 }} />我方 {ourCount} · 客户 {clientCount}</span>
-            {visit.location && <span>📍 {visit.location}</span>}
+          <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {clientNames && <span>客户：{clientNames}</span>}
+            {clientNames && visit.location && <span> · </span>}
+            {visit.location && <span>{visit.location}</span>}
+            {(clientNames || visit.location) && visit.duration && <span> · </span>}
+            {visit.duration && <span>{visit.duration}</span>}
+            {!clientNames && !visit.location && !visit.duration && <span style={{ color: "var(--ink-4)" }}>无补充信息</span>}
           </div>
         </div>
-        {/* 统计 */}
+        {/* 统计：证据 / 已验证假设 / 关联角色卡 */}
         <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--ink-3)", flexShrink: 0 }}>
           <span title="证据数"><I.Paperclip size={12} style={{ verticalAlign: -1, marginRight: 3 }} />{visit.evidence_count}</span>
           <span title="已验证假设" style={{ color: "var(--success)" }}><I.CircleCheck size={12} style={{ verticalAlign: -1, marginRight: 3 }} />{visit.verified_hypotheses}</span>
+          <span title="关联角色卡"><I.Users size={12} style={{ verticalAlign: -1, marginRight: 3 }} />{relatedCardCount}</span>
         </div>
+        <I.ChevronDown size={14} style={{
+          color: "var(--ink-4)", flexShrink: 0,
+          transform: expanded ? "rotate(180deg)" : "none", transition: "transform 200ms",
+        }} />
       </div>
+
+      {/* 展开体：基本信息（M4.3.4 将追加 KeyTakeaways / NextSteps / 证据清单） */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid var(--line)", padding: "14px 20px", background: "var(--bg)" }}>
+          <div style={{ display: "flex", gap: 20, fontSize: 12, flexWrap: "wrap" }}>
+            <div><span style={{ color: "var(--ink-3)" }}>我方参与：</span><span style={{ fontWeight: 500 }}>{ourNames || "—"}</span></div>
+            <div><span style={{ color: "var(--ink-3)" }}>客户参与：</span><span style={{ fontWeight: 500 }}>{clientNames || "—"}</span></div>
+            <div><span style={{ color: "var(--ink-3)" }}>地点：</span>{visit.location || "—"}</div>
+            <div><span style={{ color: "var(--ink-3)" }}>时长：</span>{visit.duration || "—"}</div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
