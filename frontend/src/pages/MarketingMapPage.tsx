@@ -258,6 +258,14 @@ export default function MarketingMapPage({ project }: Props) {
               setSubView("cards");
             }}
           />
+        ) : subView === "decision" ? (
+          <DecisionChainView
+            cards={cards}
+            onJump={(id) => {
+              setSelectedCardId(id);
+              setSubView("cards");
+            }}
+          />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -564,6 +572,119 @@ function OrgChartView({
   );
 }
 
+// ─── 决策链角色表（M4.2.3：表格 + 影响力条 + 综合评分 + 等级，按影响力排序） ──
+
+function DecisionChainView({
+  cards,
+  onJump,
+}: {
+  cards: StakeholderCard[];
+  onJump: (id: number) => void;
+}) {
+  if (cards.length === 0) {
+    return (
+      <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+        <I.ClipboardList size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>暂无角色卡</div>
+        <div>建立角色卡并填写主观层（影响力/参与度/支持度）后，此处按影响力排序展示决策链。</div>
+      </Card>
+    );
+  }
+
+  // 按影响力降序（缺失按综合评分，再缺失按 0）
+  const sorted = [...cards].sort((a, b) => {
+    const ia = a.subjective_layer?.influence ?? a.subjective_layer?.compositeScore ?? 0;
+    const ib = b.subjective_layer?.influence ?? b.subjective_layer?.compositeScore ?? 0;
+    return ib - ia;
+  });
+
+  const headers = ["角色类型", "姓名", "部门", "决策权", "影响力", "综合评分", "等级", "立场"];
+
+  return (
+    <div style={{ display: "flex", gap: 20, height: "100%" }}>
+      <Card style={{ flex: 1, padding: 0, overflow: "auto" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>决策链角色表</div>
+          <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>按影响力排序，点击行跳转角色卡详情。</div>
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "var(--bg-2)", borderBottom: "2px solid var(--line)" }}>
+              {headers.map((h) => (
+                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "var(--ink-3)", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((c) => {
+              const sl = c.subjective_layer ?? {};
+              const influence = typeof sl.influence === "number" ? sl.influence : 0;
+              const composite = typeof sl.compositeScore === "number" ? sl.compositeScore : null;
+              const grade = sl.gradeLevel;
+              const stance = sl.stance;
+              return (
+                <tr
+                  key={c.id}
+                  onClick={() => onJump(c.id)}
+                  style={{ borderBottom: "1px solid var(--line)", cursor: "pointer" }}
+                >
+                  <td style={{ padding: "10px 14px" }}>
+                    {c.role_type ? <Tag tone="accent">{ROLE_TYPE_LABELS[c.role_type]}</Tag> : <span style={{ color: "var(--ink-4)" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "10px 14px", fontWeight: 500 }}>{c.name}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--ink-2)" }}>{c.department || "—"}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--ink-2)", fontSize: 12 }}>{c.decision_power || "—"}</td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 60, height: 4, background: "var(--bg-3)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ width: `${influence * 10}%`, height: "100%", background: "var(--accent)", borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600 }}>{influence}/10</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {composite != null ? (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: gradeColor(composite) }}>{composite}分</span>
+                    ) : <span style={{ color: "var(--ink-4)" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {grade ? (
+                      <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: gradeColor(grade) + "22", color: gradeColor(grade) }}>{grade}</span>
+                    ) : <span style={{ color: "var(--ink-4)" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {stance ? <span style={{ fontSize: 12, fontWeight: 500, color: stanceColor(stance) }}>{stance}</span> : <span style={{ color: "var(--ink-4)" }}>—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* 右：决策链解读 */}
+      <Card style={{ width: 280, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>📖 决策链解读</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, color: "var(--ink-2)", lineHeight: 1.6 }}>
+          <div style={{ padding: 10, background: "var(--bg-2)", borderRadius: 8, borderLeft: "3px solid var(--success)" }}>
+            <div style={{ fontWeight: 600, color: "var(--success)", marginBottom: 4 }}>Champion 三要素</div>
+            <div style={{ fontSize: 11 }}>① 有影响力（能影响他人）；② 有意愿（主动推动）；③ 有个人利益（我方胜出与其目标相关）。三者缺一不可。</div>
+          </div>
+          <div>
+            <b>综合评分</b> = 参与度×0.3 + 影响力×0.4 + 支持度×0.3（后端按 §5.2 公式计算）。
+          </div>
+          <div>
+            <b>等级</b>：Champion(8-10) / 倾向我方(5-7) / 中立(3-4) / 反对(1-2)。
+          </div>
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, color: "var(--ink-3)" }}>
+            决策推进策略：优先巩固 Champion 与倾向者，争取中立者，化解反对者。
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── 占位视图（后续 M4.2.x 替换） ──────────────────────────────
 
 const PLACEHOLDER_TASK: Record<SubView, { task: string; desc: string }> = {
@@ -626,6 +747,21 @@ function gradeTone(g: string): "success" | "accent" | "warn" | "danger" | "neutr
   if (g === "中立") return "warn";
   if (g === "反对") return "danger";
   return "neutral";
+}
+
+/** 综合评分 / 等级 → 颜色（数字按 §5.2 阈值，字符串按等级名） */
+function gradeColor(v: string | number): string {
+  if (typeof v === "number") {
+    if (v >= 8) return "var(--success)";
+    if (v >= 5) return "var(--accent)";
+    if (v >= 3) return "var(--warn)";
+    return "var(--danger)";
+  }
+  if (v === "Champion") return "var(--success)";
+  if (v === "倾向我方") return "var(--accent)";
+  if (v === "中立") return "var(--warn)";
+  if (v === "反对") return "var(--danger)";
+  return "var(--ink-3)";
 }
 
 // ─── 内联样式常量 ─────────────────────────────────────────────
