@@ -76,6 +76,11 @@ SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA: dict = {
         "objective_layer": {"type": "object"},
         "subjective_layer": {"type": "object"},
         "behaviors": {"type": "array"},
+        "update_draft_id": {
+            "type": "integer",
+            "description": "可选。增量更新指定草稿卡 id（§7.2 Chat 调整循环）。"
+            "不传则新建草稿；传入则覆盖更新该草稿卡（保持草稿态，保留上一版供 diff）。",
+        },
     },
     "required": ["name"],
     "additionalProperties": True,
@@ -95,6 +100,11 @@ SAVE_VISIT_RECORD_DRAFT_SCHEMA: dict = {
         "next_steps": {"type": "string"},
         "key_takeaways": {"type": "array"},
         "related_card_ids": {"type": "array"},
+        "update_draft_id": {
+            "type": "integer",
+            "description": "可选。增量更新指定草稿记录 id（§7.2 Chat 调整循环）。"
+            "不传则新建草稿；传入则覆盖更新该草稿记录（保持草稿态，保留上一版供 diff）。",
+        },
     },
     "additionalProperties": True,
 }
@@ -147,16 +157,58 @@ def _draft_pending_event(
     draft_id: int,
     project_id: int,
     preview: dict[str, Any],
+    *,
+    previous: dict[str, Any] | None = None,
+    revision: int | None = None,
+    is_update: bool = False,
 ) -> dict[str, Any]:
-    """构造 SSE「待采纳」事件（前端 M3.1.4 渲染为采纳/驳回卡片）。"""
-    return {
+    """构造 SSE「待采纳」事件（前端 M3.1.4 渲染为采纳/驳回卡片）。
+
+    M3.4.3 Chat 调整循环：增量更新（is_update=True）时携带 previous（上一版内容快照）
+    与 revision（修订号），供前端 diff 对比本次改动（§7.2）。首次生成不带 previous。
+    """
+    evt: dict[str, Any] = {
         "type": "draft_pending",
         "entity_type": entity_type,
         "entity_label": entity_label,
         "draft_id": draft_id,
         "project_id": project_id,
         "preview": preview,
+        "is_update": is_update,
     }
+    if previous is not None:
+        evt["previous"] = previous
+    if revision is not None:
+        evt["revision"] = revision
+    return evt
+
+
+# ─── M3.4.3：草稿更新时的「上一版」字段快照（供前端 diff） ──────
+#
+# stakeholder/visit 草稿为实体行（review_status=draft），增量更新时直接覆盖字段，
+# 故在覆盖前抓取关键字段快照作为 previous（不持久化到实体表，只在事件里携带供对比）。
+
+_CARD_SNAPSHOT_FIELDS = (
+    "name", "position", "department", "reports_to", "role_type",
+    "decision_power", "objective_layer", "subjective_layer", "behaviors",
+)
+_VISIT_SNAPSHOT_FIELDS = (
+    "visit_type", "summary", "participants_our", "participants_client",
+    "location", "duration", "key_takeaways", "next_steps",
+)
+
+
+def _snapshot_card(card) -> dict[str, Any]:
+    """抓取角色卡草稿关键字段快照（用于 diff）。"""
+    return {f: getattr(card, f, None) for f in _CARD_SNAPSHOT_FIELDS}
+
+
+def _snapshot_visit(visit) -> dict[str, Any]:
+    """抓取拜访记录草稿关键字段快照（用于 diff），visit_date 转 ISO 字符串。"""
+    snap = {f: getattr(visit, f, None) for f in _VISIT_SNAPSHOT_FIELDS}
+    vd = getattr(visit, "visit_date", None)
+    snap["visit_date"] = vd.isoformat() if vd is not None else None
+    return snap
 
 
 # ─── M3.1.3：草稿工具 handler（校验→落库→推送→回写 Claude） ─────
@@ -190,48 +242,94 @@ async def handle_save_business_map_draft(
             user,
         )
 
+    # M3.4.3：revision>1 即增量更新，携带上一版供前端 diff（§7.2 Chat 调整循环）
+    is_update = (draft.revision or 1) > 1
     await ctx.publish(
         _draft_pending_event(
             "business_map_draft",
             "业务地图草稿",
             draft.id,
             ctx.project_id,
-            preview={"object_count": len(objects)},
+            preview={
+                "object_count": len(objects),
+                # 当前版节点摘要（level+name），与 previous（上一版完整 objects）对照做 diff
+                "objects": [
+                    {"level": o.get("level"), "name": o.get("name")}
+                    for o in objects
+                    if isinstance(o, dict)
+                ],
+            },
+            previous=draft.previous_data if is_update else None,
+            revision=draft.revision,
+            is_update=is_update,
         )
     )
+    verb = "已更新业务地图草稿" if is_update else "已保存业务地图草稿"
     return _ok_result(
-        f"已保存业务地图草稿（{len(objects)} 个节点，草稿ID #{draft.id}）。"
+        f"{verb}（第 {draft.revision} 版，{len(objects)} 个节点，草稿ID #{draft.id}）。"
         "草稿已进入「待采纳」区，等待用户采纳后才写入正式地图。"
+        "若用户要求调整，请基于用户指令重新调用本工具覆盖更新草稿（上一版已自动存档供对比）。"
     )
 
 
 async def handle_save_stakeholder_card_draft(
     ctx: DraftToolContext, args: dict
 ) -> dict:
-    """保存角色卡草稿 → StakeholderCard（review_status=draft）。"""
+    """保存/更新角色卡草稿 → StakeholderCard（review_status=draft）。
+
+    M3.4.3：入参可带 ``update_draft_id`` 指定要更新的草稿卡 id（§7.2 Chat 调整循环）。
+    - 给 update_draft_id：校验该卡存在、属于本项目且仍为 draft 态 → 抓取旧字段快照 →
+      覆盖更新（保持 draft 态）→ 事件携带 previous 供 diff。
+    - 不给：新建草稿卡（原 M3.1 行为不变）。
+    """
     err = validate_tool_input(SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA, args)
     if err:
         return _error_result(f"save_stakeholder_card_draft 入参校验失败：{err}")
 
     from app.db.session import async_session
-    from app.models import User
+    from app.models import StakeholderCard, User
     from app.modules.marketing_map import service as marketing_map_service
-    from app.schemas.marketing_map import StakeholderCardCreate
+    from app.schemas.marketing_map import StakeholderCardCreate, StakeholderCardUpdate
 
+    update_id = args.get("update_draft_id") if isinstance(args, dict) else None
     data = dict(args)
-    data["review_status"] = "draft"  # AI 产出先入草稿区，采纳后才 reviewed
-    try:
-        payload = StakeholderCardCreate.model_validate(data)
-    except Exception as exc:  # pydantic 校验失败（如 role_type 枚举）
-        return _error_result(f"角色卡字段不合法：{exc}")
+    data.pop("update_draft_id", None)  # 非实体字段，落库前移除
 
     async with async_session() as db:
         user = await db.get(User, ctx.user_id)
         if user is None:
             return _error_result("当前用户不存在，无法保存草稿")
-        card = await marketing_map_service.create_card(
-            db, ctx.project_id, payload, user
-        )
+
+        if update_id:
+            old = await db.get(StakeholderCard, update_id)
+            if old is None or old.project_id != ctx.project_id:
+                return _error_result("待更新的角色卡草稿不存在或不属于当前项目")
+            if old.review_status != "draft":
+                return _error_result(
+                    f"该角色卡当前状态为 {old.review_status}，仅草稿态可更新"
+                )
+            previous = _snapshot_card(old)
+            try:
+                update_payload = StakeholderCardUpdate.model_validate(data)
+            except Exception as exc:  # pydantic 校验失败（如 role_type 枚举）
+                return _error_result(f"角色卡字段不合法：{exc}")
+            card = await marketing_map_service.update_card(
+                db, ctx.project_id, update_id, update_payload
+            )
+            if card is None:
+                return _error_result("待更新的角色卡草稿不存在")
+            is_update = True
+        else:
+            data["review_status"] = "draft"  # AI 产出先入草稿区，采纳后才 reviewed
+            try:
+                payload = StakeholderCardCreate.model_validate(data)
+            except Exception as exc:  # pydantic 校验失败（如 role_type 枚举）
+                return _error_result(f"角色卡字段不合法：{exc}")
+            card = await marketing_map_service.create_card(
+                db, ctx.project_id, payload, user
+            )
+            previous = None
+            is_update = False
 
     await ctx.publish(
         _draft_pending_event(
@@ -240,41 +338,76 @@ async def handle_save_stakeholder_card_draft(
             card.id,
             ctx.project_id,
             preview={"name": card.name, "role_type": card.role_type},
+            previous=previous,
+            is_update=is_update,
         )
     )
+    verb = "已更新角色卡草稿" if is_update else "已保存角色卡草稿"
     return _ok_result(
-        f"已保存角色卡草稿「{card.name}」（草稿ID #{card.id}）。"
+        f"{verb}「{card.name}」（草稿ID #{card.id}）。"
         "等待用户采纳后才进入正式营销地图。"
+        "若用户要求调整，请带 update_draft_id=<本草稿ID> 重新调用本工具覆盖更新。"
     )
 
 
 async def handle_save_visit_record_draft(
     ctx: DraftToolContext, args: dict
 ) -> dict:
-    """保存拜访记录草稿 → VisitRecord（review_status=draft）。"""
+    """保存/更新拜访记录草稿 → VisitRecord（review_status=draft）。
+
+    M3.4.3：入参可带 ``update_draft_id`` 指定要更新的草稿记录 id（§7.2 Chat 调整循环）。
+    - 给 update_draft_id：校验存在、属本项目、仍为 draft 态 → 抓取旧字段快照 →
+      覆盖更新（保持 draft 态）→ 事件携带 previous 供 diff。
+    - 不给：新建草稿记录（原 M3.1 行为不变）。
+    """
     err = validate_tool_input(SAVE_VISIT_RECORD_DRAFT_SCHEMA, args)
     if err:
         return _error_result(f"save_visit_record_draft 入参校验失败：{err}")
 
     from app.db.session import async_session
-    from app.models import User
+    from app.models import User, VisitRecord
     from app.modules.visits import service as visits_service
-    from app.schemas.visit import VisitRecordCreate
+    from app.schemas.visit import VisitRecordCreate, VisitRecordUpdate
 
+    update_id = args.get("update_draft_id") if isinstance(args, dict) else None
     data = dict(args)
-    data["review_status"] = "draft"
-    try:
-        payload = VisitRecordCreate.model_validate(data)
-    except Exception as exc:
-        return _error_result(f"拜访记录字段不合法：{exc}")
+    data.pop("update_draft_id", None)  # 非实体字段，落库前移除
 
     async with async_session() as db:
         user = await db.get(User, ctx.user_id)
         if user is None:
             return _error_result("当前用户不存在，无法保存草稿")
-        visit = await visits_service.create_visit(
-            db, ctx.project_id, payload, user
-        )
+
+        if update_id:
+            old = await db.get(VisitRecord, update_id)
+            if old is None or old.project_id != ctx.project_id:
+                return _error_result("待更新的拜访记录草稿不存在或不属于当前项目")
+            if old.review_status != "draft":
+                return _error_result(
+                    f"该拜访记录当前状态为 {old.review_status}，仅草稿态可更新"
+                )
+            previous = _snapshot_visit(old)
+            try:
+                update_payload = VisitRecordUpdate.model_validate(data)
+            except Exception as exc:
+                return _error_result(f"拜访记录字段不合法：{exc}")
+            visit = await visits_service.update_visit(
+                db, ctx.project_id, update_id, update_payload
+            )
+            if visit is None:
+                return _error_result("待更新的拜访记录草稿不存在")
+            is_update = True
+        else:
+            data["review_status"] = "draft"
+            try:
+                payload = VisitRecordCreate.model_validate(data)
+            except Exception as exc:
+                return _error_result(f"拜访记录字段不合法：{exc}")
+            visit = await visits_service.create_visit(
+                db, ctx.project_id, payload, user
+            )
+            previous = None
+            is_update = False
 
     await ctx.publish(
         _draft_pending_event(
@@ -286,10 +419,14 @@ async def handle_save_visit_record_draft(
                 "visit_type": visit.visit_type,
                 "summary": (visit.summary or "")[:80],
             },
+            previous=previous,
+            is_update=is_update,
         )
     )
+    verb = "已更新拜访记录草稿" if is_update else "已保存拜访记录草稿"
     return _ok_result(
-        f"已保存拜访记录草稿（草稿ID #{visit.id}）。等待用户采纳后才进入正式时间线。"
+        f"{verb}（草稿ID #{visit.id}）。等待用户采纳后才进入正式时间线。"
+        "若用户要求调整，请带 update_draft_id=<本草稿ID> 重新调用本工具覆盖更新。"
     )
 
 

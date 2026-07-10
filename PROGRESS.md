@@ -249,6 +249,24 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_consultant_router.py（35 过：7 意图结构 / parse_slash / keyword_fallback 唯一·多·零 / _parse_llm_json 合法·fenced·embedded·非法·clamp / route_user_prompt 三级路由全覆盖 / classify_intent_llm env 处理与异常降级 / log_routing 落库 / seed+scan / streaming 集成路由改写+落库）、test_consultant_search.py（24 过：Schema 校验 / list_tools 暴露三工具 / allowed_names / _safe_slug / 归档写入+去重 / _html_to_text / search_web 未配置·已配置归档·失败·非法 / registry 未配置·已配置·无结果 / fetch_webpage 成功·非http·失败 / streaming 集成项目会话挂载·普通会话不挂载）、test_consultant_defense.py（15 过：道层资产 / never_visible 加载 / apply_filter substring·regex·多规则·无命中·空规则·非法正则·默认资产 / defense_plugin_active / seed+scan / streaming 集成 assistant_text 过滤+thinking 不过滤·普通会话不过滤）。全量 **648 passed / 20 failed / 2 skipped / 3 errors**，相比 M3.4.1 基线（574 passed）passed +74（35 router + 24 search + 15 defense），**fail 集未扩大**（20 fail+3 err 全为既有环境问题：企微 ImportError、Windows 路径/符号链接、本地 DB 口令、config 默认值、Claude SDK 真实依赖；与本任务无关）。
 
+### M3.4.3 Chat 调整循环 ✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| 草稿版本化（business_map） | ✅ | 2026-07-10 | BusinessMapDraft 加 previous_data(JSONB)+revision；upsert_draft 覆盖前存上一版、revision+1（决策#34） |
+| stakeholder/visit 增量更新 | ✅ | 2026-07-10 | 工具加可选 update_draft_id → update draft 态实体 + 字段快照 previous；不传则 create（M3.1 行为不变） |
+| draft_pending 携带 diff | ✅ | 2026-07-10 | 事件增 is_update/revision/previous；三类草稿均可前端 diff（§7.2） |
+| 对话流注入草稿 brief | ✅ | 2026-07-10 | streaming._build_draft_brief 读当前待采纳草稿摘要 → runner.stream_chat 注入 system_prompt（AI 基于原文重生成） |
+| 前端 diff 渲染 + 调整入口 | ✅ | 2026-07-10 | DraftPart 加字段；卡片更新时显示「第 N 版·已更新」+ diff 对比块 + 调整提示文案 |
+
+**设计要点**：
+- **核心机制（§7.2）**：产出 → 用户自然语言描述修改 → AI 基于原文+指令重新生成 → 展示 diff → 确认更新候选 → 再问采纳 → 循环。四层联动（数据/工具/对话流/前端），详见决策#34。
+- **diff 实现**：business_map 整图草稿单元（previous_data 持久化，§7.1.7 增量更新语义最清晰、规格主战场）；stakeholder/visit 的 previous 走事件级字段快照（不侵入实体表），经 run_state 回放仍可拿（M3.4.2）。
+- **对话流上下文**：`_build_draft_brief` 把当前 active 业务地图草稿（按 level 概要节点名）+ draft 态角色卡/拜访注入 system_prompt.append，使 AI「基于原文重新生成并覆盖更新」而非新建重复草稿；并提示「角色卡/拜访需带 update_draft_id」。无任何待采纳草稿时返回 None（不注入）。
+- **向后兼容**：update_draft_id 可选，不传则 create（M3.1 行为零改动，既有测试全过）；指向非 draft 态/不存在/跨项目 → is_error 回写 Claude 自我修正，不落库不推送。
+
+**回归测试**：test_draft_tools +5（business_map revision=2+previous / stakeholder update_draft_id 更新+previous+无新增第二张 / visit update_draft_id+未传字段保留 / wrong-state 拒绝 / not-found 拒绝）/ test_sessions_project_binding +3（brief 无草稿→None / 有草稿含节点名+revision / stream 传入 draft_brief），聚焦全过 33+22=55；test_business_map_api（11）+ test_reviews_api（11）既有 22 测零回归。**fail 集未扩大**（改动为纯增字段+新增分支，create/既有路径行为不变；全量本次未跑，以聚焦测试覆盖全部改动点 + 既有零回归确认）。前端 tsc -b + vite build 通过（71 模块，0 错误，构建 1.21s）。
+
 
 
 

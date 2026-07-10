@@ -346,6 +346,161 @@ async def test_adopt_entity_draft_wrong_state_rejected(logged_in_client):
     assert res.status_code == 400
 
 
+# ─── M3.4.3：Chat 调整循环 — 草稿版本化（revision/previous）+ update_draft_id ─
+
+
+@pytest.mark.asyncio
+async def test_business_map_draft_increment_revision_and_previous(logged_in_client):
+    """二次保存业务地图草稿 → revision=2、previous_data 保留上一版、事件 is_update=True。"""
+    from app.integrations.claude.tools import handle_save_business_map_draft
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    # 首次生成
+    await handle_save_business_map_draft(
+        ctx, {"objects": [{"level": "L1", "name": "价值链A"}]}
+    )
+    first_evt = events[-1]
+    assert first_evt["is_update"] is False
+    assert first_evt["revision"] == 1
+    assert "previous" not in first_evt  # 首次无 previous
+
+    # 用户自然语言调整 → AI 重新生成覆盖（§7.2）
+    await handle_save_business_map_draft(
+        ctx, {"objects": [{"level": "L1", "name": "价值链A-修订"}]}
+    )
+    second_evt = events[-1]
+    assert second_evt["is_update"] is True
+    assert second_evt["revision"] == 2
+    assert second_evt["previous"] is not None  # 携带上一版供 diff
+
+    # 落库：previous_data 保留首版内容，draft_data 为当前版
+    draft = (
+        await logged_in_client.get(f"/api/projects/{pid}/business-map/drafts")
+    ).json()
+    assert draft["revision"] == 2
+    assert draft["previous_data"] is not None
+    assert draft["previous_data"]["objects"][0]["name"] == "价值链A"
+    assert draft["draft_data"]["objects"][0]["name"] == "价值链A-修订"
+
+
+@pytest.mark.asyncio
+async def test_stakeholder_card_draft_update_via_update_draft_id(logged_in_client):
+    """update_draft_id 更新已有草稿卡（而非新建第二张），事件携带 previous 供 diff。"""
+    from app.integrations.claude.tools import handle_save_stakeholder_card_draft
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    # 首次创建草稿卡
+    r1 = await handle_save_stakeholder_card_draft(
+        ctx,
+        {"name": "王总监", "position": "IT 总监", "role_type": "technical_evaluator"},
+    )
+    assert r1["is_error"] is False
+    card_id = events[-1]["draft_id"]
+    assert events[-1]["is_update"] is False
+
+    # 用户调整 → 带 update_draft_id 覆盖更新
+    r2 = await handle_save_stakeholder_card_draft(
+        ctx, {"name": "王副总", "position": "IT 副总", "update_draft_id": card_id}
+    )
+    assert r2["is_error"] is False
+    upd_evt = events[-1]
+    assert upd_evt["is_update"] is True
+    assert upd_evt["draft_id"] == card_id  # 同一张卡（未新增）
+    assert upd_evt["previous"]["name"] == "王总监"  # 上一版字段快照
+
+    # 落库：仍是同一张草稿卡，字段已更新，无第二张草稿
+    cards = (
+        await logged_in_client.get(
+            f"/api/projects/{pid}/stakeholder-cards?include_drafts=1"
+        )
+    ).json()
+    drafts = [c for c in cards if c["review_status"] == "draft"]
+    assert len(drafts) == 1
+    assert drafts[0]["id"] == card_id
+    assert drafts[0]["name"] == "王副总"
+    assert drafts[0]["position"] == "IT 副总"
+
+
+@pytest.mark.asyncio
+async def test_visit_record_draft_update_via_update_draft_id(logged_in_client):
+    """update_draft_id 更新已有拜访草稿（而非新建），事件携带 previous；未传字段保留。"""
+    from app.integrations.claude.tools import handle_save_visit_record_draft
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    await handle_save_visit_record_draft(
+        ctx, {"visit_type": "现场访谈", "visit_date": "2026-07-09", "summary": "初稿摘要"}
+    )
+    visit_id = events[-1]["draft_id"]
+
+    r = await handle_save_visit_record_draft(
+        ctx, {"summary": "修订摘要", "update_draft_id": visit_id}
+    )
+    assert r["is_error"] is False
+    upd_evt = events[-1]
+    assert upd_evt["is_update"] is True
+    assert upd_evt["draft_id"] == visit_id
+    assert upd_evt["previous"]["summary"] == "初稿摘要"
+
+    visits = (
+        await logged_in_client.get(
+            f"/api/projects/{pid}/visit-records?include_drafts=1"
+        )
+    ).json()
+    drafts = [v for v in visits if v["review_status"] == "draft"]
+    assert len(drafts) == 1
+    assert drafts[0]["id"] == visit_id
+    assert drafts[0]["summary"] == "修订摘要"
+    assert drafts[0]["visit_type"] == "现场访谈"  # 未传字段保留
+
+
+@pytest.mark.asyncio
+async def test_stakeholder_card_draft_update_wrong_state_rejected(logged_in_client):
+    """update_draft_id 指向非 draft 态卡 → is_error，不落库不推送（仅草稿态可更新）。"""
+    from app.integrations.claude.tools import handle_save_stakeholder_card_draft
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+    # 直接建 reviewed 态卡
+    card_id = (
+        await logged_in_client.post(
+            f"/api/projects/{pid}/stakeholder-cards",
+            json={"name": "已发布", "review_status": "reviewed"},
+        )
+    ).json()["id"]
+
+    r = await handle_save_stakeholder_card_draft(
+        ctx, {"name": "改名", "update_draft_id": card_id}
+    )
+    assert r["is_error"] is True
+    assert events == []  # 不推送
+
+
+@pytest.mark.asyncio
+async def test_stakeholder_card_draft_update_not_found_rejected(logged_in_client):
+    """update_draft_id 指向不存在的草稿 → is_error。"""
+    from app.integrations.claude.tools import handle_save_stakeholder_card_draft
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    r = await handle_save_stakeholder_card_draft(
+        ctx, {"name": "x", "update_draft_id": 999999}
+    )
+    assert r["is_error"] is True
+    assert events == []
+
+
 # 测试辅助：避免在文件顶部 import DraftToolContext（模块尚未实现的阶段也能读测试）
 def DraftToolContext_for_test(*, project_id, user_id, source_session_id, publish):
     from app.integrations.claude.tools import DraftToolContext

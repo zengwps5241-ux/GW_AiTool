@@ -253,5 +253,17 @@
 - **M3.3.3 两防线门控**：均按 `defense_plugin_active(agent)`（仅项目 Agent）。防线1 runner 在 system_prompt.append 前置 dao_layer（§7.10 注入不可 RAG）；防线2 streaming.on_message 对 assistant_text 应用 never_visible 确定性过滤（思维链不过滤 §8.2）。资产单一真源 = plugins_seed/rules/。
 - **理由**：双层落地是平台既有模式的自然延伸（M3.1 进程内 MCP + M3.2 seed 模板），零新机制、全链路可单测（不依赖真实 Claude 会话/网络）。可校验性：router 35 / search 24 / defense 15 测试覆盖纯逻辑 + handler + seed/scan + streaming 接线（mock stream_chat）；全量 648 passed、fail 集未扩大。两 Plugin 共享 runner/streaming/conftest 集成点且单提交需自洽，故 M3.3.2+M3.3.3 合并为一个提交（M3.3.1 因改动隔离单独提交）。
 
+## 决策 #34：M3.4.3 Chat 调整循环 — 草稿版本化(previous_data/revision) + update_draft_id + 对话流 brief 注入 + 前端 diff（M3.4.3 / §1.6 §2.2 §7.1.7 §7.2）
+
+- **背景**：§7.2「Chat 调整机制」要求所有 WF 产出在采纳前支持自然语言调整循环：产出 → 用户描述修改 → AI 基于原文+指令重新生成 → 展示 diff → 确认后更新候选 → 再问采纳 → 直到采纳/驳回。现状差距：① business_map `upsert_draft` 已覆盖式（天然支持重新生成），但无版本历史，覆盖即丢旧内容 → 无法 diff；② stakeholder/visit 每次 `create` 新建草稿行，"调整"会变新增第二张草稿而非更新；③ AI 缺少"当前待采纳草稿原文"的可靠上下文，难以"基于原文重新生成"。
+- **选择**：四层联动（数据/工具/对话流/前端），均延续既有架构、零新机制：
+  1. **数据层**：`BusinessMapDraft` 加 `previous_data: JSONB`（上一版 draft_data）+ `revision: int`（首次=1，更新+1）。`upsert_draft` 覆盖前把旧 `draft_data` 存入 `previous_data`、`revision+=1`。业务地图"整图一个草稿单元"（§7.1.7）天然适配"基于原文覆盖更新"。迁移补 `ALTER TABLE business_map_drafts ADD COLUMN`（dev 库已有表）。
+  2. **工具层**：`_draft_pending_event` 增 `is_update/revision/previous`。business_map handler 从 upsert 返回的 `previous_data/revision` 带入事件（持久化版）；stakeholder/visit handler 增**可选** `update_draft_id` 参数 → 命中则校验存在/属本项目/仍 draft 态 → 抓字段快照（`_snapshot_card/_snapshot_visit`）作 previous → 复用 `update_card/update_visit`（partial、不强制 review_status，保持 draft）覆盖更新；不命中则 create（M3.1 行为不变）。三类 `draft_pending` 都能 diff。
+  3. **对话流**：`streaming._build_draft_brief` 读项目当前 active 业务地图草稿（按 level 概要节点名）+ draft 态角色卡/拜访记录，生成摘要文本；`runner.stream_chat` 加 `draft_brief` 参数注入 system_prompt.append（`dao_layer, agent_prompt, draft_brief, rule_prompt`），使 AI"基于原文+用户指令重新生成并覆盖更新"而非新建重复草稿，并提示"角色卡/拜访需带 update_draft_id"。
+  4. **前端**：`DraftPart` 加 `isUpdate/revision/previous`；卡片渲染——更新时徽标由"待采纳"变为"第 N 版·已更新"，新增 diff 对比块（business_map 节点增删 / stakeholder/visit 字段"旧→新"高亮），并在按钮区加调整提示（"在下方输入框用自然语言描述修改，AI 会更新草稿再请你确认"）。business_map preview 补节点摘要 `objects:[{level,name}]` 供 diff 对照。
+- **为何 previous 只存一版**：§7.2「展示 diff」即对比"上一版 vs 当前版"，单 `previous_data` 足够；独立多版历史表是过度设计（business_map 采纳时已有 `BusinessMapVersion` 全量快照承载正式版本回溯，§7.4）。stakeholder/visit 是实体行草稿，previous 不落实体表（避免侵入 StakeholderCard/VisitRecord 加列），只在事件里携带供前端即时 diff——`draft_pending` 经 `run_state` 入栈（M3.4.2），断开重连仍可回放拿到 previous。
+- **为何 update_draft_id 可选**：保留 M3.1 create 行为完全不变（向后兼容，既有测试零改动）；AI 据 brief 注入的提示在"更新"语义时带 id，"首次生成"不带。update_draft_id 指向不存在/非本项目/非 draft 态 → `is_error` 回写 Claude 自我修正，不落库不推送（与既有校验一致）。
+- **理由**：四层均在既有「草稿工具进程内 MCP（#29）+ run_state 回放（#30）+ 整图草稿单元（#18）」地基上扩展，零新表（仅加列）、零新协议。business_map 是 diff 主战场（整图草稿单元语义最清晰、规格 §7.1.7 明确"增量更新草稿"）；stakeholder/visit 的 previous 走事件级快照避免侵入实体表。可校验性：test_draft_tools +5（revision/diff/update_draft_id 各分支含 wrong-state/not-found）/ test_sessions_project_binding +3（brief 无草稿/有草稿/stream 传入）聚焦全过，test_business_map_api/test_reviews_api 既有 22 测零回归；前端 tsc -b + vite build（71 模块 0 错）。改动为纯增字段+新增分支，create/既有路径行为不变 → fail 集未扩大。
+
 
 

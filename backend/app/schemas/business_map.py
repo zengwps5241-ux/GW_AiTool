@@ -118,6 +118,10 @@ class BusinessMapDraftOut(BaseModel):
     id: int
     project_id: int
     draft_data: dict[str, Any] | None = None
+    # 上一版草稿内容（增量更新时保留，供 diff，§7.2）
+    previous_data: dict[str, Any] | None = None
+    # 草稿修订号（首次=1，每次更新 +1）
+    revision: int = 1
     source_session_id: str | None = None
     created_by: int
     created_by_name: str | None = None

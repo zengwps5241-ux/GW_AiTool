@@ -153,6 +153,11 @@ class BusinessMapDraft(Base):
     )
     # 草稿内容（增量更新的整张业务地图草稿）
     draft_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 上一版草稿内容（§7.2 Chat 调整：用户自然语言修改 → AI 重新生成时，
+    # 覆盖前把旧 draft_data 存入 previous_data，供前端 diff 对比本次改动）
+    previous_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 草稿修订号（首次生成=1，每次增量更新 +1，供前端展示「第 N 版」）
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 产出该草稿的会话 ID（Chat Session）
     source_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by: Mapped[int] = mapped_column(

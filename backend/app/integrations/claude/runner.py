@@ -168,6 +168,7 @@ async def stream_chat(
     stop_event: asyncio.Event | None = None,
     draft_context: DraftToolContext | None = None,
     search_context: SearchToolContext | None = None,
+    draft_brief: str | None = None,
 ) -> ChatRunSummary:
     """运行一次对话,把每条 SDK 消息序列化后通过 on_message 回传。
 
@@ -279,7 +280,7 @@ async def stream_chat(
             "type": "preset",
             "preset": "claude_code",
             "append": "\n\n".join(
-                p for p in (dao_layer, agent_prompt, rule_prompt) if p
+                p for p in (dao_layer, agent_prompt, draft_brief, rule_prompt) if p
             ),
         },
         cwd=str(user_workspace),

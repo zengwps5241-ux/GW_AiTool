@@ -60,7 +60,7 @@ type ToolPart = {
   errorText?: string;
 };
 type ErrorPart = { kind: "error"; text: string };
-/** AI 结构化草稿「待采纳」卡片（M3.1.4） */
+/** AI 结构化草稿「待采纳」卡片（M3.1.4；M3.4.3 增量更新带 isUpdate/revision/previous） */
 type DraftPart = {
   kind: "draft";
   /** (entity_type, draft_id) 唯一键，亦作采纳状态 map 的 key */
@@ -70,6 +70,12 @@ type DraftPart = {
   draftId: number;
   projectId: number;
   preview: Record<string, unknown>;
+  /** 是否为增量更新（true=本次修订，携带 previous 供 diff，§7.2 Chat 调整） */
+  isUpdate?: boolean;
+  /** 草稿修订号（business_map 整图草稿：第 N 版） */
+  revision?: number;
+  /** 上一版内容快照（business_map 为整图 objects；stakeholder/visit 为字段快照） */
+  previous?: Record<string, unknown>;
 };
 type Part = TextPart | ToolPart | ErrorPart | DraftPart;
 
@@ -300,6 +306,7 @@ function foldEvents(events: ChatEvent[]): Turn[] {
       }
     } else if (evt.type === "draft_pending") {
       // AI 调用 save_xxx_draft 落库后推送的「待采纳」卡片（M3.1.3/M3.1.4）
+      // M3.4.3：增量更新携带 is_update/revision/previous 供前端 diff（§7.2）
       const t = ensureAssistant();
       t.parts.push({
         kind: "draft",
@@ -309,6 +316,9 @@ function foldEvents(events: ChatEvent[]): Turn[] {
         draftId: evt.draft_id,
         projectId: evt.project_id,
         preview: evt.preview,
+        isUpdate: evt.is_update,
+        revision: evt.revision,
+        previous: evt.previous,
       });
     } else if (evt.type === "error") {
       const t = ensureAssistant();
@@ -2185,7 +2195,7 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
         {turn.parts.map((p, i) => {
           if (p.kind === "text") return <MarkdownView key={i} text={p.text} />;
           if (p.kind === "draft") {
-            // AI 结构化草稿「待采纳」卡片（M3.1.4）
+            // AI 结构化草稿「待采纳」卡片（M3.1.4；M3.4.3 增量更新带 diff + 调整提示）
             const action = draftAction[p.id];
             const previewLabel: Record<string, string> = {
               object_count: "节点数",
@@ -2194,9 +2204,75 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
               visit_type: "类型",
               summary: "摘要",
             };
+            // objects 节点摘要由下方节点列表/diff 块单独展示，不进 previewEntries
             const previewEntries = Object.entries(p.preview).filter(
-              ([, v]) => v !== null && v !== undefined && v !== "",
+              ([k, v]) =>
+                k !== "objects" && v !== null && v !== undefined && v !== "",
             );
+            const nodeNames = Array.isArray(p.preview.objects)
+              ? (p.preview.objects as { name?: string }[])
+                  .map((o) => o.name)
+                  .filter((n): n is string => !!n)
+              : [];
+            // M3.4.3 diff：增量更新时对比「上一版 → 当前版」（§7.2 Chat 调整）
+            const diffRows: { label: string; from: string; to: string }[] = [];
+            if (p.isUpdate && p.previous) {
+              if (p.entityType === "business_map_draft") {
+                const prevObjs = Array.isArray(p.previous.objects)
+                  ? (p.previous.objects as { level?: string; name?: string }[])
+                  : [];
+                const curObjs = Array.isArray(p.preview.objects)
+                  ? (p.preview.objects as { level?: string; name?: string }[])
+                  : [];
+                const keyOf = (o: { level?: string; name?: string }) =>
+                  `${o.level ?? "?"}:${o.name ?? ""}`;
+                const prevKeys = new Set(prevObjs.map(keyOf));
+                const curKeys = new Set(curObjs.map(keyOf));
+                const added = curObjs.filter((o) => !prevKeys.has(keyOf(o)));
+                const removed = prevObjs.filter((o) => !curKeys.has(keyOf(o)));
+                if (added.length)
+                  diffRows.push({
+                    label: "新增节点",
+                    from: "",
+                    to: added.map((o) => o.name ?? "?").join("、"),
+                  });
+                if (removed.length)
+                  diffRows.push({
+                    label: "移除节点",
+                    from: removed.map((o) => o.name ?? "?").join("、"),
+                    to: "",
+                  });
+                if (!added.length && !removed.length)
+                  diffRows.push({
+                    label: "结构未变",
+                    from: "字段内容可能已更新",
+                    to: "",
+                  });
+              } else {
+                // stakeholder/visit：字段快照逐项对比
+                const fmtVal = (v: unknown) =>
+                  v === null || v === undefined || v === ""
+                    ? "（空）"
+                    : typeof v === "object"
+                      ? JSON.stringify(v)
+                      : String(v);
+                const keys = Array.from(
+                  new Set([
+                    ...Object.keys(p.previous),
+                    ...Object.keys(p.preview),
+                  ]),
+                ).filter((k) => k !== "objects");
+                for (const k of keys) {
+                  if (fmtVal(p.previous[k]) !== fmtVal(p.preview[k])) {
+                    diffRows.push({
+                      label: previewLabel[k] ?? k,
+                      from: fmtVal(p.previous[k]),
+                      to: fmtVal(p.preview[k]),
+                    });
+                  }
+                }
+              }
+            }
             return (
               <div
                 key={i}
@@ -2222,17 +2298,31 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                 >
                   <I.Sparkles size={14} style={{ color: "var(--accent)" }} />
                   <span>{p.entityLabel}</span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      padding: "2px 8px",
-                      borderRadius: 10,
-                      background: "var(--accent-soft)",
-                      color: "var(--accent)",
-                    }}
-                  >
-                    待采纳
-                  </span>
+                  {p.isUpdate ? (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        background: "rgba(230,140,0,0.14)",
+                        color: "#b06a00",
+                      }}
+                    >
+                      第 {p.revision ?? 2} 版·已更新
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        background: "var(--accent-soft)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      待采纳
+                    </span>
+                  )}
                 </div>
                 {previewEntries.length > 0 && (
                   <div
@@ -2252,6 +2342,46 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                         <span style={{ flex: 1, wordBreak: "break-word" }}>
                           {String(v)}
                         </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {nodeNames.length > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                    <span style={{ color: "var(--ink-4)" }}>节点：</span>
+                    {nodeNames.join("、")}
+                  </div>
+                )}
+                {diffRows.length > 0 && (
+                  <div
+                    style={{
+                      border: "1px dashed var(--line)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      background: "rgba(0,0,0,0.02)",
+                      fontSize: 12,
+                      color: "var(--ink-2)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: "var(--ink)" }}>
+                      本次修订对比（上一版 → 当前版）
+                    </div>
+                    {diffRows.map((d, idx) => (
+                      <div
+                        key={idx}
+                        style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}
+                      >
+                        <span style={{ color: "var(--ink-4)", minWidth: 64 }}>{d.label}：</span>
+                        {d.from && (
+                          <span style={{ textDecoration: "line-through", color: "var(--danger)" }}>
+                            {d.from}
+                          </span>
+                        )}
+                        {d.from && d.to && <span style={{ color: "var(--ink-4)" }}>→</span>}
+                        {d.to && <span style={{ color: "var(--success)" }}>{d.to}</span>}
                       </div>
                     ))}
                   </div>
@@ -2285,37 +2415,43 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                     <I.CircleAlert size={14} /> {action.message}
                   </div>
                 ) : (
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={() => handleAdoptDraft(p)}
-                      disabled={action?.status === "adopting"}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: 8,
-                        border: "none",
-                        cursor: action?.status === "adopting" ? "wait" : "pointer",
-                        background: "var(--accent)",
-                        color: "#fff",
-                        fontSize: 13,
-                        opacity: action?.status === "adopting" ? 0.6 : 1,
-                      }}
-                    >
-                      {action?.status === "adopting" ? "采纳中…" : "采纳"}
-                    </button>
-                    <button
-                      onClick={() => handleRejectDraft(p)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                        background: "transparent",
-                        color: "var(--ink-2)",
-                        border: "1px solid var(--line)",
-                        fontSize: 13,
-                      }}
-                    >
-                      驳回
-                    </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 12, color: "var(--ink-4)", lineHeight: 1.5 }}>
+                      不满意？在下方输入框用自然语言描述修改（如「把 L1 改成…」「影响力调高」），
+                      AI 会基于原文重新生成并更新草稿，再请你确认采纳。
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => handleAdoptDraft(p)}
+                        disabled={action?.status === "adopting"}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: 8,
+                          border: "none",
+                          cursor: action?.status === "adopting" ? "wait" : "pointer",
+                          background: "var(--accent)",
+                          color: "#fff",
+                          fontSize: 13,
+                          opacity: action?.status === "adopting" ? 0.6 : 1,
+                        }}
+                      >
+                        {action?.status === "adopting" ? "采纳中…" : "采纳"}
+                      </button>
+                      <button
+                        onClick={() => handleRejectDraft(p)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          background: "transparent",
+                          color: "var(--ink-2)",
+                          border: "1px solid var(--line)",
+                          fontSize: 13,
+                        }}
+                      >
+                        驳回
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

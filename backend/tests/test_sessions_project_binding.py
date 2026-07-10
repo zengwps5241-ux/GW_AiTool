@@ -197,6 +197,92 @@ async def test_build_draft_context_none_without_project():
     assert ctx is None
 
 
+# ─── _build_draft_brief 单元（M3.4.3 Chat 调整循环上下文注入） ──
+
+
+@pytest.mark.asyncio
+async def test_build_draft_brief_none_when_no_drafts(logged_in_client):
+    """无任何待采纳草稿 → 不注入 brief（返回 None）。"""
+    from app.db.session import async_session
+    from app.modules.sessions.streaming import _build_draft_brief
+
+    project = await _make_project(logged_in_client)
+    async with async_session() as db:
+        brief = await _build_draft_brief(db, project["id"])
+    assert brief is None
+
+
+@pytest.mark.asyncio
+async def test_build_draft_brief_summarizes_pending_drafts(logged_in_client):
+    """有业务地图草稿 + draft 态角色卡 → brief 含概要（供 AI 基于原文重新生成）。"""
+    from app.db.session import async_session
+    from app.modules.sessions.streaming import _build_draft_brief
+
+    project = await _make_project(logged_in_client)
+    pid = project["id"]
+    # 造一张业务地图 active 草稿 + 一张 draft 态角色卡
+    await logged_in_client.put(
+        f"/api/projects/{pid}/business-map/drafts",
+        json={
+            "draft_data": {
+                "objects": [
+                    {"level": "L1", "name": "价值链X"},
+                    {"level": "L2", "name": "业务Y"},
+                ]
+            }
+        },
+    )
+    await logged_in_client.post(
+        f"/api/projects/{pid}/stakeholder-cards",
+        json={"name": "王总监", "role_type": "technical_evaluator", "review_status": "draft"},
+    )
+
+    async with async_session() as db:
+        brief = await _build_draft_brief(db, pid)
+    assert brief is not None
+    assert "业务地图草稿" in brief
+    assert "价值链X" in brief
+    assert "第 1 版" in brief  # 首次生成 revision=1
+    assert "角色卡草稿" in brief
+    assert "王总监" in brief
+
+
+@pytest.mark.asyncio
+async def test_stream_session_chat_passes_draft_brief_for_project_session(
+    logged_in_client, monkeypatch
+):
+    """项目会话且存在待采纳草稿 → stream_chat 收到 draft_brief（注入 system prompt）。"""
+    from app.modules.sessions import streaming
+
+    project = await _make_project(logged_in_client)
+    pid = project["id"]
+    # 先造一张草稿，使 brief 非空
+    await logged_in_client.put(
+        f"/api/projects/{pid}/business-map/drafts",
+        json={"draft_data": {"objects": [{"level": "L1", "name": "价值链Z"}]}},
+    )
+    sid = (
+        await logged_in_client.post("/api/sessions", json={"project_id": pid})
+    ).json()["id"]
+
+    cs = await _fetch_session(sid)
+    alice = await _fetch_user("alice")
+
+    captured: dict = {}
+
+    async def fake_stream_chat(**kwargs):
+        captured.update(kwargs)
+        return _fake_summary()
+
+    monkeypatch.setattr(streaming, "stream_chat", fake_stream_chat)
+
+    response = await streaming.stream_session_chat(cs, alice, "把 L1 改成业务全景")
+    await _drain(response)
+
+    assert "draft_brief" in captured
+    assert "价值链Z" in captured["draft_brief"]
+
+
 # ─── stream_session_chat 接线（mock stream_chat） ────────────
 
 

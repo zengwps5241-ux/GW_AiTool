@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 
 from app.core import redis as redis_core
 from app.core.config import _merged_env, get_settings, user_workspace
@@ -236,6 +237,74 @@ async def _build_draft_context(
     )
 
 
+async def _build_draft_brief(db, project_id: int) -> str | None:
+    """读取项目当前待采纳草稿，生成供 AI「基于原文+指令重新生成」的上下文摘要（§7.2）。
+
+    M3.4.3 Chat 调整循环：项目存在 active 业务地图草稿或 draft 态角色卡/拜访记录时，
+    把它们概要注入 system prompt，使 AI 在用户用自然语言提出修改时，能基于当前草稿原文
+    重新调用草稿工具覆盖更新（而非凭空新建重复草稿）。无任何待采纳草稿时返回 None。
+    """
+    from app.models import StakeholderCard, VisitRecord
+    from app.modules.business_map import service as bm_svc
+
+    lines: list[str] = []
+    # 业务地图：active 草稿（整图草稿单元）
+    draft = await bm_svc.get_active_draft(db, project_id)
+    if draft is not None:
+        specs = bm_svc._extract_object_specs(draft.draft_data)
+        by_level: dict[str, list[str]] = {}
+        for spec in specs:
+            by_level.setdefault(str(spec.get("level", "?")), []).append(
+                str(spec.get("name", "?"))
+            )
+        if by_level:
+            level_desc = " / ".join(
+                f"{lv}：{'、'.join(ns[:8])}{'…' if len(ns) > 8 else ''}"
+                for lv, ns in sorted(by_level.items())
+            )
+        else:
+            level_desc = "（空）"
+        rev = getattr(draft, "revision", 1) or 1
+        lines.append(f"- 业务地图草稿（第 {rev} 版，{len(specs)} 个节点）：{level_desc}")
+    # 角色卡：draft 态
+    cards = (
+        await db.execute(
+            select(StakeholderCard).where(
+                StakeholderCard.project_id == project_id,
+                StakeholderCard.review_status == "draft",
+            )
+        )
+    ).scalars().all()
+    if cards:
+        desc = " / ".join(f"{c.name}（{c.role_type or '未分类'}）" for c in cards[:10])
+        lines.append(f"- 角色卡草稿（{len(cards)} 张草稿态）：{desc}")
+    # 拜访记录：draft 态
+    visits = (
+        await db.execute(
+            select(VisitRecord).where(
+                VisitRecord.project_id == project_id,
+                VisitRecord.review_status == "draft",
+            )
+        )
+    ).scalars().all()
+    if visits:
+        desc = " / ".join(
+            (
+                f"{v.visit_date.isoformat() if v.visit_date else '未定'} {v.visit_type or ''}"
+            ).strip()
+            for v in visits[:10]
+        )
+        lines.append(f"- 拜访记录草稿（{len(visits)} 条草稿态）：{desc}")
+    if not lines:
+        return None
+    return (
+        "【当前待采纳草稿】用户可能基于以下草稿用自然语言提出修改。"
+        "若用户要求调整，应基于原文+用户指令重新调用对应草稿工具覆盖更新"
+        "（业务地图整图草稿直接覆盖；角色卡/拜访记录需带 update_draft_id 更新对应草稿，"
+        "避免新建重复草稿），更新后主动询问是否采纳：\n" + "\n".join(lines)
+    )
+
+
 async def stream_session_chat(
     cs: ChatSession,
     user: User,
@@ -432,10 +501,11 @@ async def stream_session_chat(
                 stream_kwargs["model"] = model
             if thinking_level != "low":
                 stream_kwargs["thinking_level"] = thinking_level
-            # M3.4.2：项目级会话挂载草稿工具（绑定项目且当前用户仍为成员）。
-            # 草稿工具经 DraftToolContext 闭包把 project/user/session 注入 handler，
-            # AI 调用 save_xxx_draft → 校验落库 → publish_draft_event 推送「待采纳」。
+            # M3.4.2/M3.4.3：项目级会话挂载草稿工具（绑定项目且当前用户仍为成员），
+            # 并把当前待采纳草稿摘要注入 system prompt（§7.2 Chat 调整循环——使 AI
+            # 基于原文+指令重新生成并覆盖更新草稿，而非新建重复草稿）。
             if project_id is not None:
+                draft_brief: str | None = None
                 async with async_session() as s:
                     draft_context = await _build_draft_context(
                         s,
@@ -444,8 +514,12 @@ async def stream_session_chat(
                         source_session_id=session_id,
                         publish=publish_draft_event,
                     )
+                    if draft_context is not None:
+                        draft_brief = await _build_draft_brief(s, project_id)
                 if draft_context is not None:
                     stream_kwargs["draft_context"] = draft_context
+                    if draft_brief:
+                        stream_kwargs["draft_brief"] = draft_brief
             # M3.3.2 consultant-search：项目 Agent 绑定搜索 Plugin 时挂载 3 个搜索工具
             # （search_web/search_company_registry/fetch_webpage），结果归档个人空间。
             # workspace_root 来自会话工作区；project/user/session 经闭包注入 handler。

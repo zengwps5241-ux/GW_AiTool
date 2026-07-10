@@ -202,13 +202,19 @@ export type ChatEvent =
       is_error?: boolean;
     }
   | {
-      /** 草稿「待采纳」事件（M3.1.3 后端 handler 推送） */
+      /** 草稿「待采纳」事件（M3.1.3 后端 handler 推送；M3.4.3 增量更新携带 is_update/revision/previous） */
       type: "draft_pending";
       entity_type: string;
       entity_label: string;
       draft_id: number;
       project_id: number;
       preview: Record<string, unknown>;
+      /** 是否为增量更新（true=本次修订，携带 previous 供 diff，§7.2 Chat 调整） */
+      is_update?: boolean;
+      /** 草稿修订号（business_map 整图草稿：第 N 版） */
+      revision?: number;
+      /** 上一版内容快照（business_map 为整图 objects；stakeholder/visit 为字段快照） */
+      previous?: Record<string, unknown>;
     }
   | { type: "result"; [key: string]: unknown }
   | { type: "error"; message: string };

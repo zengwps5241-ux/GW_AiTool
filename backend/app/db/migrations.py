@@ -541,3 +541,18 @@ async def init_db() -> None:
             await conn.execute(text(
                 "CREATE INDEX idx_intent_routing_label ON intent_routing_logs (intent_label)"
             ))
+
+        # business_map_drafts 表列迁移（M3.4.3 Chat 调整循环：草稿版本化）
+        # previous_data 保留上一版草稿供 diff（§7.2），revision 为修订号（首次=1，更新+1）
+        for col, col_type in [
+            ("previous_data", "JSONB NULL"),
+            ("revision", "INTEGER NOT NULL DEFAULT 1"),
+        ]:
+            result = await conn.execute(text(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                f"WHERE table_name='business_map_drafts' AND column_name='{col}'"
+            ))
+            if result.scalar() == 0:
+                await conn.execute(text(
+                    f"ALTER TABLE business_map_drafts ADD COLUMN {col} {col_type}"
+                ))

@@ -271,6 +271,8 @@ def _draft_to_out(draft: BusinessMapDraft, created_by_name: str | None) -> Busin
         id=draft.id,
         project_id=draft.project_id,
         draft_data=draft.draft_data,
+        previous_data=draft.previous_data,
+        revision=draft.revision if draft.revision is not None else 1,
         source_session_id=draft.source_session_id,
         created_by=draft.created_by,
         created_by_name=created_by_name,
@@ -321,7 +323,11 @@ async def get_active_draft(
 async def upsert_draft(
     db: AsyncSession, project_id: int, payload: BusinessMapDraftUpdate, user: User
 ) -> BusinessMapDraftOut:
-    """更新当前 active 草稿（不存在则创建）。整个业务地图为一个草稿单元（§7.1.7）。"""
+    """更新当前 active 草稿（不存在则创建）。整个业务地图为一个草稿单元（§7.1.7）。
+
+    增量更新语义（§7.2 Chat 调整）：覆盖前把旧 draft_data 存入 previous_data、
+    revision +1，使前端可对「上一版 vs 当前版」做 diff 对比。首次生成 revision=1。
+    """
     await _mark_expired_drafts(db, project_id)
     draft = (
         await db.execute(
@@ -338,6 +344,8 @@ async def upsert_draft(
         draft = BusinessMapDraft(
             project_id=project_id,
             draft_data=payload.draft_data,
+            previous_data=None,
+            revision=1,
             source_session_id=payload.source_session_id,
             created_by=user.id,
             expires_at=datetime.now(timezone.utc) + timedelta(days=DRAFT_TTL_DAYS),
@@ -345,7 +353,10 @@ async def upsert_draft(
         )
         db.add(draft)
     else:
+        # 增量更新：保留上一版内容供 diff，修订号递增
+        draft.previous_data = draft.draft_data
         draft.draft_data = payload.draft_data
+        draft.revision = (draft.revision or 1) + 1
         if payload.source_session_id is not None:
             draft.source_session_id = payload.source_session_id
         draft.expires_at = datetime.now(timezone.utc) + timedelta(days=DRAFT_TTL_DAYS)
