@@ -306,6 +306,18 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 **设计要点**：前置分析为项目级单份（getPreAnalysis 返回 null 时显示「开始填写」）。编辑态本地 form，保存后回填 data + 退出编辑；取消还原。复用 M2.1.8 后端 upsert（已就绪）。组件挂载时拉取（切到该 Tab 才 mount → 自动刷新）。
 **回归**：纯前端，tsc -b 0 错 + vite build 通过（1.29s）。
 
+### M4.1.7 五维健康视图（评分表 + 重算 + 手动覆盖）✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| L1/L2/L3 逐域评分表 | ✅ | 2026-07-10 | HealthTable：行=节点，列=5维+均值，色块（≤2红/3黄/≥4绿），点击节点名跳转详情 |
+| 重新计算（规则版） | ✅ | 2026-07-10 | 「重新计算全部」→ recomputeBusinessMapHealth（POST /health/recompute，M2.1.9）→ onChanged 刷新 objects |
+| 手动覆盖 | ✅ | 2026-07-10 | HealthOverrideModal：5 维 × 1-5 分按钮选择 → setBusinessMapNodeHealth（PUT /objects/{id}/health，标记 manual，desc 沿用） |
+
+**设计要点**：五维数据派生自已加载 objects 的 payload.fiveDimHealth（无需额外 GET）；重算/覆盖后调 onChanged=refresh() 重新拉取 objects 反映新评分。右侧五维解读面板（5 维含义 + 评分标准）。均值仅对有分维度取平均。空态引导去对话生成地图。
+**回归**：纯前端，tsc -b 0 错 + vite build 通过（1.25s）。
+
+
 
 
 

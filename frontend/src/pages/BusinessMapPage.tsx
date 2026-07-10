@@ -302,7 +302,15 @@ export default function BusinessMapPage({ project }: Props) {
         ) : subView === "preanalysis" ? (
           <PreAnalysisView projectId={project.id} />
         ) : subView === "health" ? (
-          <PlaceholderView />
+          <HealthView
+            objects={objects}
+            projectId={project.id}
+            onChanged={refresh}
+            onJump={(node) => {
+              setSelectedId(node.id);
+              setSubView(node.map_type === "current" ? "current" : "hypothesis");
+            }}
+          />
         ) : loading ? (
           <Card style={{ flex: 1, padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
@@ -778,19 +786,304 @@ function OntologyBlock({ ont }: { ont: NonNullable<BusinessMapPayload["ontologyE
   );
 }
 
-// ─── 占位视图（前置分析 / 五维健康 — 后续任务实现） ────────────
+// ─── 五维健康视图（M4.1.7：评分表 + 重算 + 手动覆盖） ──────────
 
-function PlaceholderView() {
-  const meta = { title: "五维健康", task: "M4.1.7", desc: "L1 雷达总览 + L2/L3 逐域评分表，支持重新计算与手动覆盖。" };
+function HealthView({
+  objects,
+  projectId,
+  onChanged,
+  onJump,
+}: {
+  objects: BusinessMapObject[];
+  projectId: number;
+  onChanged: () => void;
+  onJump: (node: BusinessMapObject) => void;
+}) {
+  const toast = useToast();
+  const [recomputing, setRecomputing] = useState(false);
+  const [editing, setEditing] = useState<BusinessMapObject | null>(null);
+
+  const withHealth = (lv: string) =>
+    objects.filter((o) => o.level === lv && o.payload?.fiveDimHealth);
+
+  const l1 = withHealth("L1");
+  const l2 = withHealth("L2");
+  const l3 = withHealth("L3");
+  const empty = l1.length + l2.length + l3.length === 0;
+
+  const recompute = async () => {
+    setRecomputing(true);
+    try {
+      await api.recomputeBusinessMapHealth(projectId);
+      toast.showToast("五维健康已按规则重新计算", "success");
+      onChanged();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "重算失败", "error");
+    } finally {
+      setRecomputing(false);
+    }
+  };
+
   return (
-    <Card style={{ flex: 1, padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
-      <I.Activity size={32} style={{ color: "var(--accent)", marginBottom: 10 }} />
-      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{meta.title}视图</div>
-      <div style={{ maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>{meta.desc}</div>
-      <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-4)" }}>将在 {meta.task} 实现</div>
-    </Card>
+    <>
+      <Card style={{ flex: 1, padding: 20, overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>五维健康总览</div>
+          <Btn
+            size="sm"
+            variant="soft"
+            icon={<I.Refresh size={13} />}
+            onClick={recompute}
+            disabled={recomputing}
+          >
+            {recomputing ? "重算中…" : "重新计算全部"}
+          </Btn>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 16 }}>
+          评分按规则自动计算（M2.1.9）；点击表格行跳转节点详情，「调整」可手动覆盖评分（标记 manual）。
+        </div>
+
+        {empty ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+            <I.Activity size={28} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+            暂无带五维健康的节点。先在对话中生成业务地图（WF07）并采纳，或点「重新计算全部」。
+          </div>
+        ) : (
+          <>
+            {l1.length > 0 && <HealthTable title="L1 · 价值链环节" nodes={l1} onJump={onJump} onEdit={setEditing} />}
+            {l2.length > 0 && <HealthTable title="L2 · 业务域" nodes={l2} onJump={onJump} onEdit={setEditing} />}
+            {l3.length > 0 && <HealthTable title="L3 · 细分场景" nodes={l3} onJump={onJump} onEdit={setEditing} />}
+          </>
+        )}
+      </Card>
+
+      {/* 右：五维解读 */}
+      <Card style={{ width: 320, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>
+          📖 五维健康解读
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, color: "var(--ink-2)", lineHeight: 1.6 }}>
+          {[
+            ["L5 数字意识", "战略是否分解到各价值链环节？IT 投资与业务战略是否匹配？", "var(--info)"],
+            ["L4 数字神经", "跨环节流程是否顺畅？协同效率如何？变更是否可控？", "var(--accent)"],
+            ["L3 数字器官", "核心 IT 系统是否覆盖各环节？系统间是否集成？用户是否愿意用？", "var(--success)"],
+            ["L2 数字血液", "跨价值链关键数据是否准确、及时、共享？", "var(--warn)"],
+            ["L1 数字骨架", "基础设施是否弹性、经济、可持续？", "var(--danger)"],
+          ].map(([title, desc, color]) => (
+            <div key={title} style={{ padding: 10, background: "var(--bg-2)", borderRadius: 8, borderLeft: `3px solid ${color}` }}>
+              <div style={{ fontWeight: 600, color, marginBottom: 4 }}>{title}</div>
+              <div style={{ fontSize: 11 }}>{desc}</div>
+            </div>
+          ))}
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, fontSize: 11, color: "var(--ink-3)" }}>
+            评分标准：5 分=行业领先 / 3 分=行业平均 / 1 分=严重不足。
+          </div>
+        </div>
+      </Card>
+
+      {editing && (
+        <HealthOverrideModal
+          node={editing}
+          projectId={projectId}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            onChanged();
+          }}
+        />
+      )}
+    </>
   );
 }
+
+/** 五维健康评分表（一行一节点，5 维 + 均值） */
+function HealthTable({
+  title,
+  nodes,
+  onJump,
+  onEdit,
+}: {
+  title: string;
+  nodes: BusinessMapObject[];
+  onJump: (node: BusinessMapObject) => void;
+  onEdit: (node: BusinessMapObject) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)", marginBottom: 8 }}>{title}</div>
+      <div style={{ overflow: "auto", border: "1px solid var(--line)", borderRadius: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: "var(--bg-2)", borderBottom: "2px solid var(--line)" }}>
+              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "var(--ink-3)" }}>节点</th>
+              {DIM_ORDER.map((d) => (
+                <th key={d.key} style={{ padding: "8px 8px", textAlign: "center", fontWeight: 700, color: "var(--ink-3)" }}>
+                  {d.label}
+                </th>
+              ))}
+              <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "var(--ink-3)" }}>均值</th>
+              <th style={{ padding: "8px 8px", textAlign: "center", fontWeight: 700, color: "var(--ink-3)" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {nodes.map((node) => {
+              const h = node.payload?.fiveDimHealth!;
+              const scores = DIM_ORDER.map((d) => h[d.key]?.score ?? 0);
+              const avg = scores.filter((s) => s > 0).length
+                ? (scores.reduce((a, b) => a + b, 0) / scores.filter((s) => s > 0).length).toFixed(1)
+                : "—";
+              return (
+                <tr key={node.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <td
+                    style={{ padding: "8px 12px", fontWeight: 500, cursor: "pointer", color: "var(--accent)" }}
+                    onClick={() => onJump(node)}
+                  >
+                    {node.name}
+                  </td>
+                  {scores.map((s, i) => (
+                    <td key={i} style={{ padding: "8px 8px", textAlign: "center" }}>
+                      {s > 0 ? <ScoreChip score={s} /> : <span style={{ color: "var(--ink-4)" }}>—</span>}
+                    </td>
+                  ))}
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700 }}>{avg}</td>
+                  <td style={{ padding: "8px 8px", textAlign: "center" }}>
+                    <button onClick={() => onEdit(node)} style={linkBtnStyle}>调整</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ScoreChip({ score }: { score: number }) {
+  return (
+    <span
+      style={{
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        background: score <= 2 ? "var(--danger-soft)" : score === 3 ? "var(--warn-soft)" : "var(--success-soft)",
+        color: score <= 2 ? "var(--danger)" : score === 3 ? "var(--warn)" : "var(--success)",
+      }}
+    >
+      {score}
+    </span>
+  );
+}
+
+/** 手动覆盖五维健康弹窗 */
+function HealthOverrideModal({
+  node,
+  projectId,
+  onClose,
+  onSaved,
+}: {
+  node: BusinessMapObject;
+  projectId: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const existing = node.payload?.fiveDimHealth ?? {};
+  const [scores, setScores] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    for (const d of DIM_ORDER) init[d.key] = existing[d.key]?.score ?? 3;
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, { score: number; desc: string }> = {};
+      for (const d of DIM_ORDER) {
+        const prev = existing[d.key];
+        payload[d.key] = { score: scores[d.key], desc: prev?.desc ?? "" };
+      }
+      await api.setBusinessMapNodeHealth(projectId, node.id, payload);
+      toast.showToast("已手动覆盖五维健康", "success");
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={modalCardStyle}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
+            手动调整五维健康
+            <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 400, marginLeft: 8 }}>{node.name}</span>
+          </div>
+          <button onClick={onClose} style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)" }}>
+            <I.X size={16} />
+          </button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {DIM_ORDER.map((d) => (
+            <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink-2)", width: 80, flexShrink: 0 }}>{d.label}</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setScores((p) => ({ ...p, [d.key]: n }))}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      border: `1px solid ${scores[d.key] === n ? "var(--accent)" : "var(--line)"}`,
+                      background: scores[d.key] === n ? "var(--accent)" : "var(--surface)",
+                      color: scores[d.key] === n ? "#FFFCF5" : "var(--ink-2)",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <span style={{ fontSize: 11, color: "var(--ink-4)" }}>
+                {scores[d.key] >= 4 ? "领先" : scores[d.key] === 3 ? "平均" : "不足"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <Btn variant="ghost" onClick={onClose}>取消</Btn>
+          <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存覆盖"}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.35)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1000,
+};
+const modalCardStyle: React.CSSProperties = {
+  width: 440,
+  background: "var(--surface)",
+  border: "1px solid var(--line)",
+  borderRadius: 12,
+  padding: 20,
+  boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+};
 
 // ─── 前置分析（M4.1.6：查看 + 编辑） ──────────────────────────
 
