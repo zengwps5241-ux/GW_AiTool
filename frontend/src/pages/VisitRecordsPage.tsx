@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
+import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
 import type { EvidenceSource, Project, StakeholderCard, VisitRecord } from "@/types";
 
@@ -253,6 +254,7 @@ export default function VisitRecordsPage({ project }: Props) {
                 key={v.id}
                 visit={v}
                 cardMap={cardMap}
+                visitEvidences={evidences.filter((e) => e.visit_record_id === v.id)}
                 expanded={expandedVisitId === v.id}
                 onToggle={() =>
                   setExpandedVisitId(expandedVisitId === v.id ? null : v.id)
@@ -387,11 +389,13 @@ export default function VisitRecordsPage({ project }: Props) {
 function VisitRow({
   visit,
   cardMap,
+  visitEvidences,
   expanded,
   onToggle,
 }: {
   visit: VisitRecord;
   cardMap: Map<number, string>;
+  visitEvidences: EvidenceSource[];
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -402,6 +406,7 @@ function VisitRow({
     .map((id) => cardMap.get(id) ?? `角色#${id}`)
     .join("、");
   const relatedCardCount = visit.related_card_ids?.length ?? 0;
+  const keyTakeawaysText = (visit.key_takeaways ?? []).join("\n").trim();
 
   return (
     <Card style={{ padding: 0, overflow: "hidden" }}>
@@ -459,18 +464,88 @@ function VisitRow({
         }} />
       </div>
 
-      {/* 展开体：基本信息（M4.3.4 将追加 KeyTakeaways / NextSteps / 证据清单） */}
+      {/* 展开体：基本信息 + 关键洞察 + 下一步行动 + 本次证据清单 */}
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--line)", padding: "14px 20px", background: "var(--bg)" }}>
-          <div style={{ display: "flex", gap: 20, fontSize: 12, flexWrap: "wrap" }}>
+        <div style={{ borderTop: "1px solid var(--line)", padding: "16px 20px", background: "var(--bg)" }}>
+          {/* 基本信息 */}
+          <div style={{ display: "flex", gap: 20, fontSize: 12, flexWrap: "wrap", marginBottom: 14 }}>
             <div><span style={{ color: "var(--ink-3)" }}>我方参与：</span><span style={{ fontWeight: 500 }}>{ourNames || "—"}</span></div>
             <div><span style={{ color: "var(--ink-3)" }}>客户参与：</span><span style={{ fontWeight: 500 }}>{clientNames || "—"}</span></div>
             <div><span style={{ color: "var(--ink-3)" }}>地点：</span>{visit.location || "—"}</div>
             <div><span style={{ color: "var(--ink-3)" }}>时长：</span>{visit.duration || "—"}</div>
           </div>
+
+          {/* Key Takeaways */}
+          {keyTakeawaysText && (
+            <div style={{ padding: "12px 14px", background: "var(--accent-soft)", borderRadius: 8, marginBottom: 14, fontSize: 12, lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>💡 关键洞察</div>
+              <MarkdownView text={keyTakeawaysText} />
+            </div>
+          )}
+
+          {/* Next Steps */}
+          {visit.next_steps && (
+            <div style={{ padding: "12px 14px", background: "var(--info-soft)", borderRadius: 8, marginBottom: 16, fontSize: 12, lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: "var(--info)", marginBottom: 6 }}>📋 下一步行动</div>
+              <MarkdownView text={visit.next_steps} />
+            </div>
+          )}
+
+          {/* 本次拜访产出的证据清单 */}
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 10 }}>
+              证据清单（{visitEvidences.length}条）
+            </div>
+            {visitEvidences.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--ink-4)", textAlign: "center", padding: 16 }}>本次拜访暂无已确认证据</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {visitEvidences.map((e) => (
+                  <EvidenceDetail key={e.id} evidence={e} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Card>
+  );
+}
+
+// ─── 证据条目（展开体内部，M4.3.5 将追加态度联动展示）──────────
+
+function EvidenceDetail({ evidence: e }: { evidence: EvidenceSource }) {
+  return (
+    <div style={{
+      display: "flex", gap: 10, padding: "10px 12px",
+      background: "var(--surface)", borderRadius: 8, border: "1px solid var(--line)", fontSize: 12,
+    }}>
+      <div style={{ width: 6, height: 6, borderRadius: 999, background: strengthColor(e.strength), flexShrink: 0, marginTop: 5 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ lineHeight: 1.6, color: "var(--ink-2)", marginBottom: 6 }}>{e.content}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--bg-3)", color: "var(--ink-3)" }}>
+            {evidenceTypeLabel[e.evidence_type] ?? e.evidence_type}
+          </span>
+          <span style={{
+            padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 500,
+            background: strengthColor(e.strength) + "18", color: strengthColor(e.strength),
+          }}>
+            {e.strength}证据
+          </span>
+          {e.source_role_name && (
+            <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--info-soft)", color: "var(--info)" }}>
+              {e.source_role_name}
+            </span>
+          )}
+          {e.related_hypothesis_name && (
+            <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--accent-soft)", color: "var(--accent)", fontWeight: 500 }}>
+              🔗 {e.related_hypothesis_name}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
