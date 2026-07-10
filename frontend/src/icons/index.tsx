@@ -374,6 +374,32 @@ export const I = {
       <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
     </Base>
   ),
+  Network: (p: IconProps) => (
+    <Base {...p}>
+      <circle cx="5" cy="6" r="2" />
+      <circle cx="19" cy="6" r="2" />
+      <circle cx="12" cy="18" r="2" />
+      <path d="M7 7l4 9M17 7l-4 9M7 6h10" />
+    </Base>
+  ),
+  Book: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+    </Base>
+  ),
+  Calendar: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </Base>
+  ),
+  MessageText: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
+      <path d="M8 9h8M8 13h5" />
+    </Base>
+  ),
 };
 
 export default I;

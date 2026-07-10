@@ -18,6 +18,8 @@ import type {
   FeedbackIssueList,
   FileNode,
   FiveDimHealthOut,
+  KnowledgeBase,
+  KnowledgeBaseInput,
   LoginWhitelistConfig,
   LoginWhitelistDepartment,
   LoginWhitelistDepartmentSearchItem,
@@ -39,6 +41,14 @@ import type {
   RunningSessionState,
   Session,
   Skill,
+  StanceChangeResult,
+  StakeholderCard,
+  StakeholderCardInput,
+  StakeholderGraph,
+  StakeholderRelation,
+  StakeholderRelationInput,
+  TalkScript,
+  TalkScriptInput,
   TeamMemberRole,
   TeamSpace,
   TeamSpaceMember,
@@ -966,6 +976,146 @@ export const api = {
       `/api/projects/${projectId}/evidence-sources${query ? "?" + query : ""}`,
     );
   },
+
+  // ─── 营销地图（M4.2 / M2.2 后端就绪）─────────────────────────
+  listStakeholderCards: (
+    projectId: number,
+    params?: {
+      department?: string;
+      role_type?: string;
+      stance?: string;
+      review_status?: string;
+      include_drafts?: boolean;
+    },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.department) qs.set("department", params.department);
+    if (params?.role_type) qs.set("role_type", params.role_type);
+    if (params?.stance) qs.set("stance", params.stance);
+    if (params?.review_status) qs.set("review_status", params.review_status);
+    if (params?.include_drafts) qs.set("include_drafts", "true");
+    const query = qs.toString();
+    return request<StakeholderCard[]>(
+      `/api/projects/${projectId}/stakeholder-cards${query ? "?" + query : ""}`,
+    );
+  },
+  getStakeholderCard: (projectId: number, cardId: number) =>
+    request<StakeholderCard>(
+      `/api/projects/${projectId}/stakeholder-cards/${cardId}`,
+    ),
+  createStakeholderCard: (projectId: number, data: StakeholderCardInput) =>
+    request<StakeholderCard>(
+      `/api/projects/${projectId}/stakeholder-cards`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateStakeholderCard: (
+    projectId: number,
+    cardId: number,
+    data: Partial<StakeholderCardInput>,
+  ) =>
+    request<StakeholderCard>(
+      `/api/projects/${projectId}/stakeholder-cards/${cardId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteStakeholderCard: (projectId: number, cardId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/stakeholder-cards/${cardId}`,
+      { method: "DELETE" },
+    ),
+  addStanceChange: (
+    projectId: number,
+    cardId: number,
+    data: { from: string; to: string; reason: string },
+  ) =>
+    request<StanceChangeResult>(
+      `/api/projects/${projectId}/stakeholder-cards/${cardId}/stance-changes`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  listStakeholderRelations: (projectId: number) =>
+    request<StakeholderRelation[]>(
+      `/api/projects/${projectId}/stakeholder-relations`,
+    ),
+  createStakeholderRelation: (
+    projectId: number,
+    data: StakeholderRelationInput,
+  ) =>
+    request<StakeholderRelation>(
+      `/api/projects/${projectId}/stakeholder-relations`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  deleteStakeholderRelation: (projectId: number, relationId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/stakeholder-relations/${relationId}`,
+      { method: "DELETE" },
+    ),
+  getStakeholderGraph: (projectId: number) =>
+    request<StakeholderGraph>(
+      `/api/projects/${projectId}/stakeholder-relations/graph`,
+    ),
+
+  listTalkScripts: (
+    projectId: number,
+    params?: { role_type?: string; scenario?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.role_type) qs.set("role_type", params.role_type);
+    if (params?.scenario) qs.set("scenario", params.scenario);
+    const query = qs.toString();
+    return request<TalkScript[]>(
+      `/api/projects/${projectId}/talk-scripts${query ? "?" + query : ""}`,
+    );
+  },
+  createTalkScript: (projectId: number, data: TalkScriptInput) =>
+    request<TalkScript>(
+      `/api/projects/${projectId}/talk-scripts`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateTalkScript: (
+    projectId: number,
+    scriptId: number,
+    data: Partial<TalkScriptInput>,
+  ) =>
+    request<TalkScript>(
+      `/api/projects/${projectId}/talk-scripts/${scriptId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteTalkScript: (projectId: number, scriptId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/talk-scripts/${scriptId}`,
+      { method: "DELETE" },
+    ),
+
+  listKnowledgeBase: (
+    projectId: number,
+    params?: { category?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.category) qs.set("category", params.category);
+    const query = qs.toString();
+    return request<KnowledgeBase[]>(
+      `/api/projects/${projectId}/knowledge-base${query ? "?" + query : ""}`,
+    );
+  },
+  createKnowledgeBase: (projectId: number, data: KnowledgeBaseInput) =>
+    request<KnowledgeBase>(
+      `/api/projects/${projectId}/knowledge-base`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateKnowledgeBase: (
+    projectId: number,
+    kbId: number,
+    data: Partial<KnowledgeBaseInput>,
+  ) =>
+    request<KnowledgeBase>(
+      `/api/projects/${projectId}/knowledge-base/${kbId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteKnowledgeBase: (projectId: number, kbId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/knowledge-base/${kbId}`,
+      { method: "DELETE" },
+    ),
 };
 
 /**

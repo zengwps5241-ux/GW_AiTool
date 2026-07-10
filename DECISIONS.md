@@ -274,6 +274,17 @@
 - **为何一次性把 client 全套 API 都接上**：M2.1 后端早已就绪（objects/pre-analysis/versions/health 全套），本次顺手接全，后续 M4.1.6-10 直接复用、无需再改 client.ts，减少跨提交冲突。
 - **理由**：复用全局选择器避免双真源（与 #32 一致）；snake_case/camelCase 分层是后端 schema 既定事实，前端类型如实映射；子任务打包遵循「一个连贯可独立验证的功能单元一个提交」，骨架不可无树独立。可校验性：纯前端、无后端改动 → tsc -b 0 错 + vite build（71 模块 1.25s）；fail 集不涉及前端，必然未扩大。
 
+## 决策 #36：M4.2 营销地图页面 — 复用 M4.1 模式 + 数据契约 + 子任务切分（M4.2.1-10 / §2.4 §5.2）
+
+- **背景**：M4.2「替换 MarketingMapPage 原型」（原型 1022 行 MOCK 数据）。后端 M2.2 已就绪：`/api/projects/{id}/{stakeholder-cards,stakeholder-relations[+/graph],talk-scripts,knowledge-base}/*` 全套。StakeholderCard 分层 JSONB（objectiveLayer/subjectiveLayer/behaviors/stanceChangeLog），综合评分/等级由后端 `service._compute_subjective` 按 §5.2 公式（engagement×0.3+influence×0.4+support×0.3）算回写。
+- **选择 A — 复用全局 Topbar ProjectSelector**：MarketingMapPage 接收 `project: Project | null` prop（App.tsx `selectedProject` 传入），与 #35/#32 同源；页内只读项目上下文栏 + 统计。App.tsx 由 `<MarketingMapPage />` 改为 `<MarketingMapPage project={selectedProject} />`。
+- **选择 B — 数据契约**：顶层字段 snake_case（`role_type`/`reports_to`/`decision_power`/`review_status`/`from_card_id`，对齐后端 *Out），分层 JSONB 内部 camelCase（`objectiveLayer.education`/`subjectiveLayer.compositeScore`/`behaviors[].suggestedAction`/`stanceChangeLog[].from`，§5.2 规格 + service._compute_subjective 写回 compositeScore/gradeLevel 双重确认）。前端 types 用 StakeholderObjectiveLayer/SubjectiveLayer/BehaviorEntry/StanceChangeEntry 精确建模（含索引签名兼容宽松数据），不退化为 `any`。
+- **选择 C — 视图拓扑 = 8 顶 Tab**：原型 6 视图（组织架构/决策链/立场矩阵/采购时间线/角色卡/知识库）基础上，M4.2.8 加「关系网络」(ReactFlow)、M4.2.10 加「话术库」各为独立顶 Tab；角色 CRUD（M4.2.9）作为编辑弹窗挂在角色卡视图 + 关系网络视图。8 Tab 用图标+小字号水平排布可容纳。
+- **选择 D — 子任务切分**：M4.2.1 骨架 = 数据加载层（cards+scripts 父级一次拉取，relations/kb 各视图自取，与 #35 同）+ 项目上下文栏 + 统计栏 + 8 Tab 切换 + 角色卡视图种子（左列表+右只读详情，作为数据主干，使骨架提交即可用）；其余 7 视图以含任务编号的 PlaceholderView 占位。M4.2.2-5/7/8/10 各替换一个占位为真实视图，M4.2.6 把角色卡种子升级为 5 子 Tab + 右侧关联面板，M4.2.9 加 CRUD 弹窗。每个子任务独立提交保持可回滚。
+- **选择 E — ReactFlow（非 D3）**：§5.2 明示「前端使用 ReactFlow/D3」；选 ReactFlow（v11 `reactflow`，`import 'reactflow/dist/style.css'`），声明式 nodes/edges + 内置拖拽/缩放，4 种 relation_type 用不同边样式区分，无需手写力导向。已 `npm i reactflow`。
+- **理由**：与 #35 完全一致的工程范式（全局选择器 / snake_case+camelCase / 子任务独立提交 / 纯前端 tsc+build 校验）；ReactFlow 是 §5.2 钦定二选一中的声明式更优解。可校验性：无后端改动 → tsc -b + vite build；fail 集不涉及前端必然未扩大。
+
+
 
 
 

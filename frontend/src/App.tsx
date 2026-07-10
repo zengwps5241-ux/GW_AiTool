@@ -213,7 +213,8 @@ export default function App() {
           onOpenVisitRecords={() => setView("visitRecords")}
         />
       );
-    if (view === "marketingMap") return <MarketingMapPage />;
+    if (view === "marketingMap")
+      return <MarketingMapPage project={selectedProject} />;
     if (view === "visitRecords") return <VisitRecordsPage />;
 
     // 用户审批页面（管理员）

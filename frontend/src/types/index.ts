@@ -807,6 +807,234 @@ export interface FiveDimHealthOut {
   source: "auto" | "manual" | string;
 }
 
+// ─── 营销地图（M4.2 / §5.2）──────────────────────────────────
+// 顶层对象字段为 snake_case（与后端 StakeholderCardOut 等对齐），
+// objective_layer / subjective_layer / behaviors / stance_change_log 内部为
+// camelCase（§5.2 规格契约；compositeScore / gradeLevel 由后端按公式算回写）。
+
+/** 角色类型（五类，§5.2） */
+export type StakeholderRoleType =
+  | "economic_decision_maker"
+  | "technical_evaluator"
+  | "user"
+  | "coach_supporter"
+  | "procurement_finance";
+
+/** 关系类型（四种，§5.2 StakeholderRelation） */
+export type StakeholderRelationType =
+  | "reports_to"
+  | "influences"
+  | "collaborates"
+  | "opposes";
+
+/** 知识库分类（三种） */
+export type KnowledgeCategory =
+  | "role_recognition"
+  | "behavior_quick_ref"
+  | "onboarding_guide";
+
+export type ReviewStatus = "draft" | "pending_review" | "reviewed" | "rejected";
+
+/** 立场（中文枚举） */
+export type StanceLevel = "支持" | "中立" | "反对" | "观望";
+
+/** 综合评分等级（后端按 compositeScore 计算） */
+export type GradeLevel = "Champion" | "倾向我方" | "中立" | "反对";
+
+/** 决策权（中文枚举） */
+export type DecisionPower =
+  | "最终决策"
+  | "技术把关"
+  | "推荐建议"
+  | "影响者"
+  | "信息提供";
+
+/** 角色卡 · 客观层（camelCase JSONB，§5.2 objectiveLayer） */
+export interface StakeholderObjectiveLayer {
+  education?: string;
+  previousCompanies?: string;
+  personality?: string;
+  communicationPreference?: string;
+  relationships?: string;
+  historyWithUs?: string;
+  historyWithCompetitor?: string;
+  [key: string]: unknown;
+}
+
+/** 角色卡 · 主观层（camelCase JSONB，§5.2 subjectiveLayer） */
+export interface StakeholderSubjectiveLayer {
+  stance?: StanceLevel;
+  explicitKPI?: string;
+  personalMotivation?: string;
+  attitudeToUs?: string;
+  attitudeToCompetitor?: string;
+  engagement?: number; // 1-10，权重 0.3
+  influence?: number; // 1-10，权重 0.4
+  support?: number; // 1-10，权重 0.3
+  /** 综合评分 = engagement×0.3 + influence×0.4 + support×0.3（后端算回写） */
+  compositeScore?: number;
+  gradeLevel?: GradeLevel;
+  confidence?: string; // 高 / 中 / 低
+  coreConcerns?: string;
+  leverage?: string;
+  [key: string]: unknown;
+}
+
+/** 行为分析条目 */
+export interface BehaviorEntry {
+  observation?: string;
+  interpretation?: string;
+  suggestedAction?: string;
+  [key: string]: unknown;
+}
+
+/** 态度变化记录条目（JSONB 内 from/to） */
+export interface StanceChangeEntry {
+  date?: string;
+  from?: StanceLevel;
+  to?: StanceLevel;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+/** 角色卡（输出，对齐 StakeholderCardOut） */
+export interface StakeholderCard {
+  id: number;
+  project_id: number;
+  name: string;
+  position: string | null;
+  department: string | null;
+  reports_to: string | null;
+  contact_info: string | null;
+  role_type: StakeholderRoleType | null;
+  decision_power: string | null;
+  objective_layer: StakeholderObjectiveLayer | null;
+  subjective_layer: StakeholderSubjectiveLayer | null;
+  behaviors: BehaviorEntry[] | null;
+  stance_change_log: StanceChangeEntry[] | null;
+  review_status: ReviewStatus;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  is_public: boolean;
+  shared_with: number[] | null;
+  sensitivity_level: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 角色卡创建/更新入参（对齐 StakeholderCardCreate/Update） */
+export interface StakeholderCardInput {
+  name?: string;
+  position?: string | null;
+  department?: string | null;
+  reports_to?: string | null;
+  contact_info?: string | null;
+  role_type?: StakeholderRoleType | null;
+  decision_power?: string | null;
+  objective_layer?: StakeholderObjectiveLayer | null;
+  subjective_layer?: StakeholderSubjectiveLayer | null;
+  behaviors?: BehaviorEntry[] | null;
+  stance_change_log?: StanceChangeEntry[] | null;
+  review_status?: ReviewStatus;
+  is_public?: boolean;
+  shared_with?: number[] | null;
+  sensitivity_level?: string;
+}
+
+/** 角色关系（输出，对齐 StakeholderRelationOut） */
+export interface StakeholderRelation {
+  id: number;
+  project_id: number;
+  from_card_id: number;
+  from_card_name: string | null;
+  to_card_id: number;
+  to_card_name: string | null;
+  relation_type: StakeholderRelationType;
+  description: string | null;
+  created_by: number;
+  created_at: string | null;
+}
+
+export interface StakeholderRelationInput {
+  from_card_id: number;
+  to_card_id: number;
+  relation_type: StakeholderRelationType;
+  description?: string | null;
+}
+
+/** 关系网络图（节点+边） */
+export interface StakeholderGraphNode {
+  id: number;
+  name: string;
+  role_type: StakeholderRoleType | null;
+  department: string | null;
+}
+export interface StakeholderGraphEdge {
+  id: number;
+  source: number;
+  target: number;
+  relation_type: StakeholderRelationType;
+  description: string | null;
+}
+export interface StakeholderGraph {
+  nodes: StakeholderGraphNode[];
+  edges: StakeholderGraphEdge[];
+}
+
+/** 话术（输出，对齐 TalkScriptOut） */
+export interface TalkScript {
+  id: number;
+  project_id: number;
+  stakeholder_card_id: number | null;
+  stakeholder_card_name: string | null;
+  role_type: StakeholderRoleType | null;
+  scenario: string | null;
+  content: string;
+  source_customer_quote: string | null;
+  is_template: boolean;
+  created_by: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TalkScriptInput {
+  stakeholder_card_id?: number | null;
+  role_type?: StakeholderRoleType | null;
+  scenario?: string | null;
+  content?: string;
+  source_customer_quote?: string | null;
+  is_template?: boolean;
+}
+
+/** 知识库（输出，对齐 KnowledgeBaseOut） */
+export interface KnowledgeBase {
+  id: number;
+  project_id: number;
+  category: KnowledgeCategory;
+  title: string;
+  content: string;
+  created_by: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface KnowledgeBaseInput {
+  category: KnowledgeCategory;
+  title?: string;
+  content?: string;
+}
+
+/** 态度变化（POST 返回，对齐 StanceChangeOut） */
+export interface StanceChangeResult {
+  date: string;
+  from_stance: StanceLevel;
+  to_stance: StanceLevel;
+  reason: string;
+}
+
 /** 证据源（M2.3 / §7.5 证据验证联动） */
 export interface EvidenceSource {
   id: number;
