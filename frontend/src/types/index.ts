@@ -921,6 +921,8 @@ export interface StakeholderCard {
   is_public: boolean;
   shared_with: number[] | null;
   sensitivity_level: string;
+  /** 产出该草稿的会话 ID（M4.4.5 待采纳徽标"跳回原对话"用） */
+  source_session_id: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -1033,6 +1035,47 @@ export interface StanceChangeResult {
   from_stance: StanceLevel;
   to_stance: StanceLevel;
   reason: string;
+}
+
+/** 拜访记录（输出，对齐 VisitRecordOut；M4.3 全量字段待补，此处含徽标所需子集） */
+export interface VisitRecord {
+  id: number;
+  project_id: number;
+  visit_date: string | null;
+  visit_type: string;
+  participants_our: string[] | null;
+  participants_client: number[] | null;
+  location: string | null;
+  duration: string | null;
+  summary: string | null;
+  next_steps: string | null;
+  key_takeaways: string[] | null;
+  related_card_ids: number[] | null;
+  evidence_count: number;
+  verified_hypotheses: number;
+  review_status: ReviewStatus;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  is_public: boolean;
+  shared_with: number[] | null;
+  sensitivity_level: string;
+  /** 产出该草稿的会话 ID（M4.4.5 待采纳徽标"跳回原对话"用） */
+  source_session_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 业务地图草稿（active，对齐 BusinessMapDraftOut 子集；M4.4.5 徽标用） */
+export interface BusinessMapDraft {
+  id: number;
+  project_id: number;
+  revision: number;
+  status: string;
+  source_session_id: string | null;
+  created_at: string | null;
 }
 
 /** 证据源（M2.3 / §7.5 证据验证联动） */

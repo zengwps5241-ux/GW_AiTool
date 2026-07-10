@@ -408,6 +408,9 @@ interface Props {
   onBreadcrumbChange?: (items: BreadcrumbItem[]) => void;
   /** Topbar 选中的项目（M3.4.1）：新建会话时绑定到该项目，加载项目 Agent + 工作流 Skill */
   selectedProject?: Project | null;
+  /** 待采纳徽标"跳回原对话"：要打开的会话 id（M4.4.5）；消费后调 onFocusSessionConsumed 清空 */
+  focusSessionId?: string | null;
+  onFocusSessionConsumed?: () => void;
   me: UserMe;
 }
 
@@ -500,6 +503,211 @@ const WF_CHIPS: WfChipDef[] = [
   { key: "stakeholder", label: "营销地图", Icon: I.Users, command: "consultant-stakeholder", hint: "请为本项目生成营销地图角色卡。" },
 ];
 
+// ─── M4.4.5 采纳卡片全字段预览（三类草稿，§7.1 第9条「关键字段默认 + 可展开完整」） ──
+
+const DRAFT_ROLE_TYPE_LABELS: Record<string, string> = {
+  economic_decision_maker: "经济决策人",
+  technical_evaluator: "技术评估人",
+  user: "终端用户",
+  coach_supporter: "教练/支持者",
+  procurement_finance: "采购/财务",
+};
+
+function draftStr(v: unknown): string {
+  return v == null || v === "" ? "" : String(v);
+}
+function draftNum(v: unknown): number | undefined {
+  return typeof v === "number" ? v : undefined;
+}
+
+/** 采纳卡片内一行键值 */
+function DraftField({ label, value, highlight }: { label: string; value: unknown; highlight?: boolean }) {
+  const text = draftStr(value);
+  if (!text) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
+      <span style={{ color: "var(--ink-4)", minWidth: 72, flexShrink: 0 }}>{label}</span>
+      <span style={{ flex: 1, wordBreak: "break-word", color: highlight ? "var(--accent)" : "var(--ink-2)", lineHeight: 1.5 }}>
+        {text}
+      </span>
+    </div>
+  );
+}
+
+/** 角色卡草稿全字段预览 */
+function StakeholderDraftPreview({ preview }: { preview: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
+  const sl = (preview.subjective_layer as Record<string, unknown> | undefined) ?? {};
+  const ol = (preview.objective_layer as Record<string, unknown> | undefined) ?? {};
+  const behaviors = Array.isArray(preview.behaviors) ? (preview.behaviors as Record<string, unknown>[]) : [];
+  const roleType = draftStr(preview.role_type);
+  const grade = draftStr(sl.gradeLevel);
+  const stance = draftStr(sl.stance);
+  const dims: [string, number | undefined][] = [
+    ["参与度", draftNum(sl.engagement)],
+    ["影响力", draftNum(sl.influence)],
+    ["支持度", draftNum(sl.support)],
+  ];
+  const composite = draftNum(sl.compositeScore);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* 头部 */}
+      <div style={{ fontSize: 13, color: "var(--ink)", fontWeight: 600 }}>
+        {draftStr(preview.name) || "（未命名）"}
+        {draftStr(preview.position) && <span style={{ color: "var(--ink-3)", fontWeight: 400, marginLeft: 6 }}>{draftStr(preview.position)}</span>}
+        {draftStr(preview.department) && <span style={{ color: "var(--ink-4)", fontWeight: 400, marginLeft: 6 }}>· {draftStr(preview.department)}</span>}
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {roleType && <Tag tone="accent">{DRAFT_ROLE_TYPE_LABELS[roleType] ?? roleType}</Tag>}
+        {draftStr(preview.decision_power) && <Tag tone="info">{draftStr(preview.decision_power)}</Tag>}
+        {grade && <Tag tone={grade === "Champion" ? "success" : grade === "倾向我方" ? "accent" : grade === "中立" ? "warn" : "danger"}>{grade}</Tag>}
+        {stance && <Tag tone={stance === "支持" ? "success" : stance === "反对" ? "danger" : "neutral"}>立场:{stance}</Tag>}
+        {draftStr(sl.confidence) && <Tag tone="neutral">置信{draftStr(sl.confidence)}</Tag>}
+      </div>
+      {/* 三维评分 + 综合 */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {dims.map(([label, v]) => (
+          <div key={label} style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--line)" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: v != null ? "var(--ink)" : "var(--ink-4)" }}>{v != null ? v : "—"}</div>
+            <div style={{ fontSize: 10, color: "var(--ink-3)" }}>{label}</div>
+          </div>
+        ))}
+        <div style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "var(--accent-soft)", borderRadius: 8, border: "1px solid var(--accent)" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent)" }}>{composite != null ? composite : "—"}</div>
+          <div style={{ fontSize: 10, color: "var(--accent)" }}>综合</div>
+        </div>
+      </div>
+      {/* 关键主观字段 */}
+      <DraftField label="核心顾虑" value={sl.coreConcerns} highlight />
+      <DraftField label="影响杠杆" value={sl.leverage} highlight />
+      {/* 展开完整 */}
+      <button onClick={() => setExpanded((e) => !e)} style={{ all: "unset", cursor: "pointer", color: "var(--accent)", fontSize: 12, fontWeight: 500 }}>
+        {expanded ? "收起完整角色卡 ▴" : `展开完整角色卡（客观层/主观层/行为${behaviors.length ? ` ${behaviors.length}` : ""}）▾`}
+      </button>
+      {expanded && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, background: "var(--bg)", borderRadius: 8, border: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)" }}>客观层</div>
+          <DraftField label="教育背景" value={ol.education} />
+          <DraftField label="过往经历" value={ol.previousCompanies} />
+          <DraftField label="性格特征" value={ol.personality} />
+          <DraftField label="沟通偏好" value={ol.communicationPreference} />
+          <DraftField label="人际关系" value={ol.relationships} />
+          <DraftField label="与我方合作" value={ol.historyWithUs} />
+          <DraftField label="与竞品合作" value={ol.historyWithCompetitor} />
+          <DraftField label="联系方式" value={preview.contact_info} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", marginTop: 4 }}>主观层</div>
+          <DraftField label="显性 KPI" value={sl.explicitKPI} />
+          <DraftField label="隐性诉求" value={sl.personalMotivation} />
+          <DraftField label="对我方态度" value={sl.attitudeToUs} />
+          <DraftField label="对竞品态度" value={sl.attitudeToCompetitor} />
+          {behaviors.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", marginTop: 4 }}>行为分析（{behaviors.length}）</div>
+              {behaviors.map((b, i) => (
+                <div key={i} style={{ padding: 8, background: "var(--surface)", borderRadius: 6, border: "1px solid var(--line)", fontSize: 12 }}>
+                  <div style={{ color: "var(--ink-2)" }}>🔍 {draftStr(b.observation) || "—"}</div>
+                  <div style={{ color: "var(--ink-3)", marginTop: 3 }}>🧠 {draftStr(b.interpretation) || "—"}</div>
+                  <div style={{ color: "var(--accent)", marginTop: 3 }}>💡 {draftStr(b.suggestedAction) || "—"}</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 拜访记录草稿全字段预览 */
+function VisitDraftPreview({ preview }: { preview: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
+  const takeaways = Array.isArray(preview.key_takeaways) ? (preview.key_takeaways as unknown[]) : [];
+  const our = Array.isArray(preview.participants_our) ? (preview.participants_our as unknown[]) : [];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {draftStr(preview.visit_type) && <Tag tone="accent">{draftStr(preview.visit_type)}</Tag>}
+        {draftStr(preview.visit_date) && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{draftStr(preview.visit_date)}</span>}
+        {our.length > 0 && <span style={{ fontSize: 11, color: "var(--ink-4)" }}>我方 {our.length} 人</span>}
+      </div>
+      <DraftField label="摘要" value={preview.summary} />
+      {takeaways.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
+          <span style={{ color: "var(--ink-4)" }}>Key Takeaways：</span>{takeaways.map(draftStr).filter(Boolean).join("；")}
+        </div>
+      )}
+      <button onClick={() => setExpanded((e) => !e)} style={{ all: "unset", cursor: "pointer", color: "var(--accent)", fontSize: 12, fontWeight: 500 }}>
+        {expanded ? "收起 ▴" : "展开完整记录 ▾"}
+      </button>
+      {expanded && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, background: "var(--bg)", borderRadius: 8, border: "1px solid var(--line)" }}>
+          <DraftField label="地点" value={preview.location} />
+          <DraftField label="时长" value={preview.duration} />
+          <DraftField label="下一步" value={preview.next_steps} />
+          {our.length > 0 && <DraftField label="我方参与人" value={our.map(draftStr).join("、")} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 业务地图草稿全字段预览（L1-L4 分组 + 节点可展开 payload 关键字段） */
+const DRAFT_BM_LEVELS = ["L1", "L2", "L3", "L4"] as const;
+function BusinessMapDraftPreview({ preview }: { preview: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
+  const objects = Array.isArray(preview.objects) ? (preview.objects as Record<string, unknown>[]) : [];
+  const byLevel = (lv: string) => objects.filter((o) => draftStr(o.level) === lv);
+  /** 取节点 payload 关键展示字段（按层级差异化） */
+  const payloadHighlights = (p: Record<string, unknown> | undefined): [string, unknown][] => {
+    if (!p) return [];
+    const out: [string, unknown][] = [];
+    if (draftStr(p.confidenceLevel)) out.push(["置信度", p.confidenceLevel]);
+    if (draftStr(p.sourceType)) out.push(["来源", p.sourceType]);
+    if (draftStr(p.fiveDimHealth)) out.push(["五维健康", p.fiveDimHealth]);
+    if (draftStr(p.domainGoal)) out.push(["域目标", p.domainGoal]);
+    if (draftStr(p.painPoints)) out.push(["痛点", p.painPoints]);
+    if (draftStr(p.aiOpportunity)) out.push(["AI 机会", p.aiOpportunity]);
+    if (draftStr(p.masteryLevel)) out.push(["掌握程度", p.masteryLevel]);
+    return out;
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 10, fontSize: 12, color: "var(--ink-3)", flexWrap: "wrap" }}>
+        <span>共 {objects.length} 节点</span>
+        {DRAFT_BM_LEVELS.map((lv) => {
+          const n = byLevel(lv).length;
+          return n > 0 ? <span key={lv}>{lv}:<b style={{ color: "var(--ink)" }}>{n}</b></span> : null;
+        })}
+      </div>
+      {DRAFT_BM_LEVELS.map((lv) => {
+        const nodes = byLevel(lv);
+        if (nodes.length === 0) return null;
+        return (
+          <div key={lv}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", marginBottom: 3 }}>{lv}（{nodes.length}）</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12.5 }}>
+              {nodes.map((o, i) => (
+                <div key={i} style={{ color: "var(--ink-2)" }}>
+                  • {draftStr(o.name)}
+                  {expanded && (
+                    <span style={{ color: "var(--ink-4)", fontSize: 11 }}>
+                      {payloadHighlights(o.payload as Record<string, unknown> | undefined)
+                        .map(([k, v]) => `${k}:${draftStr(v)}`).join("  ")}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      <button onClick={() => setExpanded((e) => !e)} style={{ all: "unset", cursor: "pointer", color: "var(--accent)", fontSize: 12, fontWeight: 500 }}>
+        {expanded ? "收起节点详情 ▴" : "展开节点 payload 关键字段 ▾"}
+      </button>
+    </div>
+  );
+}
+
 export default function ChatWorkspace({
   mode,
   teamSpaceId,
@@ -512,6 +720,8 @@ export default function ChatWorkspace({
   onOpenTeamDetail,
   onBreadcrumbChange,
   selectedProject,
+  focusSessionId,
+  onFocusSessionConsumed,
   me,
 }: Props) {
   const { showToast } = useToast();
@@ -1042,6 +1252,15 @@ export default function ChatWorkspace({
     },
     [clearActiveStream, currentId, restoreRunningSession, setChatMode],
   );
+
+  // 待采纳徽标"跳回原对话"（M4.4.5）：打开指定会话后清空 focusSessionId
+  useEffect(() => {
+    if (!focusSessionId) return;
+    if (sessions.some((s) => s.id === focusSessionId)) {
+      selectSession(focusSessionId);
+      onFocusSessionConsumed?.();
+    }
+  }, [focusSessionId, sessions, selectSession, onFocusSessionConsumed]);
 
   // 打开/关闭预览模态
   const openPreview = useCallback((node: WorkspaceNode) => {
@@ -2197,23 +2416,21 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
           if (p.kind === "draft") {
             // AI 结构化草稿「待采纳」卡片（M3.1.4；M3.4.3 增量更新带 diff + 调整提示）
             const action = draftAction[p.id];
+            // diff 字段中文标签（M3.4.3 Chat 调整对比用）；采纳卡片主展示由下方
+            // Stakeholder/Visit/BusinessMap 预览组件按 entityType 分别渲染全字段
             const previewLabel: Record<string, string> = {
               object_count: "节点数",
-              name: "姓名",
-              role_type: "角色类型",
-              visit_type: "类型",
+              name: "姓名", position: "岗位", department: "部门",
+              reports_to: "汇报对象", contact_info: "联系方式",
+              role_type: "角色类型", decision_power: "决策权",
+              objective_layer: "客观层", subjective_layer: "主观层",
+              behaviors: "行为分析",
+              visit_type: "类型", visit_date: "日期",
+              participants_our: "我方参与人", participants_client: "客户参与人",
+              location: "地点", duration: "时长",
+              key_takeaways: "Key Takeaways", next_steps: "下一步",
               summary: "摘要",
             };
-            // objects 节点摘要由下方节点列表/diff 块单独展示，不进 previewEntries
-            const previewEntries = Object.entries(p.preview).filter(
-              ([k, v]) =>
-                k !== "objects" && v !== null && v !== undefined && v !== "",
-            );
-            const nodeNames = Array.isArray(p.preview.objects)
-              ? (p.preview.objects as { name?: string }[])
-                  .map((o) => o.name)
-                  .filter((n): n is string => !!n)
-              : [];
             // M3.4.3 diff：增量更新时对比「上一版 → 当前版」（§7.2 Chat 调整）
             const diffRows: { label: string; from: string; to: string }[] = [];
             if (p.isUpdate && p.previous) {
@@ -2305,7 +2522,7 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                         padding: "2px 8px",
                         borderRadius: 10,
                         background: "rgba(230,140,0,0.14)",
-                        color: "#b06a00",
+                        color: "var(--warn)",
                       }}
                     >
                       第 {p.revision ?? 2} 版·已更新
@@ -2324,33 +2541,14 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                     </span>
                   )}
                 </div>
-                {previewEntries.length > 0 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      fontSize: 12.5,
-                      color: "var(--ink-2)",
-                    }}
-                  >
-                    {previewEntries.map(([k, v]) => (
-                      <div key={k} style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: "var(--ink-4)", minWidth: 64 }}>
-                          {previewLabel[k] ?? k}
-                        </span>
-                        <span style={{ flex: 1, wordBreak: "break-word" }}>
-                          {String(v)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                {p.entityType === "stakeholder_card_draft" && (
+                  <StakeholderDraftPreview preview={p.preview} />
                 )}
-                {nodeNames.length > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--ink-3)", lineHeight: 1.5 }}>
-                    <span style={{ color: "var(--ink-4)" }}>节点：</span>
-                    {nodeNames.join("、")}
-                  </div>
+                {p.entityType === "visit_record_draft" && (
+                  <VisitDraftPreview preview={p.preview} />
+                )}
+                {p.entityType === "business_map_draft" && (
+                  <BusinessMapDraftPreview preview={p.preview} />
                 )}
                 {diffRows.length > 0 && (
                   <div
@@ -2430,7 +2628,7 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
                           border: "none",
                           cursor: action?.status === "adopting" ? "wait" : "pointer",
                           background: "var(--accent)",
-                          color: "#fff",
+                          color: "var(--on-accent)",
                           fontSize: 13,
                           opacity: action?.status === "adopting" ? 0.6 : 1,
                         }}
@@ -2778,7 +2976,7 @@ function SearchableDropdown({
 
 // 筛选条件芯片
 // 智能体颜色池（为每个智能体分配一个固定的颜色）
-const AGENT_COLORS = ["#B85C3C", "#5C8A56", "#C68A3E", "#4A7593", "#8B5C8A", "#9A4A2E"];
+const AGENT_COLORS = ["#6E8E68", "#6488A8", "#8C6F92", "#B07A2E", "#4A7593", "#5E8A55"];
 function getAgentColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -3058,7 +3256,7 @@ function EmptyState({
             fontWeight: 500,
           }}
         >
-          您好，欢迎使用国科智能体平台!
+          您好，欢迎使用咨询顾问作战台!
         </h2>
         <div style={{ color: "var(--ink-3)", fontSize: 18 }}>
           {projectName
@@ -5192,7 +5390,7 @@ function PreviewError({
         style={{
           padding: "6px 14px",
           background: "var(--accent)",
-          color: "#fff",
+          color: "var(--on-accent)",
           border: "none",
           borderRadius: 6,
           cursor: "pointer",

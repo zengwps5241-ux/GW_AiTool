@@ -18,6 +18,7 @@ import type {
   FeedbackIssueList,
   FileNode,
   FiveDimHealthOut,
+  BusinessMapDraft,
   KnowledgeBase,
   KnowledgeBaseInput,
   LoginWhitelistConfig,
@@ -42,6 +43,7 @@ import type {
   Session,
   Skill,
   StanceChangeResult,
+  VisitRecord,
   StakeholderCard,
   StakeholderCardInput,
   StakeholderGraph,
@@ -1116,6 +1118,33 @@ export const api = {
       `/api/projects/${projectId}/knowledge-base/${kbId}`,
       { method: "DELETE" },
     ),
+
+  // ─── 待采纳草稿找回（M4.4.5 §7.1 第8条 徽标兜底）─────────────
+  /** 业务地图当前 active 草稿（整图草稿单元，单个或 null） */
+  getActiveBusinessMapDraft: (projectId: number) =>
+    request<BusinessMapDraft | null>(
+      `/api/projects/${projectId}/business-map/drafts`,
+    ),
+  /** 拜访记录列表（含草稿筛选；M4.3 全量复用） */
+  listVisitRecords: (
+    projectId: number,
+    params?: {
+      visit_type?: string;
+      card_id?: number;
+      review_status?: string;
+      include_drafts?: boolean;
+    },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.visit_type) qs.set("visit_type", params.visit_type);
+    if (params?.card_id != null) qs.set("card_id", String(params.card_id));
+    if (params?.review_status) qs.set("review_status", params.review_status);
+    if (params?.include_drafts) qs.set("include_drafts", "true");
+    const query = qs.toString();
+    return request<VisitRecord[]>(
+      `/api/projects/${projectId}/visit-records${query ? "?" + query : ""}`,
+    );
+  },
 };
 
 /**

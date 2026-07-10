@@ -12,9 +12,11 @@ interface Props {
   onOpenFeedback: () => void;
   /** 中间插槽：用于项目选择器等全局控件 */
   projectSlot?: ReactNode;
+  /** 右侧插槽：用于待采纳草稿徽标等（M4.4.5） */
+  badgeSlot?: ReactNode;
 }
 
-export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedback, projectSlot }: Props) {
+export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedback, projectSlot, badgeSlot }: Props) {
   const labelOf = (item: BreadcrumbItem) => (typeof item === "string" ? item : item.label);
 
   return (
@@ -81,6 +83,7 @@ export default function Topbar({ breadcrumb, theme, onToggleTheme, onOpenFeedbac
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{projectSlot}</div>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {badgeSlot}
         <button
           onClick={onOpenFeedback}
           className="focus-ring"

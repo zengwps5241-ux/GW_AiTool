@@ -22,6 +22,7 @@ import SidebarVariantA from "@/components/SidebarVariantA";
 import Topbar, { type BreadcrumbItem } from "@/components/Topbar";
 import FeedbackDialog from "@/components/FeedbackDialog";
 import ProjectSelector from "@/components/ProjectSelector";
+import PendingDraftsBadge from "@/components/PendingDraftsBadge";
 
 type AuthState =
   | { status: "loading" }
@@ -41,6 +42,8 @@ export default function App() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   // 全局选中项目（M1.3.9）：业务地图/营销地图/拜访记录/对话 共享
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  /** 待采纳徽标"跳回原对话"：要打开的会话 id（M4.4.5） */
+  const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "dark" ? "dark" : "light";
@@ -236,6 +239,8 @@ export default function App() {
           onOpenTeamDetail={openTeamDetailById}
           onBreadcrumbChange={setChatBreadcrumb}
           selectedProject={selectedProject}
+          focusSessionId={focusSessionId}
+          onFocusSessionConsumed={() => setFocusSessionId(null)}
           me={auth.me}
         />
       );
@@ -310,6 +315,15 @@ export default function App() {
               compact
               value={selectedProject?.id ?? null}
               onChange={setSelectedProject}
+            />
+          }
+          badgeSlot={
+            <PendingDraftsBadge
+              project={selectedProject}
+              onJumpToChat={(sid) => {
+                setFocusSessionId(sid);
+                setView("chat");
+              }}
             />
           }
         />
