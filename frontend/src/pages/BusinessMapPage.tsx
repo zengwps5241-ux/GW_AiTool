@@ -5,12 +5,14 @@
 // + M4.1.5 偏差池（前置分析/五维健康/节点CRUD/版本/证据见后续任务）。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
-import { Card, Spinner, Tag, useToast } from "@/components/ui";
+import { Btn, Card, Spinner, Tag, TextArea, useToast } from "@/components/ui";
 import { I } from "@/icons";
 import type {
   BusinessMapObject,
   BusinessMapPayload,
   FiveDimHealth,
+  PreAnalysis,
+  PreAnalysisInput,
   Project,
 } from "@/types";
 
@@ -297,8 +299,10 @@ export default function BusinessMapPage({ project }: Props) {
               setSubView("current");
             }}
           />
-        ) : subView === "preanalysis" || subView === "health" ? (
-          <PlaceholderView view={subView} />
+        ) : subView === "preanalysis" ? (
+          <PreAnalysisView projectId={project.id} />
+        ) : subView === "health" ? (
+          <PlaceholderView />
         ) : loading ? (
           <Card style={{ flex: 1, padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
@@ -776,23 +780,192 @@ function OntologyBlock({ ont }: { ont: NonNullable<BusinessMapPayload["ontologyE
 
 // ─── 占位视图（前置分析 / 五维健康 — 后续任务实现） ────────────
 
-function PlaceholderView({ view }: { view: "preanalysis" | "health" }) {
-  const meta =
-    view === "preanalysis"
-      ? { title: "前置分析", task: "M4.1.6", desc: "项目级产业环境与战略定位分析（行业价值链 / 客户地位 / 行业趋势 / 战略定位 / 数字化驱动力），含查看与编辑。" }
-      : { title: "五维健康", task: "M4.1.7", desc: "L1 雷达总览 + L2/L3 逐域评分表，支持重新计算与手动覆盖。" };
+function PlaceholderView() {
+  const meta = { title: "五维健康", task: "M4.1.7", desc: "L1 雷达总览 + L2/L3 逐域评分表，支持重新计算与手动覆盖。" };
   return (
     <Card style={{ flex: 1, padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
-      <I.Sparkles size={32} style={{ color: "var(--accent)", marginBottom: 10 }} />
+      <I.Activity size={32} style={{ color: "var(--accent)", marginBottom: 10 }} />
       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>{meta.title}视图</div>
-      <div style={{ maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
-        {meta.desc}
-      </div>
-      <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-4)" }}>
-        将在 {meta.task} 实现
-      </div>
+      <div style={{ maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>{meta.desc}</div>
+      <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-4)" }}>将在 {meta.task} 实现</div>
     </Card>
   );
+}
+
+// ─── 前置分析（M4.1.6：查看 + 编辑） ──────────────────────────
+
+const PREANALYSIS_FIELDS: { key: keyof PreAnalysisInput; label: string; emoji: string; hint: string }[] = [
+  { key: "industry_value_chain", label: "行业价值链", emoji: "🏭", hint: "上游→中游→下游，标注客户所在环节" },
+  { key: "customer_position", label: "客户行业地位", emoji: "📊", hint: "市场份额/排名/核心竞争力/市场布局" },
+  { key: "industry_trends", label: "行业趋势与变化", emoji: "📈", hint: "政策/技术/市场/竞争 PEST 四维度" },
+  { key: "strategic_positioning", label: "客户战略定位", emoji: "🎯", hint: "使命/战略重点/数字化态度/近期调整/关键 KPI" },
+  { key: "digitalization_drivers", label: "数字化驱动力", emoji: "⚡", hint: "2-3 个关键驱动力，与 L1 五维健康关联" },
+];
+
+const EMPTY_FORM: PreAnalysisInput = {
+  industry_value_chain: "",
+  customer_position: "",
+  industry_trends: "",
+  strategic_positioning: "",
+  digitalization_drivers: "",
+};
+
+function PreAnalysisView({ projectId }: { projectId: number }) {
+  const toast = useToast();
+  const [data, setData] = useState<PreAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<PreAnalysisInput>(EMPTY_FORM);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const pa = await api.getPreAnalysis(projectId);
+      setData(pa);
+      setForm(pa ? toForm(pa) : EMPTY_FORM);
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "加载前置分析失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const startEdit = () => {
+    setForm(data ? toForm(data) : EMPTY_FORM);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const pa = await api.upsertPreAnalysis(projectId, form);
+      setData(pa);
+      setForm(toForm(pa));
+      setEditing(false);
+      toast.showToast("前置分析已保存", "success");
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card style={{ flex: 1, padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
+          <Spinner size={16} /> 加载前置分析…
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {/* 左：内容/表单 */}
+      <Card style={{ flex: 1, padding: 20, overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>产业环境与战略定位分析</div>
+          {!editing && (
+            <Btn size="sm" variant="soft" icon={<I.Edit size={13} />} onClick={startEdit}>
+              {data ? "编辑" : "填写"}
+            </Btn>
+          )}
+        </div>
+
+        {!data && !editing ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+            <I.Search size={28} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+            <div style={{ marginBottom: 12 }}>本项目尚未填写前置分析。</div>
+            <Btn size="sm" variant="primary" icon={<I.Plus size={13} />} onClick={startEdit}>
+              开始填写
+            </Btn>
+          </div>
+        ) : editing ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {PREANALYSIS_FIELDS.map((f) => (
+              <div key={f.key}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 4 }}>
+                  {f.emoji} {f.label}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: "var(--ink-4)", marginLeft: 6 }}>
+                    （{f.hint}）
+                  </span>
+                </div>
+                <TextArea
+                  rows={3}
+                  style={{ width: "100%", fontSize: 13, lineHeight: 1.6 }}
+                  placeholder={`请输入${f.label}…`}
+                  value={(form[f.key] as string) ?? ""}
+                  onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+              <Btn variant="ghost" onClick={() => { setEditing(false); setForm(data ? toForm(data) : EMPTY_FORM); }}>
+                取消
+              </Btn>
+              <Btn variant="primary" onClick={save} disabled={saving}>
+                {saving ? "保存中…" : "保存"}
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
+            {PREANALYSIS_FIELDS.map((f) => {
+              const value = (data as PreAnalysis | null)?.[f.key as keyof PreAnalysis] ?? null;
+              return (
+                <div key={f.key} style={{ padding: 14, background: "var(--bg-2)", borderRadius: 10, border: "1px solid var(--line)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>
+                    {f.emoji} {f.label}
+                  </div>
+                  <div style={{ color: value ? "var(--ink-2)" : "var(--ink-4)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                    {value || "（未填写）"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* 右：维度说明 */}
+      <Card style={{ width: 300, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>
+          📋 分析维度说明
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 12, color: "var(--ink-2)", lineHeight: 1.6 }}>
+          <div>
+            前置分析回答：<b>为什么客户当前的战略是这样？为什么数字化是它的关键抓手？</b>
+          </div>
+          <div>五个维度层层递进：行业价值链 → 客户地位 → 行业趋势 → 战略定位 → 数字化驱动力。</div>
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, color: "var(--ink-3)" }}>
+            与 L1 地图的关系：数字化驱动力直接关联 L1 五维健康中的「数字意识」和「数字神经」维度，为后续 L1 价值链健康诊断提供战略上下文。
+          </div>
+          {data?.updated_at && (
+            <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, fontSize: 11, color: "var(--ink-4)" }}>
+              最近更新：{data.updated_at.slice(0, 16).replace("T", " ")}
+              {data.created_by_name ? ` · 由 ${data.created_by_name}` : ""}
+            </div>
+          )}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function toForm(pa: PreAnalysis): PreAnalysisInput {
+  return {
+    industry_value_chain: pa.industry_value_chain ?? "",
+    customer_position: pa.customer_position ?? "",
+    industry_trends: pa.industry_trends ?? "",
+    strategic_positioning: pa.strategic_positioning ?? "",
+    digitalization_drivers: pa.digitalization_drivers ?? "",
+  };
 }
 
 // ─── 空地图 ───────────────────────────────────────────────────
