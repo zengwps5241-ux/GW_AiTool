@@ -10,7 +10,13 @@ import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
 import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
-import type { EvidenceSource, Project, StakeholderCard, VisitRecord } from "@/types";
+import type {
+  EvidenceSource,
+  Project,
+  StakeholderCard,
+  VisitRecord,
+  VisitRecordInput,
+} from "@/types";
 
 // ─── 常量 ─────────────────────────────────────────────────────
 
@@ -50,6 +56,9 @@ const STRENGTHS = ["强", "中", "弱"] as const;
 /** 证据类型枚举（§2.5 / §7.5） */
 const EVIDENCE_TYPES = ["客户原话", "行为观察", "角色态度信号", "业务术语"] as const;
 
+/** 拜访类型枚举（§2.5：现场访谈/电话沟通/视频会议/邮件/一句话记录） */
+const VISIT_TYPES = ["现场访谈", "电话沟通", "视频会议", "邮件", "一句话记录"] as const;
+
 /** 证据类型 → 展示标签（带图标） */
 const evidenceTypeLabel: Record<string, string> = {
   客户原话: "💬 客户原话",
@@ -76,6 +85,10 @@ export default function VisitRecordsPage({ project }: Props) {
   const [filterRole, setFilterRole] = useState<string>("全部");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 拜访记录编辑弹窗（null=关闭；create=新建；edit=编辑指定拜访）
+  const [visitModal, setVisitModal] = useState<
+    { mode: "create" } | { mode: "edit"; visit: VisitRecord } | null
+  >(null);
 
   const projectId = project?.id ?? null;
 
@@ -112,6 +125,28 @@ export default function VisitRecordsPage({ project }: Props) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // 删除拜访记录（其下证据由后端级联删除）
+  const handleDeleteVisit = useCallback(
+    async (visit: VisitRecord) => {
+      if (projectId == null) return;
+      if (
+        !window.confirm(
+          `确认删除该拜访记录（${visit.visit_date ?? "未定日期"} · ${visit.visit_type}）？其下证据将一并删除。`,
+        )
+      )
+        return;
+      try {
+        await api.deleteVisitRecord(projectId, visit.id);
+        toast.showToast("已删除拜访记录", "success");
+        setExpandedVisitId(null);
+        refresh();
+      } catch (e) {
+        toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+      }
+    },
+    [projectId, toast, refresh],
+  );
 
   // 切换项目时收起展开的拜访卡 + 重置筛选
   useEffect(() => {
@@ -230,6 +265,13 @@ export default function VisitRecordsPage({ project }: Props) {
         <span style={{ ...statStyle, color: "var(--success)" }}>
           已验证假设: <b>{stats.verified}</b>
         </span>
+        <button
+          onClick={() => setVisitModal({ mode: "create" })}
+          style={primaryBtnStyle}
+          title="新增拜访记录"
+        >
+          <I.Plus size={13} /> 新增拜访
+        </button>
       </div>
 
       {/* 主内容：两栏（左拜访时间线 + 右证据面板） */}
@@ -267,6 +309,8 @@ export default function VisitRecordsPage({ project }: Props) {
                 onToggle={() =>
                   setExpandedVisitId(expandedVisitId === v.id ? null : v.id)
                 }
+                onEdit={() => setVisitModal({ mode: "edit", visit: v })}
+                onDelete={() => handleDeleteVisit(v)}
               />
             ))
           )}
@@ -388,6 +432,173 @@ export default function VisitRecordsPage({ project }: Props) {
           </div>
         </Card>
       </div>
+
+      {/* 拜访记录编辑弹窗（新增/编辑） */}
+      {visitModal && projectId != null && (
+        <VisitFormModal
+          projectId={projectId}
+          cards={cards}
+          visit={"visit" in visitModal ? visitModal.visit : null}
+          onClose={() => setVisitModal(null)}
+          onSaved={() => {
+            setVisitModal(null);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── 拜访记录编辑弹窗（M4.3.6 新增/编辑，手动写入默认 reviewed §7.3）─────
+
+function VisitFormModal({
+  projectId,
+  cards,
+  visit,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  cards: StakeholderCard[];
+  visit: VisitRecord | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [visitDate, setVisitDate] = useState(visit?.visit_date ?? "");
+  const [visitType, setVisitType] = useState<string>(visit?.visit_type ?? "现场访谈");
+  const [ourParts, setOurParts] = useState((visit?.participants_our ?? []).join("、"));
+  // 客户方参与人 = 关联角色卡（手动录入两者同步，简化表单）
+  const [clientIds, setClientIds] = useState<number[]>(visit?.participants_client ?? []);
+  const [location, setLocation] = useState(visit?.location ?? "");
+  const [duration, setDuration] = useState(visit?.duration ?? "");
+  const [summary, setSummary] = useState(visit?.summary ?? "");
+  const [takeaways, setTakeaways] = useState((visit?.key_takeaways ?? []).join("\n"));
+  const [nextSteps, setNextSteps] = useState(visit?.next_steps ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const toggleClient = (id: number) =>
+    setClientIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+
+  const save = async () => {
+    setSaving(true);
+    // 我方参与按 、/，/换行 分割；关键洞察按行分割
+    const ourList = ourParts.split(/[、,，\n]/).map((s) => s.trim()).filter(Boolean);
+    const takeawayList = takeaways.split("\n").map((s) => s.trim()).filter(Boolean);
+    const payload: VisitRecordInput = {
+      visit_type: visitType,
+      visit_date: visitDate || null,
+      participants_our: ourList.length ? ourList : null,
+      participants_client: clientIds.length ? clientIds : null,
+      related_card_ids: clientIds.length ? clientIds : null,
+      location: location.trim() || null,
+      duration: duration.trim() || null,
+      summary: summary.trim() || null,
+      key_takeaways: takeawayList.length ? takeawayList : null,
+      next_steps: nextSteps.trim() || null,
+      review_status: "reviewed",
+    };
+    try {
+      if (visit) {
+        await api.updateVisitRecord(projectId, visit.id, payload);
+        toast.showToast("已更新拜访记录", "success");
+      } else {
+        await api.createVisitRecord(projectId, payload);
+        toast.showToast("已新增拜访记录", "success");
+      }
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 560, maxHeight: "85vh", overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <I.Calendar size={16} style={{ color: "var(--accent)" }} />
+          <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>
+            {visit ? "编辑拜访记录" : "新增拜访记录"}
+          </span>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle} title="关闭">✕</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12 }}>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={miniLabelStyle}>拜访日期</span>
+              <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} style={modalInputStyle} />
+            </label>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={miniLabelStyle}>拜访类型</span>
+              <select value={visitType} onChange={(e) => setVisitType(e.target.value)} style={selectStyle}>
+                {VISIT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>我方参与人（顿号/逗号分隔）</span>
+            <input value={ourParts} onChange={(e) => setOurParts(e.target.value)} placeholder="如：张顾问、李工" style={modalInputStyle} />
+          </label>
+
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>客户方参与人 / 关联角色（多选）</span>
+            <div style={clientPickStyle}>
+              {cards.length === 0 ? (
+                <span style={{ fontSize: 11, color: "var(--ink-4)" }}>该项目暂无已确认角色卡</span>
+              ) : (
+                cards.map((c) => {
+                  const checked = clientIds.includes(c.id);
+                  return (
+                    <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer", color: checked ? "var(--accent)" : "var(--ink-2)" }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleClient(c.id)} />
+                      {c.name}{c.position ? ` · ${c.position}` : ""}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </label>
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={miniLabelStyle}>地点</span>
+              <input value={location} onChange={(e) => setLocation(e.target.value)} style={modalInputStyle} />
+            </label>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={miniLabelStyle}>时长</span>
+              <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="如：2小时" style={modalInputStyle} />
+            </label>
+          </div>
+
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>拜访摘要</span>
+            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} style={textareaStyle} />
+          </label>
+
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>关键洞察（每行一条）</span>
+            <textarea value={takeaways} onChange={(e) => setTakeaways(e.target.value)} rows={3} placeholder={"① …\n② …"} style={textareaStyle} />
+          </label>
+
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>下一步行动（支持 Markdown）</span>
+            <textarea value={nextSteps} onChange={(e) => setNextSteps(e.target.value)} rows={3} style={textareaStyle} />
+          </label>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={ghostBtnStyle}>取消</button>
+          <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>{saving ? "保存中…" : "保存"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -400,12 +611,16 @@ function VisitRow({
   visitEvidences,
   expanded,
   onToggle,
+  onEdit,
+  onDelete,
 }: {
   visit: VisitRecord;
   cardMap: Map<number, string>;
   visitEvidences: EvidenceSource[];
   expanded: boolean;
   onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const date = visit.visit_date;
   const ourNames = visit.participants_our?.join("、") || null;
@@ -475,6 +690,16 @@ function VisitRow({
       {/* 展开体：基本信息 + 关键洞察 + 下一步行动 + 本次证据清单 */}
       {expanded && (
         <div style={{ borderTop: "1px solid var(--line)", padding: "16px 20px", background: "var(--bg)" }}>
+          {/* 操作栏 */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 12 }}>
+            <button onClick={onEdit} style={ghostBtnStyle} title="编辑拜访记录">
+              <I.Edit size={12} style={{ verticalAlign: -1, marginRight: 4 }} />编辑
+            </button>
+            <button onClick={onDelete} style={{ ...ghostBtnStyle, color: "var(--danger)", borderColor: "var(--danger)" }} title="删除拜访记录">
+              <I.Trash size={12} style={{ verticalAlign: -1, marginRight: 4 }} />删除
+            </button>
+          </div>
+
           {/* 基本信息 */}
           <div style={{ display: "flex", gap: 20, fontSize: 12, flexWrap: "wrap", marginBottom: 14 }}>
             <div><span style={{ color: "var(--ink-3)" }}>我方参与：</span><span style={{ fontWeight: 500 }}>{ourNames || "—"}</span></div>
@@ -612,6 +837,72 @@ const retryBtnStyle: React.CSSProperties = {
   marginTop: 12, padding: "6px 18px", borderRadius: 8, fontSize: 12, fontWeight: 500,
   border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-2)",
   cursor: "pointer", fontFamily: "inherit",
+};
+
+/** 顶部主要按钮（新增拜访） */
+const primaryBtnStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 4,
+  padding: "6px 14px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+  border: "none", borderRadius: 8, background: "var(--accent)", color: "var(--on-accent)",
+  cursor: "pointer", whiteSpace: "nowrap",
+};
+
+/** 次要/幽灵按钮（编辑/取消/删除等） */
+const ghostBtnStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center",
+  padding: "5px 12px", fontSize: 12, fontWeight: 500, fontFamily: "inherit",
+  border: "1px solid var(--line)", borderRadius: 8, background: "transparent", color: "var(--ink-2)",
+  cursor: "pointer", whiteSpace: "nowrap",
+};
+
+/** 图标按钮（关闭等） */
+const iconBtnStyle: React.CSSProperties = {
+  all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center",
+  width: 24, height: 24, borderRadius: 6, color: "var(--ink-3)", fontSize: 13,
+};
+
+/** 保存按钮（禁用态降低不透明度） */
+function saveBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    padding: "6px 16px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+    border: "none", borderRadius: 8, background: "var(--accent)", color: "var(--on-accent)",
+    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1,
+  };
+}
+
+// ─── 弹窗 / 表单样式 ──────────────────────────────────────────
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
+  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12,
+  padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+};
+
+const modalInputStyle: React.CSSProperties = {
+  padding: "6px 9px", fontSize: 12, border: "1px solid var(--line)", borderRadius: 6,
+  fontFamily: "inherit", color: "var(--ink-2)", background: "var(--surface)", width: "100%",
+};
+
+const selectStyle: React.CSSProperties = { ...modalInputStyle, cursor: "pointer" };
+
+const textareaStyle: React.CSSProperties = {
+  width: "100%", padding: "6px 9px", fontSize: 12, border: "1px solid var(--line)", borderRadius: 6,
+  fontFamily: "inherit", color: "var(--ink-2)", background: "var(--surface)", resize: "vertical",
+};
+
+const fieldLabelStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 3 };
+
+const miniLabelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: "var(--ink-3)" };
+
+/** 客户角色多选区（checkbox 列表，可滚动） */
+const clientPickStyle: React.CSSProperties = {
+  display: "flex", flexWrap: "wrap", gap: "6px 14px",
+  padding: 10, border: "1px solid var(--line)", borderRadius: 6,
+  background: "var(--bg-2)", maxHeight: 120, overflow: "auto",
 };
 
 const filterLabelStyle: React.CSSProperties = {

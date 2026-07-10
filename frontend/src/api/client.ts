@@ -11,6 +11,7 @@ import type {
   AdoptResult,
   ConversionTask,
   EvidenceSource,
+  EvidenceSourceInput,
   Customer,
   CustomerInput,
   FeedbackIssueCreated,
@@ -46,6 +47,7 @@ import type {
   Skill,
   StanceChangeResult,
   VisitRecord,
+  VisitRecordInput,
   StakeholderCard,
   StakeholderCardInput,
   StakeholderGraph,
@@ -980,6 +982,25 @@ export const api = {
       `/api/projects/${projectId}/evidence-sources${query ? "?" + query : ""}`,
     );
   },
+  createEvidence: (projectId: number, data: EvidenceSourceInput) =>
+    request<EvidenceSource>(
+      `/api/projects/${projectId}/evidence-sources`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateEvidence: (
+    projectId: number,
+    evidenceId: number,
+    data: Partial<EvidenceSourceInput>,
+  ) =>
+    request<EvidenceSource>(
+      `/api/projects/${projectId}/evidence-sources/${evidenceId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteEvidence: (projectId: number, evidenceId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/evidence-sources/${evidenceId}`,
+      { method: "DELETE" },
+    ),
 
   // ─── 营销地图（M4.2 / M2.2 后端就绪）─────────────────────────
   listStakeholderCards: (
@@ -1163,6 +1184,25 @@ export const api = {
       `/api/projects/${projectId}/visit-records${query ? "?" + query : ""}`,
     );
   },
+  createVisitRecord: (projectId: number, data: VisitRecordInput) =>
+    request<VisitRecord>(
+      `/api/projects/${projectId}/visit-records`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateVisitRecord: (
+    projectId: number,
+    visitId: number,
+    data: Partial<VisitRecordInput>,
+  ) =>
+    request<VisitRecord>(
+      `/api/projects/${projectId}/visit-records/${visitId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteVisitRecord: (projectId: number, visitId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/visit-records/${visitId}`,
+      { method: "DELETE" },
+    ),
 };
 
 /**

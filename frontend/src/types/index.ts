@@ -1146,3 +1146,33 @@ export interface EvidenceSource {
   created_at: string | null;
   updated_at: string | null;
 }
+
+/** 拜访记录创建/编辑入参（对齐 VisitRecordCreate；手动新增默认 reviewed，§7.3） */
+export interface VisitRecordInput {
+  visit_date?: string | null;
+  visit_type: string;
+  participants_our?: string[] | null;
+  participants_client?: number[] | null;
+  location?: string | null;
+  duration?: string | null;
+  summary?: string | null;
+  next_steps?: string | null;
+  key_takeaways?: string[] | null;
+  related_card_ids?: number[] | null;
+  review_status?: string;
+}
+
+/** 证据创建/编辑入参（对齐 EvidenceSourceCreate；角色态度信号可带 §7.6 立场变化） */
+export interface EvidenceSourceInput {
+  visit_record_id: number;
+  evidence_type: string;
+  strength?: string;
+  content: string;
+  source_role_id?: number | null;
+  source_role_name?: string | null;
+  related_hypothesis_id?: number | null;
+  related_hypothesis_name?: string | null;
+  implied_from_stance?: string | null;
+  implied_to_stance?: string | null;
+  review_status?: string;
+}
