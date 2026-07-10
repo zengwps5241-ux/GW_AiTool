@@ -16,6 +16,7 @@ description: WF12 营销地图角色卡生成——按客观层/主观层/行为
    - 影响力 influence：5=最终决策者 / 3=推荐者 / 1=无影响
    - 支持度 support：5=公开推动 / 3=私下认可 / 1=公开质疑
    - `gradeLevel`：Champion(8-10) / 倾向我方(5-7) / 中立(3-4) / 反对(1-2)
+   - `confidence`（置信度，主观判断必填）：高=≥3 次接触且有行为/原话佐证 / 中=有部分佐证 / 低=仅 1 次接触或主要为推断
    - **Champion 三要素**（缺一不可，三者全满足才判 Champion）：① 有影响力（能影响他人）② 有意愿（主动推动）③ 有个人利益（我方胜出与其个人目标相关）
 3. **角色去重**：生成前先核对项目内是否已有同人角色卡（姓名/岗位/部门匹配）；命中则在文本中列出候选请用户确认是「合并/更新」还是「新建」，不要重复建卡（person_disambiguation）。
 
@@ -27,7 +28,7 @@ description: WF12 营销地图角色卡生成——按客观层/主观层/行为
 4. **判定角色类型与决策权**：
    - `role_type`：economic_decision_maker（经济决策）/ technical_evaluator（技术评估）/ user（使用者）/ coach_supporter（教练支持）/ procurement_finance（采购财务）
    - `decision_power`：最终决策 / 技术把关 / 推荐建议 / 影响者 / 信息提供
-5. **评分主观层**：按公式给 engagement/influence/support 打分并算 compositeScore、gradeLevel；填 stance、explicitKPI、personalMotivation、attitudeToUs、attitudeToCompetitor、coreConcerns、leverage。
+5. **评分主观层**：按公式给 engagement/influence/support 打分并算 compositeScore、gradeLevel；填 stance、explicitKPI、personalMotivation、attitudeToUs、attitudeToCompetitor、coreConcerns、leverage、**confidence（置信度，按上方标准：高/中/低）**。
 6. **行为记录**：behaviors 数组，每条含 observation（客观）/ interpretation（解读）/ suggestedAction（建议下一步）。
 7. **生成话术**（可选）：针对该角色类型 + 场景（初次拜访/方案汇报/价值呈现/应对价格质疑等）给 1-2 段对话体话术（在文本中给出，话术库后续沉淀）。
 8. **与用户确认**后调用草稿工具写入项目草稿区。
@@ -44,7 +45,7 @@ mcp__consultant_drafts__save_stakeholder_card_draft
   role_type: "economic_decision_maker"
   decision_power: "最终决策"
   objective_layer: { education:"...", previousCompanies:"...", personality:"...", communicationPreference:"...", relationships:"...", historyWithUs:"...", historyWithCompetitor:"..." }
-  subjective_layer: { stance:"支持", explicitKPI:"...", personalMotivation:"...", attitudeToUs:"...", attitudeToCompetitor:"...", engagement:7, influence:9, support:6, coreConcerns:"...", leverage:"..." }
+  subjective_layer: { stance:"支持", explicitKPI:"...", personalMotivation:"...", attitudeToUs:"...", attitudeToCompetitor:"...", engagement:7, influence:9, support:6, coreConcerns:"...", leverage:"...", confidence:"中" }
   behaviors: [ { observation:"...", interpretation:"...", suggestedAction:"..." } ]
 ```
 
