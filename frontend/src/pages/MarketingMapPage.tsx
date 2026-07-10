@@ -28,6 +28,7 @@ import type {
   ProcurementStage,
   ProcurementStageStatus,
   StakeholderCard,
+  StakeholderCardInput,
   StakeholderGraph,
   StakeholderRelationType,
   StanceChangeEntry,
@@ -342,7 +343,7 @@ function CardsView({
   scripts,
   selectedCard,
   onSelect,
-  onChanged: _onChanged,
+  onChanged,
 }: {
   projectId: number;
   cards: StakeholderCard[];
@@ -351,39 +352,27 @@ function CardsView({
   onSelect: (id: number) => void;
   onChanged: () => void;
 }) {
+  const toast = useToast();
   const [tab, setTab] = useState<CardTab>("objective");
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  // 角色卡编辑器：null=关闭；{card:null}=新建；{card:X}=编辑 X（M4.2.9 CRUD）
+  const [cardEditor, setCardEditor] = useState<{ card: StakeholderCard | null } | null>(null);
 
-  // 空项目无角色卡
-  if (cards.length === 0) {
-    return (
-      <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
-        <I.UserCheck size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>尚未建立角色卡</div>
-        <div style={{ maxWidth: 380, margin: "0 auto", lineHeight: 1.7 }}>
-          前往「对话」页对项目 Agent 说「生成角色卡」或使用 WF12 chip，AI 会基于拜访证据产出角色卡草稿，采纳后此处可见；也可在 M4.2.9 上线后手动新增。
-        </div>
-      </Card>
-    );
-  }
-
-  // 默认选中第一个
-  const current = selectedCard ?? cards[0];
-  const cardScripts = scripts.filter((s) => s.stakeholder_card_id === current.id);
-  // 同角色类型的通用模板话术（跨客户通用，stakeholder_card_id 为 null 且 role_type 匹配）
-  const templateScripts = scripts.filter(
-    (s) => s.stakeholder_card_id == null && s.role_type === current.role_type,
-  );
+  // 默认选中第一个（可能为 null — 空列表）
+  const current = selectedCard ?? cards[0] ?? null;
+  const currentId = current?.id;
 
   // 切换角色：重置子 Tab + 拉取关联拜访记录（card_id 过滤 related_card_ids / participants_client）
+  // hooks 全部置于早期 return 之前，避免删除最后一张卡时 hooks 数量变化（M4.2.9 修复 M4.2.6 遗留）
   useEffect(() => {
     setTab("objective");
+    if (currentId == null) return;
     let cancelled = false;
     setVisitsLoading(true);
     setVisits([]);
     api
-      .listVisitRecords(projectId, { card_id: current.id })
+      .listVisitRecords(projectId, { card_id: currentId })
       .then((list) => {
         if (!cancelled) setVisits(list);
       })
@@ -396,10 +385,60 @@ function CardsView({
     return () => {
       cancelled = true;
     };
-  }, [current.id, projectId]);
+  }, [currentId, projectId]);
 
-  const behaviors = current.behaviors ?? [];
-  const stanceLog = current.stance_change_log ?? [];
+  const handleDelete = async (card: StakeholderCard) => {
+    if (!window.confirm(`确认删除角色卡「${card.name}」？关联的关系/话术可能受影响。`)) return;
+    try {
+      await api.deleteStakeholderCard(projectId, card.id);
+      toast.showToast("已删除", "success");
+      onChanged();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+    }
+  };
+
+  const editorEl = cardEditor && (
+    <CardEditModal
+      projectId={projectId}
+      card={cardEditor.card}
+      onClose={() => setCardEditor(null)}
+      onSaved={() => {
+        setCardEditor(null);
+        onChanged();
+      }}
+    />
+  );
+
+  // 空项目无角色卡（提供新建入口，M4.2.9）
+  if (cards.length === 0) {
+    return (
+      <>
+        <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+          <I.UserCheck size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>尚未建立角色卡</div>
+          <div style={{ maxWidth: 380, margin: "0 auto", lineHeight: 1.7, marginBottom: 16 }}>
+            手动新增角色卡（直接进正式库），或在「对话」页用 WF12 chip 让 AI 基于拜访证据产出草稿后采纳。
+          </div>
+          <button onClick={() => setCardEditor({ card: null })} style={primaryBtnStyle}>
+            <I.Plus size={14} /> 新增角色卡
+          </button>
+        </Card>
+        {editorEl}
+      </>
+    );
+  }
+
+  // current 非空（cards.length > 0 已保证）
+  const cur = current as StakeholderCard;
+  const cardScripts = scripts.filter((s) => s.stakeholder_card_id === cur.id);
+  // 同角色类型的通用模板话术（跨客户通用，stakeholder_card_id 为 null 且 role_type 匹配）
+  const templateScripts = scripts.filter(
+    (s) => s.stakeholder_card_id == null && s.role_type === cur.role_type,
+  );
+
+  const behaviors = cur.behaviors ?? [];
+  const stanceLog = cur.stance_change_log ?? [];
 
   // 子 Tab 角标计数（仅数组类 Tab 显示数量）
   const tabBadge: Record<CardTab, number> = {
@@ -414,13 +453,16 @@ function CardsView({
     <div style={{ display: "flex", gap: 16, height: "100%" }}>
       {/* 左：角色列表 */}
       <Card style={{ width: 220, padding: 0, flexShrink: 0, overflow: "auto" }}>
-        <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6 }}>
-          角色列表（{cards.length}）
+        <div style={listHeaderStyle}>
+          <span>角色列表（{cards.length}）</span>
+          <button onClick={() => setCardEditor({ card: null })} style={listAddBtnStyle} title="新增角色卡">
+            <I.Plus size={14} />
+          </button>
         </div>
         {cards.map((c) => {
           const rt = c.role_type;
           const stance = c.subjective_layer?.stance;
-          const isSel = current.id === c.id;
+          const isSel = cur.id === c.id;
           return (
             <button
               key={c.id}
@@ -465,7 +507,11 @@ function CardsView({
 
       {/* 中：详情卡（头 + 5 子 Tab + 内容） */}
       <Card style={{ flex: 1, padding: 0, overflow: "auto", minWidth: 0 }}>
-        <CardDetailHeader card={current} />
+        <CardDetailHeader
+          card={cur}
+          onEdit={() => setCardEditor({ card: cur })}
+          onDelete={() => handleDelete(cur)}
+        />
         {/* 子 Tab 栏 */}
         <div style={cardTabBarStyle}>
           {CARD_TABS.map((t) => {
@@ -483,14 +529,14 @@ function CardsView({
         </div>
         {/* 子 Tab 内容 */}
         <div style={{ padding: 20, fontSize: 13 }}>
-          {tab === "objective" && <ObjectiveTab card={current} />}
-          {tab === "subjective" && <SubjectiveTab card={current} />}
+          {tab === "objective" && <ObjectiveTab card={cur} />}
+          {tab === "subjective" && <SubjectiveTab card={cur} />}
           {tab === "behaviors" && <BehaviorsTab behaviors={behaviors} />}
           {tab === "stance" && <StanceHistoryTab log={stanceLog} />}
           {tab === "scripts" && (
             <ScriptsTab
-              cardName={current.name}
-              roleType={current.role_type}
+              cardName={cur.name}
+              roleType={cur.role_type}
               cardScripts={cardScripts}
               templateScripts={templateScripts}
             />
@@ -507,6 +553,8 @@ function CardsView({
           onJumpScripts={() => setTab("scripts")}
         />
       </Card>
+
+      {editorEl}
     </div>
   );
 }
@@ -803,8 +851,16 @@ function EmptyTab({ icon, text }: { icon: keyof typeof I; text: string }) {
   );
 }
 
-/** 角色卡详情头部：头像 + 基本信息 + 标签 */
-function CardDetailHeader({ card }: { card: StakeholderCard }) {
+/** 角色卡详情头部：头像 + 基本信息 + 标签 + 编辑/删除（M4.2.9） */
+function CardDetailHeader({
+  card,
+  onEdit,
+  onDelete,
+}: {
+  card: StakeholderCard;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
   const rt = card.role_type;
   const grade = card.subjective_layer?.gradeLevel;
   return (
@@ -825,9 +881,15 @@ function CardDetailHeader({ card }: { card: StakeholderCard }) {
         {card.contact_info && <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>📧 {card.contact_info}</div>}
       </div>
       <div style={{ display: "flex", gap: 6, flexDirection: "column", alignItems: "flex-end" }}>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {rt && <Tag tone="accent">{ROLE_TYPE_LABELS[rt]}</Tag>}
           {card.decision_power && <Tag tone="info">{card.decision_power}</Tag>}
+          {onEdit && (
+            <button onClick={onEdit} style={iconBtnStyle} title="编辑角色卡"><I.Edit size={14} /></button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} style={iconBtnStyle} title="删除角色卡"><I.Trash size={14} /></button>
+          )}
         </div>
         {grade && (
           <Tag tone={gradeTone(grade)}>{grade}{card.subjective_layer?.confidence ? ` · 置信${card.subjective_layer.confidence}` : ""}</Tag>
@@ -1798,8 +1860,11 @@ function RelationsView({
   const toast = useToast();
   const [graph, setGraph] = useState<StakeholderGraph | null>(null);
   const [loading, setLoading] = useState(true);
+  // 关系编辑（M4.2.9）：添加弹窗 + 选中边删除
+  const [showRel, setShowRel] = useState(false);
+  const [selEdgeId, setSelEdgeId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     setLoading(true);
     api
       .getStakeholderGraph(projectId)
@@ -1807,6 +1872,23 @@ function RelationsView({
       .catch((e) => toast.showToast(e instanceof Error ? e.message : "加载关系网络失败", "error"))
       .finally(() => setLoading(false));
   }, [projectId, toast]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const handleDeleteRelation = async () => {
+    if (selEdgeId == null) return;
+    if (!window.confirm("确认删除该关系？")) return;
+    try {
+      await api.deleteStakeholderRelation(projectId, Number(selEdgeId));
+      toast.showToast("已删除关系", "success");
+      setSelEdgeId(null);
+      refresh();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+    }
+  };
 
   // 圆形自动布局：N 节点均匀分布于圆周
   const rfNodes: Node<RelationNodeData>[] = useMemo(() => {
@@ -1824,11 +1906,12 @@ function RelationsView({
     });
   }, [graph]);
 
-  // 边：4 类关系颜色 + 线型 + 箭头 + 中文标签
+  // 边：4 类关系颜色 + 线型 + 箭头 + 中文标签；选中边加粗高亮（供 M4.2.9 删除）
   const rfEdges: Edge[] = useMemo(() => {
     if (!graph) return [];
     return graph.edges.map((e) => {
       const meta = RELATION_META[e.relation_type] ?? { label: e.relation_type, color: "var(--ink-3)", dashed: false };
+      const selected = selEdgeId === String(e.id);
       return {
         id: String(e.id),
         source: String(e.source),
@@ -1837,11 +1920,12 @@ function RelationsView({
         labelStyle: { fill: meta.color, fontWeight: 600, fontSize: 11 },
         labelBgStyle: { fill: "var(--surface)", fillOpacity: 0.9 },
         labelBgPadding: [4, 2],
-        style: { stroke: meta.color, strokeWidth: 2, strokeDasharray: meta.dashed ? "6 4" : undefined },
+        selected,
+        style: { stroke: meta.color, strokeWidth: selected ? 4 : 2, strokeDasharray: meta.dashed ? "6 4" : undefined },
         markerEnd: { type: MarkerType.ArrowClosed, color: meta.color, width: 18, height: 18 },
       };
     });
-  }, [graph]);
+  }, [graph, selEdgeId]);
 
   const hasCards = cards.length > 0;
   const edgeCount = graph?.edges.length ?? 0;
@@ -1861,13 +1945,22 @@ function RelationsView({
     <div style={{ display: "flex", gap: 16, height: "100%" }}>
       {/* 左：关系图 */}
       <Card style={{ flex: 1, padding: 0, overflow: "hidden", position: "relative", minWidth: 0 }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <I.Network size={15} style={{ color: "var(--accent)" }} />
           <span style={{ fontSize: 14, fontWeight: 600, fontFamily: "var(--serif)" }}>角色关系网络图</span>
           <span style={{ fontSize: 11, color: "var(--ink-3)" }}>· {graph?.nodes.length ?? 0} 角色 / {edgeCount} 关系</span>
           {edgeCount === 0 && !loading && (
-            <span style={{ fontSize: 11, color: "var(--warn)" }}>（暂无关系，M4.2.9 上线后可手动添加）</span>
+            <span style={{ fontSize: 11, color: "var(--warn)" }}>（暂无关系，点击右侧「添加关系」）</span>
           )}
+          <div style={{ flex: 1 }} />
+          {selEdgeId && (
+            <button onClick={handleDeleteRelation} style={{ ...kbGhostBtnStyle, color: "var(--danger)", borderColor: "var(--danger)" }} title="删除选中的关系">
+              <I.Trash size={13} /> 删除选中关系
+            </button>
+          )}
+          <button onClick={() => setShowRel(true)} disabled={cards.length < 2} style={primaryBtnStyle} title={cards.length < 2 ? "至少需要 2 张角色卡" : "添加关系"}>
+            <I.Plus size={13} /> 添加关系
+          </button>
         </div>
         <div style={{ height: "calc(100% - 45px)", background: "var(--bg-2)" }}>
           {loading ? (
@@ -1880,6 +1973,8 @@ function RelationsView({
               edges={rfEdges}
               nodeTypes={RELATION_NODE_TYPES}
               onNodeClick={(_, node) => onJump(Number(node.id))}
+              onEdgeClick={(_, edge) => setSelEdgeId(edge.id)}
+              onPaneClick={() => setSelEdgeId(null)}
               fitView
               fitViewOptions={{ padding: 0.2 }}
               proOptions={{ hideAttribution: true }}
@@ -1921,10 +2016,420 @@ function RelationsView({
         <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12, fontSize: 11, color: "var(--ink-3)", lineHeight: 1.7 }}>
           <div style={{ fontWeight: 600, color: "var(--ink-2)", marginBottom: 4 }}>操作</div>
           <div>· 点击节点 → 跳转该角色卡详情</div>
+          <div>· 点击边选中 → 顶部「删除选中关系」</div>
           <div>· 拖拽节点 / 滚轮缩放 / 拖动画布</div>
           <div>· 节点边框色 = 角色类型（见角色列表）</div>
         </div>
       </Card>
+
+      {showRel && (
+        <RelationEditModal
+          projectId={projectId}
+          cards={cards}
+          relation={null}
+          onClose={() => setShowRel(false)}
+          onSaved={() => {
+            setShowRel(false);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── 角色卡编辑器（M4.2.9：手动新增/编辑角色卡，全字段，§5.2） ──
+// 手动建卡直接进正式库（review_status=reviewed，后端 schema 默认亦如此，§2.4）。
+// 全字段：基本信息 + 客观层 7 + 主观层（评分+全文本+confidence）+ behaviors + stance_change_log。
+// compositeScore/gradeLevel 由后端按 §5.2 公式算回写，编辑器不收集。
+
+const DECISION_POWER_OPTIONS = ["最终决策", "技术把关", "推荐建议", "影响者", "信息提供"];
+const STANCE_OPTIONS: StanceLevel[] = ["支持", "中立", "反对", "观望"];
+const CONFIDENCE_OPTIONS = ["高", "中", "低"];
+
+/** 客观层 7 字段定义 */
+const OBJECTIVE_FIELDS: { key: string; label: string }[] = [
+  { key: "education", label: "教育背景" },
+  { key: "previousCompanies", label: "过往公司与年限" },
+  { key: "personality", label: "性格特征" },
+  { key: "communicationPreference", label: "沟通偏好" },
+  { key: "relationships", label: "人际关系" },
+  { key: "historyWithUs", label: "与我方历史合作" },
+  { key: "historyWithCompetitor", label: "与竞品历史合作" },
+];
+
+/** 主观层文本字段定义（评分类单独处理） */
+const SUBJECTIVE_TEXT_FIELDS: { key: string; label: string }[] = [
+  { key: "explicitKPI", label: "显性 KPI" },
+  { key: "personalMotivation", label: "隐性个人诉求" },
+  { key: "attitudeToUs", label: "对我方方案的态度" },
+  { key: "attitudeToCompetitor", label: "对竞品的态度" },
+  { key: "coreConcerns", label: "核心顾虑" },
+  { key: "leverage", label: "影响杠杆" },
+];
+
+/** 可折叠分区 */
+function EditSection({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ borderBottom: "1px solid var(--line)", paddingBottom: 6, marginBottom: 6 }}>
+      <button onClick={onToggle} style={sectionToggleStyle}>
+        <I.ChevronDown size={13} style={{ transform: open ? "none" : "rotate(-90deg)", transition: "transform 120ms" }} />
+        <span>{title}</span>
+      </button>
+      {open && <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
+/** 编辑器字段（标签 + 控件，full 跨列） */
+function EditField({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: full ? "1 1 100%" : "1 1 calc(50% - 6px)", minWidth: 0 }}>
+      <span style={miniLabelStyle}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function CardEditModal({
+  projectId,
+  card,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  card: StakeholderCard | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const isEdit = card != null;
+  const ol = (card?.objective_layer ?? {}) as Record<string, string>;
+  const sl = card?.subjective_layer ?? {};
+
+  // 基本信息
+  const [name, setName] = useState(card?.name ?? "");
+  const [position, setPosition] = useState(card?.position ?? "");
+  const [department, setDepartment] = useState(card?.department ?? "");
+  const [reportsTo, setReportsTo] = useState(card?.reports_to ?? "");
+  const [contactInfo, setContactInfo] = useState(card?.contact_info ?? "");
+  const [roleType, setRoleType] = useState<StakeholderRoleType | "">(card?.role_type ?? "");
+  const [decisionPower, setDecisionPower] = useState(card?.decision_power ?? "");
+
+  // 客观层
+  const [obj, setObj] = useState<Record<string, string>>(
+    () => Object.fromEntries(OBJECTIVE_FIELDS.map((f) => [f.key, ol[f.key] ?? ""])) as Record<string, string>,
+  );
+  // 主观层
+  const [stance, setStance] = useState<StanceLevel | "">(sl.stance ?? "");
+  const [confidence, setConfidence] = useState(sl.confidence ?? "");
+  const [engagement, setEngagement] = useState(sl.engagement != null ? String(sl.engagement) : "");
+  const [influence, setInfluence] = useState(sl.influence != null ? String(sl.influence) : "");
+  const [support, setSupport] = useState(sl.support != null ? String(sl.support) : "");
+  const [subj, setSubj] = useState<Record<string, string>>(
+    () => Object.fromEntries(SUBJECTIVE_TEXT_FIELDS.map((f) => [f.key, ((sl as Record<string, string>)[f.key]) ?? ""])) as Record<string, string>,
+  );
+  // 数组
+  const [behaviors, setBehaviors] = useState<BehaviorEntry[]>(card?.behaviors ?? []);
+  const [stanceLog, setStanceLog] = useState<StanceChangeEntry[]>(card?.stance_change_log ?? []);
+
+  const [saving, setSaving] = useState(false);
+  const [openSec, setOpenSec] = useState<Record<string, boolean>>({
+    basic: true,
+    objective: false,
+    subjective: false,
+    behaviors: false,
+    stance: false,
+  });
+  const toggle = (k: string) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
+
+  const numOrUndef = (s: string): number | undefined => {
+    if (s.trim() === "") return undefined;
+    const n = Number(s);
+    if (Number.isNaN(n)) return undefined;
+    return Math.max(1, Math.min(10, n));
+  };
+
+  const buildPayload = (): StakeholderCardInput => {
+    const trimObj = (o: Record<string, string>): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(o)) if (v.trim()) out[k] = v.trim();
+      return out;
+    };
+    const objectiveLayer = trimObj(obj);
+    const subjectiveLayer: Record<string, unknown> = { ...trimObj(subj) };
+    if (stance) subjectiveLayer.stance = stance;
+    if (confidence) subjectiveLayer.confidence = confidence;
+    const eg = numOrUndef(engagement);
+    if (eg != null) subjectiveLayer.engagement = eg;
+    const inf = numOrUndef(influence);
+    if (inf != null) subjectiveLayer.influence = inf;
+    const sup = numOrUndef(support);
+    if (sup != null) subjectiveLayer.support = sup;
+
+    const payload: StakeholderCardInput = {
+      name: name.trim(),
+      position: position.trim() || null,
+      department: department.trim() || null,
+      reports_to: reportsTo.trim() || null,
+      contact_info: contactInfo.trim() || null,
+      role_type: roleType || null,
+      decision_power: decisionPower || null,
+      objective_layer: Object.keys(objectiveLayer).length ? objectiveLayer : undefined,
+      subjective_layer: Object.keys(subjectiveLayer).length ? subjectiveLayer : undefined,
+      behaviors: behaviors.length ? behaviors : null,
+      stance_change_log: stanceLog.length ? stanceLog : null,
+    };
+    if (!isEdit) payload.review_status = "reviewed";
+    return payload;
+  };
+
+  const save = async () => {
+    if (!name.trim()) {
+      toast.showToast("姓名不能为空", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = buildPayload();
+      if (isEdit && card) {
+        await api.updateStakeholderCard(projectId, card.id, payload);
+      } else {
+        await api.createStakeholderCard(projectId, payload);
+      }
+      toast.showToast(isEdit ? "已更新角色卡" : "已新增角色卡", "success");
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateBeh = (i: number, key: keyof BehaviorEntry, val: string) =>
+    setBehaviors((arr) => arr.map((b, j) => (j === i ? { ...b, [key]: val } : b)));
+  const updateStance = (i: number, key: keyof StanceChangeEntry, val: string) =>
+    setStanceLog((arr) => arr.map((e, j) => (j === i ? { ...e, [key]: val } : e)));
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 680, maxHeight: "88vh", overflow: "auto" }}>
+        {/* 头部 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 16, fontWeight: 600, fontFamily: "var(--serif)" }}>{isEdit ? "编辑角色卡" : "新增角色卡"}</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle} title="关闭">✕</button>
+        </div>
+
+        {/* 基本信息 */}
+        <EditSection title="基本信息" open={openSec.basic} onToggle={() => toggle("basic")}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <EditField label="姓名 *"><input value={name} onChange={(e) => setName(e.target.value)} style={modalInputStyle} placeholder="必填" /></EditField>
+            <EditField label="职位"><input value={position} onChange={(e) => setPosition(e.target.value)} style={modalInputStyle} /></EditField>
+            <EditField label="部门"><input value={department} onChange={(e) => setDepartment(e.target.value)} style={modalInputStyle} /></EditField>
+            <EditField label="汇报对象"><input value={reportsTo} onChange={(e) => setReportsTo(e.target.value)} style={modalInputStyle} placeholder="姓名（驱动组织架构图）" /></EditField>
+            <EditField label="联系方式"><input value={contactInfo} onChange={(e) => setContactInfo(e.target.value)} style={modalInputStyle} placeholder="邮箱 / 电话" /></EditField>
+            <EditField label="角色类型">
+              <select value={roleType} onChange={(e) => setRoleType(e.target.value as StakeholderRoleType | "")} style={selectStyle}>
+                <option value="">（未选择）</option>
+                {ROLE_TYPE_ORDER.map((rt) => <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt]}</option>)}
+              </select>
+            </EditField>
+            <EditField label="决策权">
+              <select value={decisionPower} onChange={(e) => setDecisionPower(e.target.value)} style={selectStyle}>
+                <option value="">（未选择）</option>
+                {DECISION_POWER_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </EditField>
+          </div>
+        </EditSection>
+
+        {/* 客观层 */}
+        <EditSection title="客观信息层（7 字段）" open={openSec.objective} onToggle={() => toggle("objective")}>
+          {OBJECTIVE_FIELDS.map((f) => (
+            <EditField key={f.key} label={f.label} full>
+              <textarea value={obj[f.key]} onChange={(e) => setObj({ ...obj, [f.key]: e.target.value })} rows={2} style={textareaStyle} />
+            </EditField>
+          ))}
+        </EditSection>
+
+        {/* 主观层 */}
+        <EditSection title="主观分析层（评分 + 全字段 + 置信度）" open={openSec.subjective} onToggle={() => toggle("subjective")}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <EditField label="立场">
+              <select value={stance} onChange={(e) => setStance(e.target.value as StanceLevel | "")} style={selectStyle}>
+                <option value="">（未选择）</option>
+                {STANCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </EditField>
+            <EditField label="置信度">
+              <select value={confidence} onChange={(e) => setConfidence(e.target.value)} style={selectStyle}>
+                <option value="">（未选择）</option>
+                {CONFIDENCE_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </EditField>
+            <EditField label="参与度 (1-10)"><input type="number" min={1} max={10} value={engagement} onChange={(e) => setEngagement(e.target.value)} style={modalInputStyle} /></EditField>
+            <EditField label="影响力 (1-10)"><input type="number" min={1} max={10} value={influence} onChange={(e) => setInfluence(e.target.value)} style={modalInputStyle} /></EditField>
+            <EditField label="支持度 (1-10)"><input type="number" min={1} max={10} value={support} onChange={(e) => setSupport(e.target.value)} style={modalInputStyle} /></EditField>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--ink-4)", margin: "2px 0 8px" }}>综合评分与等级由后端按 §5.2 公式（参与度×0.3 + 影响力×0.4 + 支持度×0.3）自动计算。</div>
+          {SUBJECTIVE_TEXT_FIELDS.map((f) => (
+            <EditField key={f.key} label={f.label} full>
+              <textarea value={subj[f.key]} onChange={(e) => setSubj({ ...subj, [f.key]: e.target.value })} rows={2} style={textareaStyle} />
+            </EditField>
+          ))}
+        </EditSection>
+
+        {/* 行为分析 */}
+        <EditSection title={`行为分析（${behaviors.length} 条）`} open={openSec.behaviors} onToggle={() => toggle("behaviors")}>
+          {behaviors.map((b, i) => (
+            <div key={i} style={arrayItemStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)" }}>#{i + 1}</span>
+                <button onClick={() => setBehaviors((arr) => arr.filter((_, j) => j !== i))} style={linkBtnStyle}>删除</button>
+              </div>
+              <textarea value={b.observation ?? ""} onChange={(e) => updateBeh(i, "observation", e.target.value)} placeholder="观察到的行为（客观记录）" rows={2} style={textareaStyle} />
+              <textarea value={b.interpretation ?? ""} onChange={(e) => updateBeh(i, "interpretation", e.target.value)} placeholder="解读（基于角色类型的推断）" rows={2} style={textareaStyle} />
+              <textarea value={b.suggestedAction ?? ""} onChange={(e) => updateBeh(i, "suggestedAction", e.target.value)} placeholder="建议下一步动作" rows={2} style={textareaStyle} />
+            </div>
+          ))}
+          <button onClick={() => setBehaviors((arr) => [...arr, {}])} style={addRowBtnStyle}>+ 添加行为</button>
+        </EditSection>
+
+        {/* 态度历史 */}
+        <EditSection title={`态度变化历史（${stanceLog.length} 条）`} open={openSec.stance} onToggle={() => toggle("stance")}>
+          {stanceLog.map((e, i) => (
+            <div key={i} style={arrayItemStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)" }}>#{i + 1}</span>
+                <button onClick={() => setStanceLog((arr) => arr.filter((_, j) => j !== i))} style={linkBtnStyle}>删除</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: "0 0 150px" }}>
+                  <span style={miniLabelStyle}>日期</span>
+                  <input type="date" value={e.date ?? ""} onChange={(ev) => updateStance(i, "date", ev.target.value)} style={modalInputStyle} />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: "1 1 120px" }}>
+                  <span style={miniLabelStyle}>此前立场</span>
+                  <select value={e.from ?? ""} onChange={(ev) => updateStance(i, "from", ev.target.value)} style={selectStyle}>
+                    <option value="">（未选择）</option>
+                    {STANCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: "1 1 120px" }}>
+                  <span style={miniLabelStyle}>当前立场</span>
+                  <select value={e.to ?? ""} onChange={(ev) => updateStance(i, "to", ev.target.value)} style={selectStyle}>
+                    <option value="">（未选择）</option>
+                    {STANCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+              </div>
+              <textarea value={e.reason ?? ""} onChange={(ev) => updateStance(i, "reason", ev.target.value)} placeholder="变化原因" rows={2} style={textareaStyle} />
+            </div>
+          ))}
+          <button onClick={() => setStanceLog((arr) => [...arr, {}])} style={addRowBtnStyle}>+ 添加态度变化</button>
+        </EditSection>
+
+        {/* 底部操作 */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={kbGhostBtnStyle}>取消</button>
+          <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>{saving ? "保存中…" : "保存"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 关系编辑（M4.2.9：增删 StakeholderRelation，M4.2.8 图视图的编辑入口） ──
+
+function RelationEditModal({
+  projectId,
+  cards,
+  relation,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  cards: StakeholderCard[];
+  relation: StakeholderRelationType | null;  // null 不该出现（仅新建/删除，无编辑关系）
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [fromId, setFromId] = useState<number | "">(cards[0]?.id ?? "");
+  const [toId, setToId] = useState<number | "">(cards[1]?.id ?? "");
+  const [relType, setRelType] = useState<StakeholderRelationType>(relation ?? "reports_to");
+  const [desc, setDesc] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (fromId === "" || toId === "") {
+      toast.showToast("请选择源角色和目标角色", "error");
+      return;
+    }
+    if (fromId === toId) {
+      toast.showToast("源角色与目标角色不能相同", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.createStakeholderRelation(projectId, {
+        from_card_id: fromId,
+        to_card_id: toId,
+        relation_type: relType,
+        description: desc.trim() || null,
+      });
+      toast.showToast("已添加关系", "success");
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "添加失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 460 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <I.Network size={16} style={{ color: "var(--accent)" }} />
+          <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>添加角色关系</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle} title="关闭">✕</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>源角色（from）</span>
+            <select value={fromId} onChange={(e) => setFromId(e.target.value ? Number(e.target.value) : "")} style={selectStyle}>
+              <option value="">（选择角色）</option>
+              {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.position ? ` · ${c.position}` : ""}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>目标角色（to）</span>
+            <select value={toId} onChange={(e) => setToId(e.target.value ? Number(e.target.value) : "")} style={selectStyle}>
+              <option value="">（选择角色）</option>
+              {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.position ? ` · ${c.position}` : ""}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>关系类型</span>
+            <select value={relType} onChange={(e) => setRelType(e.target.value as StakeholderRelationType)} style={selectStyle}>
+              {(Object.keys(RELATION_META) as StakeholderRelationType[]).map((rt) => (
+                <option key={rt} value={rt}>{RELATION_META[rt].label}（{rt}）</option>
+              ))}
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            <span style={miniLabelStyle}>关系说明（可选）</span>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} placeholder="如：直接汇报、技术影响…" style={textareaStyle} />
+          </label>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={kbGhostBtnStyle}>取消</button>
+          <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>{saving ? "保存中…" : "添加"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2289,6 +2794,103 @@ const kbGhostBtnStyle: React.CSSProperties = {
   borderRadius: 8,
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+/** 主要按钮（新增/确认） */
+const primaryBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  padding: "8px 16px",
+  fontSize: 13,
+  fontWeight: 600,
+  border: "none",
+  background: "var(--accent)",
+  color: "var(--on-accent)",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+/** 角色列表头（标题 + 新增按钮） */
+const listHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "10px 12px",
+  borderBottom: "1px solid var(--line)",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "var(--ink-3)",
+  textTransform: "uppercase",
+  letterSpacing: 0.6,
+};
+
+const listAddBtnStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 22,
+  height: 22,
+  borderRadius: 6,
+  color: "var(--accent)",
+  border: "1px solid var(--accent)",
+};
+
+// ─── 角色卡编辑器样式（M4.2.9）────────────────────────────────
+
+const modalInputStyle: React.CSSProperties = {
+  padding: "6px 9px",
+  fontSize: 12,
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  fontFamily: "inherit",
+  color: "var(--ink-2)",
+  background: "var(--surface)",
+  width: "100%",
+};
+
+/** 可折叠分区标题按钮 */
+const sectionToggleStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  fontSize: 12,
+  fontWeight: 700,
+  color: "var(--ink-2)",
+  padding: "4px 0",
+};
+
+/** 数组条目容器（行为/态度变化） */
+const arrayItemStyle: React.CSSProperties = {
+  padding: 10,
+  background: "var(--bg-2)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+/** 添加行按钮（虚线） */
+const addRowBtnStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
+  padding: "7px",
+  fontSize: 12,
+  fontWeight: 500,
+  color: "var(--accent)",
+  border: "1px dashed var(--accent)",
+  borderRadius: 8,
+  background: "var(--accent-soft)",
 };
 
 // ─── 采购时间线视图样式（M4.2.5）──────────────────────────────

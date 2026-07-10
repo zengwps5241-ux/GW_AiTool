@@ -322,6 +322,16 @@
 - **为何数字 id 全 String 化**：graph 端点 nodes/edges 的 id/source/target 是 number，ReactFlow 要求 string。node.data 保留原始 number cardId 供 onJump，ReactFlow 内部 id/source/target 用 String()——onNodeClick 取 node.id 再 Number() 还原跳转，双向一致。
 - **理由**：ReactFlow 是 §5.2 钦定二选一的声明式更优解（决策#36 已预装）；关系 CRUD 归 M4.2.9 遵循计划拆分使本任务单一关注点（渲染）；onNodeClick 避开函数进 data 的反模式。与 #35-#39 一致的工程范式。可校验性：真机 graph 端点 seed 测试（建卡 id=3 + 关系 3→1 reports_to）→ GET graph 返回 2 nodes/1 edge 结构正确 → **测后清理恢复 dev 库**（删关系 204 + 删卡 204，回到 1 节点/0 边/1 卡原状）；tsc -b 0 错 + vite build 过（CSS 5.44→12.76kB / JS 574→728kB 为 reactflow 注入，正常）。纯前端无后端改动 → fail 集不涉及前端必然未扩大。
 
+## 决策 #41：M4.2.9 角色 CRUD + 关系编辑 — 全字段编辑器 + 选中边删除（§2.4 §5.2）
+
+- **背景**：M4.2.9「角色 CRUD | 手动新增/编辑/删除角色卡 + 关系编辑」。后端 create/update/delete stakeholder-cards + create/delete stakeholder-relations 全套就绪（M2.2）；createStakeholderCard 的 review_status **默认 reviewed**（schema Field("reviewed")，手动建卡直接进正式库，§2.4 line 335）；compositeScore/gradeLevel 由后端按 §5.2 公式算回写（不收集）。抉择：① 编辑器覆盖多少字段；② 关系编辑入口放哪；③ M4.2.6 遗留的 hooks 顺序隐患（删除最后一张卡时 useEffect 在早期 return 之后 → hooks 数量变化崩溃）。
+- **选择 A — 全字段编辑器 CardEditModal（5 可折叠分区）**：基本信息（姓名*/职位/部门/汇报对象/联系方式/角色类型/决策权）+ 客观层 7 字段 + 主观层（立场/置信度 select + 参与度/影响力/支持度 number 1-10 + 6 文本字段）+ behaviors 数组（observation/interpretation/suggestedAction 增删行）+ stance_change_log 数组（date/from/to/reason 增删行）。基本信息默认展开，其余折叠（避免巨型表单压迫感）。**compositeScore/gradeLevel 不收集**（后端按 §5.2 公式 eng×0.3+inf×0.4+sup×0.3 算回写，编辑器明示此规则）。空值裁剪：objective_layer/subjective_layer 仅含非空键（全空则传 undefined 保 null），数组空则传 null。
+- **选择 B — 关系编辑挂 RelationsView（M4.2.8 图视图）**：「添加关系」按钮（disabled when cards<2， RelationEditModal 选 from/to/type/desc，校验 from≠to）+ **onEdgeClick 选中边 → 边加粗高亮 + 顶部「删除选中关系」按钮** + onPaneClick 清除选中。关系编辑天然属于图视图的交互（而非角色卡视图），与 M4.2.8 视图同处一个组件。RelationEditModal 不支持「编辑关系」（关系无业务编辑语义，改类型=删旧建新，故只做增删）。
+- **选择 C — 修复 M4.2.6 hooks 顺序隐患**：M4.2.6 的 CardsView 把 `if (cards.length === 0) return` 置于 useState 与 useEffect 之间——无 delete 时不触发，但 M4.2.9 引入删除最后一张卡时 cards 由 >0 变 0，early return 跳过 useEffect → React「Rendered fewer hooks than expected」崩溃。重构为：所有 hooks（含新增 cardEditor state）置于早期 return 之前，`current = selectedCard ?? cards[0] ?? null`，useEffect 以 `current?.id` 为依赖并在内部 guard null。空态也提供「新增角色卡」入口（不止提示）。
+- **选择 D — CRUD 入口分布**：CardsView 左列表头「+」按钮 + 空态「新增角色卡」按钮（新建）；CardDetailHeader 右上角 Edit/Trash 图标按钮（编辑/删除当前卡）；删除带 confirm 提示关系/话术受影响。RelationsView 头部「添加关系」+ 选中边删除。onChange/refresh 回调驱动父级重新拉取列表。
+- **为何关系无编辑只有增删**：StakeholderRelation 业务语义轻（from/to/type/description），改类型等同于重建关系，UI 上「删旧+建新」比「编辑」更清晰，且后端 update relation 端点本就不在 M2.2 套件（只有 create/delete）。故 RelationEditModal 固定新建语义。
+- **理由**：全字段编辑器兑现「手动新增/编辑角色卡」规格（§2.4 line 335），compositeScore 后端算避免前后端重复公式；关系增删补齐 M4.2.8 图视图的编辑能力；hooks 顺序修复消除 M4.2.6 遗留的 delete-last-card 崩溃隐患（测试时删卡回 0 节点不再崩）。与 #35-#40 一致的工程范式。可校验性：真机 ASCII 全 CRUD（建卡 id=4 review_status=reviewed composite=6 grade=倾向我方 / 更新三维全 9→composite=9 grade=Champion 公式正确 / 关系 create id=2 / 删关系 204 / 删卡 204）→ **测后清理恢复 dev 库**（1 节点/0 边）；tsc -b 0 错 + vite build 过。（中文 curl body 仍受 Windows Git Bash 编码限制，前端 fetch UTF-8 不受影响，已用 ASCII 验证全链路含计算字段。）纯前端无后端改动 → fail 集不涉及前端必然未扩大。
+
 
 
 
