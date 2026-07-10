@@ -628,7 +628,7 @@ function statusLabel(status: string) {
 
 function statusColor(status: string) {
   if (status === "success") return "var(--success)";
-  if (status === "interrupted") return "#f59e0b";
+  if (status === "interrupted") return "var(--warn)";
   if (status === "error") return "var(--danger)";
   return "var(--ink-3)";
 }

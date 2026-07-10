@@ -252,7 +252,7 @@ export function Btn({
   const variants: Record<BtnVariant, CSSProperties> = {
     primary: {
       background: "var(--accent)",
-      color: "#FFFCF5",
+      color: "var(--on-accent)",
       borderColor: "var(--accent)",
     },
     secondary: {
@@ -267,7 +267,7 @@ export function Btn({
     },
     danger: {
       background: "var(--danger)",
-      color: "#fff",
+      color: "var(--on-accent)",
       borderColor: "var(--danger)",
     },
     soft: {
@@ -493,7 +493,7 @@ export function Avatar({
   color?: string;
   size?: number;
 }) {
-  const palette = ["#B85C3C", "#5C8A56", "#C68A3E", "#4A7593", "#8B5C8A", "#9A4A2E"];
+  const palette = ["#6E8E68", "#6488A8", "#8C6F92", "#B07A2E", "#4A7593", "#5E8A55"];
   const c = color || palette[(name.charCodeAt(0) || 0) % palette.length];
   return (
     <span
@@ -502,7 +502,7 @@ export function Avatar({
         height: size,
         borderRadius: 999,
         background: c,
-        color: "#FFFCF5",
+        color: "var(--on-accent)",
         fontSize: size * 0.4,
         fontWeight: 600,
         display: "inline-flex",
@@ -616,7 +616,7 @@ export function Checkbox({
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "#FFFCF5",
+          color: "var(--on-accent)",
           flexShrink: 0,
         }}
       >

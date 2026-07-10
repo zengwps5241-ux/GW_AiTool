@@ -1599,7 +1599,7 @@ function EditModal({
                             ? {
                                 background: "var(--success)",
                                 borderColor: "var(--success)",
-                                color: "#fff",
+                                color: "var(--on-accent)",
                               }
                             : undefined
                         }
@@ -1868,7 +1868,7 @@ function FileTreeNode({
               background: "var(--danger)",
               border: "1px solid var(--danger)",
               borderRadius: 6,
-              color: "#fff",
+              color: "var(--on-accent)",
               cursor: isDeleting ? "default" : "pointer",
               opacity: isDeleting ? 0.6 : 1,
               fontFamily: "inherit",

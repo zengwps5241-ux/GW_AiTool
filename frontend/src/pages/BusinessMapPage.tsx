@@ -298,7 +298,7 @@ export default function BusinessMapPage({ project, onOpenVisitRecords }: Props) 
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
-                    color: "#FFFCF5",
+                    color: "var(--on-accent)",
                     background: "var(--danger)",
                     borderRadius: 999,
                     padding: "1px 6px",
@@ -1384,7 +1384,7 @@ function FiveDimRadar({ health }: { health: FiveDimHealth }) {
 function OntologyBlock({ ont }: { ont: NonNullable<BusinessMapPayload["ontologyExtraction"]> }) {
   return (
     <div style={{ marginTop: 8, border: "1px solid var(--accent)", borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#FFFCF5", background: "var(--accent)", padding: "6px 10px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--accent)", padding: "6px 10px" }}>
         🧠 业务本体抽取（先本体后 AI）
       </div>
       <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1662,7 +1662,7 @@ function HealthOverrideModal({
                       borderRadius: 6,
                       border: `1px solid ${scores[d.key] === n ? "var(--accent)" : "var(--line)"}`,
                       background: scores[d.key] === n ? "var(--accent)" : "var(--surface)",
-                      color: scores[d.key] === n ? "#FFFCF5" : "var(--ink-2)",
+                      color: scores[d.key] === n ? "var(--on-accent)" : "var(--ink-2)",
                       fontSize: 12,
                       fontWeight: 600,
                       cursor: "pointer",

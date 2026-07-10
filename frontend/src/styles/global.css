@@ -2,38 +2,39 @@
    设计语言来源 ui-refer/ai-ops。*/
 
 :root {
-  /* 浅色 - 温暖羊皮纸调 */
-  --bg: #FAF7F0;
-  --bg-2: #F4EFE3;
-  --bg-3: #EDE6D4;
-  --surface: #FFFCF5;
-  --surface-2: #FBF6E8;
-  --ink: #1F1B17;
-  --ink-2: #4A4339;
-  --ink-3: #7A7263;
-  --ink-4: #B5AC97;
-  --line: #E5DCC4;
-  --line-2: #D7CCAE;
-  --accent: #B85C3C;
-  --accent-2: #9A4A2E;
-  --accent-soft: #F1DCD0;
-  --success: #5C8A56;
-  --success-soft: #E2EAD6;
-  --warn: #C68A3E;
-  --warn-soft: #F2E2C0;
-  --danger: #B0473C;
-  --danger-soft: #F1D6CF;
+  /* 浅色 - 鼠尾草冷调（N1 换皮） */
+  --bg: #F6F7F3;
+  --bg-2: #EDF0E9;
+  --bg-3: #E1E6DC;
+  --surface: #FFFFFF;
+  --surface-2: #F2F5EE;
+  --ink: #252824;
+  --ink-2: #4B5049;
+  --ink-3: #777D73;
+  --ink-4: #ACB2A6;
+  --line: #E0E5DC;
+  --line-2: #CED4C8;
+  --accent: #6E8E68;
+  --accent-2: #54704F;
+  --accent-soft: #DDE7D8;
+  --on-accent: #FFFFFF;
+  --success: #5E8A55;
+  --success-soft: #E0E8DC;
+  --warn: #B07A2E;
+  --warn-soft: #F0E2C5;
+  --danger: #A8453B;
+  --danger-soft: #F0D6D0;
   --info: #4A7593;
   --info-soft: #D7E2EB;
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-xl: 18px;
 
-  --shadow-sm: 0 1px 0 rgba(31, 27, 23, 0.04);
-  --shadow: 0 1px 2px rgba(31, 27, 23, 0.04), 0 4px 12px rgba(31, 27, 23, 0.04);
-  --shadow-lg: 0 12px 32px rgba(31, 27, 23, 0.08);
+  --shadow-sm: 0 1px 0 rgba(37, 40, 36, 0.05);
+  --shadow: 0 1px 2px rgba(37, 40, 36, 0.05), 0 6px 16px rgba(37, 40, 36, 0.06);
+  --shadow-lg: 0 14px 36px rgba(37, 40, 36, 0.10);
 
   --serif: "Source Serif 4", "Songti SC", "Noto Serif SC", Georgia, serif;
   --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -46,28 +47,29 @@
 }
 
 [data-theme="dark"] {
-  --bg: #1A1714;
-  --bg-2: #221E1A;
-  --bg-3: #2A251F;
-  --surface: #1F1B17;
-  --surface-2: #25201B;
-  --ink: #F2EBDC;
-  --ink-2: #C9C0AB;
-  --ink-3: #8E8472;
-  --ink-4: #5C5447;
-  --line: #322C24;
-  --line-2: #443B30;
-  --accent: #D9744F;
-  --accent-2: #B85C3C;
-  --accent-soft: #3A2620;
-  --success: #7AAA72;
-  --success-soft: #28342A;
+  --bg: #171A17;
+  --bg-2: #1F241F;
+  --bg-3: #272D27;
+  --surface: #1C211C;
+  --surface-2: #232923;
+  --ink: #EDF1EB;
+  --ink-2: #C3CCC0;
+  --ink-3: #8A9388;
+  --ink-4: #565D55;
+  --line: #2B322B;
+  --line-2: #3D453D;
+  --accent: #8FBF84;
+  --accent-2: #6E8E68;
+  --accent-soft: #1E2D1E;
+  --on-accent: #FFFFFF;
+  --success: #8FBF82;
+  --success-soft: #1E3024;
   --warn: #DCA85C;
   --warn-soft: #3A2F1E;
   --danger: #D26358;
   --danger-soft: #3A2622;
-  --info: #6F9CB8;
-  --info-soft: #1F2C36;
+  --info: #7FA8C6;
+  --info-soft: #10262E;
 
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
@@ -178,8 +180,8 @@ select {
   30% { transform: translateY(-3px); opacity: 1; }
 }
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(184, 92, 60, 0); }
-  50% { box-shadow: 0 0 0 6px rgba(184, 92, 60, 0.12); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(110, 142, 104, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(110, 142, 104, 0.12); }
 }
 @keyframes slide-in-right {
   from { transform: translateX(20px); opacity: 0; }

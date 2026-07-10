@@ -125,12 +125,12 @@ export default function UserApprovalPage() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "var(--warning, #ed6c02)",
+                    color: "var(--warn, #ed6c02)",
                     marginTop: 4,
                     display: "inline-block",
                     padding: "2px 8px",
                     borderRadius: 4,
-                    background: "var(--warning-soft, #fff3e0)",
+                    background: "var(--warn-soft, #fff3e0)",
                   }}
                 >
                   待审批

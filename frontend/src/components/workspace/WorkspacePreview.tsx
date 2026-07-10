@@ -119,7 +119,7 @@ export default function WorkspacePreview(props: WorkspacePreviewProps) {
                 style={{
                   ...toolbarBtnStyle,
                   background: dirty ? "var(--accent)" : "transparent",
-                  color: dirty ? "#fff" : "var(--ink-3)",
+                  color: dirty ? "var(--on-accent)" : "var(--ink-3)",
                   borderColor: dirty ? "var(--accent)" : "var(--line)",
                 }}
               >
@@ -182,7 +182,7 @@ export default function WorkspacePreview(props: WorkspacePreviewProps) {
                   marginTop: 12,
                   padding: "6px 14px",
                   background: "var(--accent)",
-                  color: "#fff",
+                  color: "var(--on-accent)",
                   border: "none",
                   borderRadius: 6,
                   cursor: "pointer",

@@ -347,7 +347,7 @@ function CardsView({
             >
               <div style={{
                 width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 14, fontWeight: 700, color: "#FFFCF5",
+                fontSize: 14, fontWeight: 700, color: "var(--on-accent)",
                 background: rt ? ROLE_TYPE_COLOR[rt] : "var(--ink-3)",
                 flexShrink: 0,
               }}>
@@ -404,7 +404,7 @@ function CardDetailHeader({ card }: { card: StakeholderCard }) {
     <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 16 }}>
       <div style={{
         width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 20, fontWeight: 700, color: "#FFFCF5",
+        fontSize: 20, fontWeight: 700, color: "var(--on-accent)",
         background: rt ? ROLE_TYPE_COLOR[rt] : "var(--ink-3)",
         flexShrink: 0,
       }}>
@@ -533,7 +533,7 @@ function OrgChartView({
         >
           <div style={{
             width: 30, height: 30, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 700, color: "#FFFCF5",
+            fontSize: 13, fontWeight: 700, color: "var(--on-accent)",
             background: rt ? ROLE_TYPE_COLOR[rt] : "var(--ink-3)", flexShrink: 0,
           }}>
             {card.name[0]}
@@ -806,7 +806,7 @@ function StanceMatrixView({
                     justifyContent: "center",
                     fontSize: 10,
                     fontWeight: 700,
-                    color: "#FFFCF5",
+                    color: "var(--on-accent)",
                     cursor: "pointer",
                     transition: "transform 120ms",
                   }}
