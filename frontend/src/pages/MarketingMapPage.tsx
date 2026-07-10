@@ -266,6 +266,14 @@ export default function MarketingMapPage({ project }: Props) {
               setSubView("cards");
             }}
           />
+        ) : subView === "matrix" ? (
+          <StanceMatrixView
+            cards={cards}
+            onJump={(id) => {
+              setSelectedCardId(id);
+              setSubView("cards");
+            }}
+          />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -679,6 +687,155 @@ function DecisionChainView({
           <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, color: "var(--ink-3)" }}>
             决策推进策略：优先巩固 Champion 与倾向者，争取中立者，化解反对者。
           </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── 角色-立场矩阵（M4.2.4：横轴立场 × 纵轴影响力，气泡=参与度） ──
+
+const STANCE_AXIS: StanceLevel[] = ["反对", "观望", "中立", "支持"];
+
+function StanceMatrixView({
+  cards,
+  onJump,
+}: {
+  cards: StakeholderCard[];
+  onJump: (id: number) => void;
+}) {
+  // 仅渲染有 stance + influence 的卡
+  const plotable = cards.filter(
+    (c) => c.subjective_layer?.stance != null && typeof c.subjective_layer?.influence === "number",
+  );
+
+  // 按 (stance, influence) 桶预计算每张卡的 {idx,total}，用于散开重叠气泡
+  const scatter = useMemo(() => {
+    const byKey = new Map<string, StakeholderCard[]>();
+    for (const c of plotable) {
+      const sl = c.subjective_layer!;
+      const key = `${sl.stance}-${sl.influence}`;
+      const arr = byKey.get(key) ?? [];
+      arr.push(c);
+      byKey.set(key, arr);
+    }
+    const info = new Map<number, { idx: number; total: number }>();
+    for (const arr of byKey.values()) {
+      arr.forEach((c, i) => info.set(c.id, { idx: i, total: arr.length }));
+    }
+    return info;
+  }, [plotable]);
+
+  if (cards.length === 0) {
+    return (
+      <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+        <I.Target size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>暂无角色卡</div>
+        <div>建立角色卡并填写立场与影响力后，此处展示立场-影响力矩阵。</div>
+      </Card>
+    );
+  }
+
+  const CHART_H = 380;
+  // stance → 横向中心百分比（4 等分列中心）
+  const stanceX: Record<StanceLevel, number> = {
+    反对: 12.5,
+    观望: 37.5,
+    中立: 62.5,
+    支持: 87.5,
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 20, height: "100%" }}>
+      <Card style={{ flex: 1, padding: 20, overflow: "auto" }}>
+        <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)", marginBottom: 4 }}>角色-立场矩阵</div>
+        <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 16 }}>
+          横轴=立场，纵轴=影响力（0-10），气泡大小=参与度。点击气泡跳转角色卡。
+        </div>
+
+        {plotable.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+            暂无带「立场+影响力」的角色卡，无法绘制矩阵。
+          </div>
+        ) : (
+          <div style={{ position: "relative", height: CHART_H, margin: "12px 8px 28px 36px", borderLeft: "2px solid var(--line)", borderBottom: "2px solid var(--line)" }}>
+            {/* Y 轴刻度 */}
+            {[0, 5, 10].map((v) => (
+              <div key={v} style={{ position: "absolute", left: -30, top: v === 0 ? CHART_H - 12 : v === 10 ? -4 : CHART_H / 2 - 6, fontSize: 10, color: "var(--ink-4)" }}>{v}</div>
+            ))}
+            <div style={{ position: "absolute", left: -34, top: CHART_H / 2 - 30, fontSize: 11, color: "var(--ink-3)", transform: "rotate(-90deg)", transformOrigin: "left top" }}>影响力 →</div>
+            {/* 中位线（influence=5） */}
+            <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 1, background: "var(--line)", border: "1px dashed transparent", borderTop: "1px dashed var(--ink-4)" }} />
+            {/* X 轴标签 */}
+            {STANCE_AXIS.map((s) => (
+              <div key={s} style={{ position: "absolute", bottom: -22, left: `${stanceX[s]}%`, transform: "translateX(-50%)", fontSize: 11, fontWeight: 500, color: stanceColor(s) }}>{s}</div>
+            ))}
+            {/* 气泡 */}
+            {plotable.map((c) => {
+              const sl = c.subjective_layer!;
+              const stance = sl.stance!;
+              const influence = sl.influence as number;
+              const engagement = typeof sl.engagement === "number" ? sl.engagement : 5;
+              const { idx, total } = scatter.get(c.id) ?? { idx: 0, total: 1 };
+              // 同桶内按索引水平抖动散开
+              const spread = total > 1 ? (idx - (total - 1) / 2) * 6 : 0;
+              const x = stanceX[stance] + (spread / 8); // 百分比微调
+              const yPct = (10 - influence) * 10; // 0-100
+              const size = Math.max(18, Math.min(48, 18 + engagement * 3));
+              const color = stanceColor(stance);
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => onJump(c.id)}
+                  title={`${c.name}：立场${stance} 影响力${influence} 参与度${engagement ?? "—"} 综合${sl.compositeScore ?? "—"}`}
+                  style={{
+                    position: "absolute",
+                    left: `${x}%`,
+                    top: `${yPct}%`,
+                    width: size,
+                    height: size,
+                    marginLeft: -size / 2,
+                    marginTop: -size / 2,
+                    borderRadius: 999,
+                    background: color,
+                    opacity: 0.82,
+                    border: "2px solid var(--surface)",
+                    boxShadow: "var(--shadow-sm)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#FFFCF5",
+                    cursor: "pointer",
+                    transition: "transform 120ms",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.18)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  {c.name[0]}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* 右：四象限策略 */}
+      <Card style={{ width: 280, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>📖 四象限策略</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, lineHeight: 1.5 }}>
+          {[
+            { area: "高影响 × 支持/观望", color: "var(--success)", act: "重点巩固，发展为 Champion；借其影响力辐射他人。" },
+            { area: "高影响 × 反对/中立", color: "var(--danger)", act: "重点化解，针对性回应其核心顾虑，避免其阻挠决策。" },
+            { area: "低影响 × 支持", color: "var(--accent)", act: "培养为业务示范用户，积累正面口碑，不占用主攻精力。" },
+            { area: "低影响 × 中立/反对", color: "var(--ink-3)", act: "持续观察，低成本维护，优先级最低。" },
+          ].map((r) => (
+            <div key={r.area} style={{ padding: 10, background: "var(--bg-2)", borderRadius: 8, borderLeft: `3px solid ${r.color}` }}>
+              <div style={{ fontWeight: 600, color: r.color, marginBottom: 4 }}>{r.area}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-2)" }}>{r.act}</div>
+            </div>
+          ))}
         </div>
       </Card>
     </div>
