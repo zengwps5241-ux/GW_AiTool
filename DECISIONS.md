@@ -312,6 +312,16 @@
 - **为何 KnowledgeBase 是项目级而非全局共享**：规格说「跨客户通用」，但 M2.2 数据模型是 project_id 作用域（每项目独立 KB）。这是 M2.2 既定事实（决策#24），M4.2.7 前端如实映射——按项目渲染该项目 KB。真正的「跨客户通用共享」需后端改造（全局 KB 表 + 项目引用），超出本前端视图任务范围，记录为后续考量。
 - **理由**：CRUD + Markdown 是知识库的完整功能闭环（团队可即时沉淀方法论经验）；不臆造附录种子守住「不造假」底线（同 #38）；复用 MarkdownView 零新依赖；空态规格化引导对接方法论结构。与 #35-#38 一致的工程范式（全局选择器 / 子任务独立提交 / 纯前端 tsc+build）。可校验性：真机 KB CRUD 全链路（create HTTP 201 id=1 → update HTTP 200 title→v2 → list 回读 → delete HTTP 204 → list count=0）+ tsc -b 0 错 + vite build 过。（curl 中文+换行 body 在 Windows Git Bash 编码失败，纯 shell 测试假象，前端 fetch 用 UTF-8 不受影响，已用 ASCII body 验证全链路。）纯前端无后端改动 → fail 集不涉及前端必然未扩大。
 
+## 决策 #40：M4.2.8 角色关系网络图 — ReactFlow 视图（圆形布局 + 4 类边样式），关系 CRUD 留 M4.2.9（§5.2）
+
+- **背景**：M4.2.8「角色关系网络图 | 节点=角色卡，边=关系（4 种类型不同颜色/线型），可交互 | 可用 D3/ReactFlow」。后端 M2.2 已就绪 `GET /api/projects/{id}/stakeholder-relations/graph`（nodes:[{id,name,role_type,department}] + edges:[{id,source,target,relation_type,description}]）+ createStakeholderRelation/deleteStakeholderRelation。ReactFlow v11 已 npm i（决策#36 预装）。抉择：① ReactFlow vs D3；② 节点布局（graph 端点不返坐标）；③ 关系 CRUD 是否纳入本任务。
+- **选择 A — ReactFlow（非 D3）+ 圆形自动布局**：§5.2「前端使用 ReactFlow/D3」二选一，ReactFlow v11 声明式 nodes/edges + 内置拖拽/缩放/小地图/控件，4 类 relation_type 用 edge.style（stroke 颜色 + strokeDasharray 虚实）+ markerEnd 箭头区分，远省于 D3 手写力导向。**graph 端点不返节点坐标** → 前端圆形自动布局（N 节点均匀分布圆周，半径随 N 自适应 150-300px），用户可拖拽节点重排（ReactFlow 内置交互）。fitView 自适应视口。
+- **选择 B — 关系 CRUD 留 M4.2.9，本任务纯视图**：开发计划明示 M4.2.9 =「角色 CRUD **+ 关系编辑**」，故关系增删属 M4.2.9 范畴。M4.2.8 只做交互式渲染：节点（自定义 RelationNode 头像+姓名+部门，边框色=角色类型色）+ 4 类边样式 + **onNodeClick → onJump(卡id) 跳角色卡详情**（与组织架构/决策链/立场矩阵视图一致的跳转模式）+ 图例（SVG 线段示意 4 类颜色/线型/箭头）+ MiniMap（节点色=角色类型）。无关系时渲染孤立节点 + 顶部「暂无关系，M4.2.9 上线后可手动添加」提示，不造假边。
+- **选择 C — nodeTypes 模块级常量 + onNodeClick（非 data 内函数）**：ReactFlow v11 要求 nodeTypes 引用稳定（否则重渲染循环）→ `RELATION_NODE_TYPES` 定义为模块级常量。节点点击跳转**不**把 onJump 塞进 node.data（会让 nodes 数组随父级 inline onJump 变化失去 useMemo 稳定性），而用 ReactFlow 的 `onNodeClick={(_,node)=>onJump(Number(node.id))}` 回调——node.id 即卡 id（String 化），干净避开「函数进 data」反模式。
+- **选择 D — 4 类关系语义化样式**：reports_to 汇报=实线 accent / influences 影响=实线 info / collaborates 协作=实线 success / opposes 对立=**虚线 danger**（对立用虚线+红强化负向语义）。三类正向用不同色相区分，对立用线型+红双区分。RELATION_META 单表驱动样式 + 图例 + 边 label（中文），单一真源。
+- **为何数字 id 全 String 化**：graph 端点 nodes/edges 的 id/source/target 是 number，ReactFlow 要求 string。node.data 保留原始 number cardId 供 onJump，ReactFlow 内部 id/source/target 用 String()——onNodeClick 取 node.id 再 Number() 还原跳转，双向一致。
+- **理由**：ReactFlow 是 §5.2 钦定二选一的声明式更优解（决策#36 已预装）；关系 CRUD 归 M4.2.9 遵循计划拆分使本任务单一关注点（渲染）；onNodeClick 避开函数进 data 的反模式。与 #35-#39 一致的工程范式。可校验性：真机 graph 端点 seed 测试（建卡 id=3 + 关系 3→1 reports_to）→ GET graph 返回 2 nodes/1 edge 结构正确 → **测后清理恢复 dev 库**（删关系 204 + 删卡 204，回到 1 节点/0 边/1 卡原状）；tsc -b 0 错 + vite build 过（CSS 5.44→12.76kB / JS 574→728kB 为 reactflow 注入，正常）。纯前端无后端改动 → fail 集不涉及前端必然未扩大。
+
 
 
 

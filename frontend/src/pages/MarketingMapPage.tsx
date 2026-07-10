@@ -5,6 +5,17 @@
 // + 角色卡视图种子（左列表 + 右只读详情，作为数据主干，M4.2.6 将升级为 5 子 Tab）。
 // 组织架构/决策链/立场矩阵/采购时间线/关系网络/知识库/话术库见后续 M4.2.x 任务。
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  MarkerType,
+  type Edge,
+  type Node,
+  type NodeProps,
+  type NodeTypes,
+} from "reactflow";
+import "reactflow/dist/style.css";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
 import MarkdownView from "@/components/workspace/MarkdownView";
@@ -17,6 +28,8 @@ import type {
   ProcurementStage,
   ProcurementStageStatus,
   StakeholderCard,
+  StakeholderGraph,
+  StakeholderRelationType,
   StanceChangeEntry,
   StakeholderRoleType,
   StanceLevel,
@@ -287,6 +300,15 @@ export default function MarketingMapPage({ project }: Props) {
           <ProcurementTimelineView projectId={project.id} cards={cards} />
         ) : subView === "knowledge" ? (
           <KnowledgeBaseView projectId={project.id} />
+        ) : subView === "relations" ? (
+          <RelationsView
+            projectId={project.id}
+            cards={cards}
+            onJump={(id) => {
+              setSelectedCardId(id);
+              setSubView("cards");
+            }}
+          />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -1707,6 +1729,202 @@ function KBEntryEditor({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── 角色关系网络图（M4.2.8：ReactFlow，节点=角色卡，边=4 类关系，§5.2） ──
+// 数据源 GET /api/projects/{id}/stakeholder-relations/graph（nodes + edges）。
+// 4 类关系（reports_to/influences/collaborates/opposes）用不同颜色 + 线型区分；
+// 节点点击跳转角色卡详情（M4.2.9 加关系 CRUD 编辑）。圆形自动布局 + 用户可拖拽重排。
+
+/** 四类关系样式（颜色 + 线型 + 中文标签） */
+const RELATION_META: Record<StakeholderRelationType, { label: string; color: string; dashed: boolean }> = {
+  reports_to: { label: "汇报", color: "var(--accent)", dashed: false },
+  influences: { label: "影响", color: "var(--info)", dashed: false },
+  collaborates: { label: "协作", color: "var(--success)", dashed: false },
+  opposes: { label: "对立", color: "var(--danger)", dashed: true },
+};
+
+/** 关系图自定义节点数据 */
+interface RelationNodeData {
+  name: string;
+  roleType: StakeholderRoleType | null;
+  department: string | null;
+  [key: string]: unknown;
+}
+
+/** 关系图节点（头像 + 姓名 + 部门，边框色 = 角色类型色） */
+function RelationNode({ data }: NodeProps<RelationNodeData>) {
+  const { name, roleType, department } = data;
+  const color = roleType ? ROLE_TYPE_COLOR[roleType] : "var(--ink-3)";
+  return (
+    <div
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+        padding: "8px 12px 6px", background: "var(--surface)",
+        border: `2px solid ${color}`, borderRadius: 12,
+        boxShadow: "var(--shadow-sm)", minWidth: 76,
+      }}
+    >
+      <div style={{
+        width: 34, height: 34, borderRadius: 999, background: color, color: "var(--on-accent)",
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700,
+      }}>
+        {name[0]}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", fontFamily: "var(--serif)" }}>{name}</div>
+      {department && (
+        <div style={{ fontSize: 10, color: "var(--ink-3)", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {department}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** nodeTypes 须稳定（模块级常量，避免 ReactFlow 重渲染循环） */
+const RELATION_NODE_TYPES: NodeTypes = { relation: RelationNode };
+
+function RelationsView({
+  projectId,
+  cards,
+  onJump,
+}: {
+  projectId: number;
+  cards: StakeholderCard[];
+  onJump: (id: number) => void;
+}) {
+  const toast = useToast();
+  const [graph, setGraph] = useState<StakeholderGraph | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    api
+      .getStakeholderGraph(projectId)
+      .then(setGraph)
+      .catch((e) => toast.showToast(e instanceof Error ? e.message : "加载关系网络失败", "error"))
+      .finally(() => setLoading(false));
+  }, [projectId, toast]);
+
+  // 圆形自动布局：N 节点均匀分布于圆周
+  const rfNodes: Node<RelationNodeData>[] = useMemo(() => {
+    if (!graph) return [];
+    const N = graph.nodes.length;
+    const R = Math.max(150, Math.min(300, N * 34));
+    return graph.nodes.map((n, i) => {
+      const angle = (2 * Math.PI * i) / Math.max(N, 1);
+      return {
+        id: String(n.id),
+        type: "relation",
+        position: { x: 320 + R * Math.cos(angle), y: 220 + R * Math.sin(angle) },
+        data: { name: n.name, roleType: n.role_type, department: n.department },
+      };
+    });
+  }, [graph]);
+
+  // 边：4 类关系颜色 + 线型 + 箭头 + 中文标签
+  const rfEdges: Edge[] = useMemo(() => {
+    if (!graph) return [];
+    return graph.edges.map((e) => {
+      const meta = RELATION_META[e.relation_type] ?? { label: e.relation_type, color: "var(--ink-3)", dashed: false };
+      return {
+        id: String(e.id),
+        source: String(e.source),
+        target: String(e.target),
+        label: meta.label,
+        labelStyle: { fill: meta.color, fontWeight: 600, fontSize: 11 },
+        labelBgStyle: { fill: "var(--surface)", fillOpacity: 0.9 },
+        labelBgPadding: [4, 2],
+        style: { stroke: meta.color, strokeWidth: 2, strokeDasharray: meta.dashed ? "6 4" : undefined },
+        markerEnd: { type: MarkerType.ArrowClosed, color: meta.color, width: 18, height: 18 },
+      };
+    });
+  }, [graph]);
+
+  const hasCards = cards.length > 0;
+  const edgeCount = graph?.edges.length ?? 0;
+
+  // 无角色卡
+  if (!loading && !hasCards) {
+    return (
+      <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+        <I.Network size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>暂无角色卡</div>
+        <div>建立角色卡并为其添加关系（汇报 / 影响 / 协作 / 对立）后，此处展示交互式关系网络图。</div>
+      </Card>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 16, height: "100%" }}>
+      {/* 左：关系图 */}
+      <Card style={{ flex: 1, padding: 0, overflow: "hidden", position: "relative", minWidth: 0 }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8 }}>
+          <I.Network size={15} style={{ color: "var(--accent)" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, fontFamily: "var(--serif)" }}>角色关系网络图</span>
+          <span style={{ fontSize: 11, color: "var(--ink-3)" }}>· {graph?.nodes.length ?? 0} 角色 / {edgeCount} 关系</span>
+          {edgeCount === 0 && !loading && (
+            <span style={{ fontSize: 11, color: "var(--warn)" }}>（暂无关系，M4.2.9 上线后可手动添加）</span>
+          )}
+        </div>
+        <div style={{ height: "calc(100% - 45px)", background: "var(--bg-2)" }}>
+          {loading ? (
+            <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
+              <Spinner size={16} /> 加载关系网络…
+            </div>
+          ) : (
+            <ReactFlow
+              nodes={rfNodes}
+              edges={rfEdges}
+              nodeTypes={RELATION_NODE_TYPES}
+              onNodeClick={(_, node) => onJump(Number(node.id))}
+              fitView
+              fitViewOptions={{ padding: 0.2 }}
+              proOptions={{ hideAttribution: true }}
+              defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
+            >
+              <Background gap={16} size={1} color="var(--line)" />
+              <Controls showInteractive={false} />
+              <MiniMap
+                nodeColor={(n) => {
+                  const rt = (n.data as RelationNodeData)?.roleType;
+                  return rt ? ROLE_TYPE_COLOR[rt] : "var(--ink-4)";
+                }}
+                maskColor="rgba(0,0,0,0.05)"
+              />
+            </ReactFlow>
+          )}
+        </div>
+      </Card>
+
+      {/* 右：关系图例 + 说明 */}
+      <Card style={{ width: 240, padding: 16, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+          📖 关系类型图例
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12 }}>
+          {(Object.keys(RELATION_META) as StakeholderRelationType[]).map((rt) => {
+            const m = RELATION_META[rt];
+            return (
+              <div key={rt} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <svg width="34" height="10" style={{ flexShrink: 0 }}>
+                  <line x1="0" y1="5" x2="30" y2="5" stroke={m.color} strokeWidth="2.5" strokeDasharray={m.dashed ? "5 3" : undefined} />
+                  <polygon points="28,1 34,5 28,9" fill={m.color} />
+                </svg>
+                <span style={{ fontWeight: 600, color: m.color }}>{m.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12, fontSize: 11, color: "var(--ink-3)", lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 600, color: "var(--ink-2)", marginBottom: 4 }}>操作</div>
+          <div>· 点击节点 → 跳转该角色卡详情</div>
+          <div>· 拖拽节点 / 滚轮缩放 / 拖动画布</div>
+          <div>· 节点边框色 = 角色类型（见角色列表）</div>
+        </div>
+      </Card>
     </div>
   );
 }
