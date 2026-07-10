@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     KnowledgeBase,
+    ProcurementTimeline,
     StakeholderCard,
     StakeholderRelation,
     TalkScript,
@@ -29,6 +30,10 @@ from app.schemas.marketing_map import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
     KnowledgeBaseUpdate,
+    ProcurementStageIn,
+    ProcurementStageOut,
+    ProcurementTimelineInput,
+    ProcurementTimelineOut,
     StakeholderCardCreate,
     StakeholderCardOut,
     StakeholderCardUpdate,
@@ -540,3 +545,87 @@ async def delete_kb(db, project_id, kb_id) -> bool:
     await db.delete(k)
     await db.commit()
     return True
+
+
+# ─── 采购流程时间线（M4.2.5）───────────────────────────────────
+
+#: 五阶段通用模板（需求识别→方案评估→供应商筛选→商务谈判→合同签署）
+PROCUREMENT_STAGE_TEMPLATE: list[tuple[str, str]] = [
+    ("need_identification", "需求识别"),
+    ("solution_evaluation", "方案评估"),
+    ("vendor_screening", "供应商筛选"),
+    ("commercial_negotiation", "商务谈判"),
+    ("contract_signing", "合同签署"),
+]
+
+
+def _default_procurement_stages() -> list[dict]:
+    """生成五阶段默认模板（全部未开始、日期/说明/关键角色为空）。"""
+    return [
+        {
+            "key": key,
+            "name": name,
+            "status": "not_started",
+            "startDate": None,
+            "endDate": None,
+            "note": None,
+            "ownerCardId": None,
+        }
+        for key, name in PROCUREMENT_STAGE_TEMPLATE
+    ]
+
+
+def _proc_to_out(
+    pt: ProcurementTimeline, created_by_name: str | None
+) -> ProcurementTimelineOut:
+    """落库行 → 输出；stages 缺失时回退五阶段默认模板。"""
+    stages = pt.stages if pt.stages else _default_procurement_stages()
+    return ProcurementTimelineOut(
+        id=pt.id,
+        project_id=pt.project_id,
+        stages=[ProcurementStageOut(**s) for s in stages],
+        created_by=pt.created_by,
+        created_by_name=created_by_name,
+        created_at=iso(pt.created_at),
+        updated_at=iso(pt.updated_at),
+    )
+
+
+async def get_procurement_timeline(
+    db: AsyncSession, project_id: int
+) -> ProcurementTimelineOut | None:
+    """读取项目采购时间线（未建则返回 None，由前端用默认模板渲染）。"""
+    pt = (
+        await db.execute(
+            select(ProcurementTimeline).where(
+                ProcurementTimeline.project_id == project_id
+            )
+        )
+    ).scalar_one_or_none()
+    if pt is None:
+        return None
+    return _proc_to_out(pt, await _user_name(db, pt.created_by))
+
+
+async def upsert_procurement_timeline(
+    db: AsyncSession, project_id: int, payload: ProcurementTimelineInput, user: User
+) -> ProcurementTimelineOut:
+    """创建或更新采购时间线（一个项目一份，整体替换 stages）。"""
+    pt = (
+        await db.execute(
+            select(ProcurementTimeline).where(
+                ProcurementTimeline.project_id == project_id
+            )
+        )
+    ).scalar_one_or_none()
+    stages = [s.model_dump() for s in payload.stages]
+    if pt is None:
+        pt = ProcurementTimeline(
+            project_id=project_id, stages=stages, created_by=user.id
+        )
+        db.add(pt)
+    else:
+        pt.stages = stages
+    await db.commit()
+    await db.refresh(pt)
+    return _proc_to_out(pt, await _user_name(db, pt.created_by))

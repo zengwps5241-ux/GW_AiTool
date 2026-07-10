@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -160,6 +161,40 @@ class KnowledgeBase(Base):
     category: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+        nullable=False,
+    )
+
+
+class ProcurementTimeline(Base):
+    """项目级采购流程时间线（一个项目一份，M4.2.5）。
+
+    五阶段通用模板（需求识别→方案评估→供应商筛选→商务谈判→合同签署），
+    由用户手动填写各阶段状态/起止日期/说明/关键角色。stages 为 JSONB 数组，
+    内部 camelCase（§5.2 契约）：[{ key, name, status, startDate, endDate, note, ownerCardId }]。
+    """
+
+    __tablename__ = "procurement_timelines"
+    __table_args__ = (
+        UniqueConstraint("project_id", name="uq_proc_timeline_project"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    # 五阶段数组（camelCase JSONB；键契约见 service 层 PROCUREMENT_STAGE_TEMPLATE）
+    stages: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
     )

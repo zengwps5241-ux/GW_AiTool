@@ -15,6 +15,7 @@ from app.models.feedback import FeedbackAttachment, FeedbackIssue
 from app.models.login_whitelist import LoginWhitelistDepartment, LoginWhitelistUser
 from app.models.marketing_map import (
     KnowledgeBase,
+    ProcurementTimeline,
     StakeholderCard,
     StakeholderRelation,
     TalkScript,
@@ -48,6 +49,7 @@ __all__ = [
     "Organization",
     "PluginBinding",
     "PreAnalysis",
+    "ProcurementTimeline",
     "Project",
     "ProjectDepartmentAccess",
     "ProjectMember",

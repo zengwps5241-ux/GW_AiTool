@@ -34,6 +34,8 @@ import type {
   Plugin,
   PreAnalysis,
   PreAnalysisInput,
+  ProcurementTimeline,
+  ProcurementTimelineInput,
   Project,
   ProjectDepartmentAccess,
   ProjectInput,
@@ -1117,6 +1119,22 @@ export const api = {
     request<void>(
       `/api/projects/${projectId}/knowledge-base/${kbId}`,
       { method: "DELETE" },
+    ),
+
+  // ─── 采购流程时间线（M4.2.5）──────────────────────────────────
+  /** 读取项目采购时间线（未建返回 null，前端用五阶段默认模板渲染） */
+  getProcurementTimeline: (projectId: number) =>
+    request<ProcurementTimeline | null>(
+      `/api/projects/${projectId}/procurement-timeline`,
+    ),
+  /** 创建或更新采购时间线（项目级单例，整体替换 stages） */
+  upsertProcurementTimeline: (
+    projectId: number,
+    data: ProcurementTimelineInput,
+  ) =>
+    request<ProcurementTimeline>(
+      `/api/projects/${projectId}/procurement-timeline`,
+      { method: "PUT", body: JSON.stringify(data) },
     ),
 
   // ─── 待采纳草稿找回（M4.4.5 §7.1 第8条 徽标兜底）─────────────

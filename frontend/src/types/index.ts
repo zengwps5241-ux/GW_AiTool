@@ -1029,6 +1029,50 @@ export interface KnowledgeBaseInput {
   content?: string;
 }
 
+// ─── 采购流程时间线（M4.2.5 / §5.2）──────────────────────────
+
+/** 采购阶段状态（四态） */
+export type ProcurementStageStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "blocked";
+
+/** 采购阶段 key（固定五阶段通用模板） */
+export type ProcurementStageKey =
+  | "need_identification"
+  | "solution_evaluation"
+  | "vendor_screening"
+  | "commercial_negotiation"
+  | "contract_signing";
+
+/** 采购单阶段（camelCase JSONB，与后端 ProcurementStageOut 对齐） */
+export interface ProcurementStage {
+  key: ProcurementStageKey;
+  name: string;
+  status: ProcurementStageStatus;
+  startDate: string | null;
+  endDate: string | null;
+  note: string | null;
+  ownerCardId: number | null;
+}
+
+/** 采购时间线（项目级单例，对齐 ProcurementTimelineOut） */
+export interface ProcurementTimeline {
+  id: number;
+  project_id: number;
+  stages: ProcurementStage[];
+  created_by: number;
+  created_by_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 采购时间线 upsert 入参（整体替换 stages） */
+export interface ProcurementTimelineInput {
+  stages: ProcurementStage[];
+}
+
 /** 态度变化（POST 返回，对齐 StanceChangeOut） */
 export interface StanceChangeResult {
   date: string;

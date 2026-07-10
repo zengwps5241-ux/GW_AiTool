@@ -10,6 +10,8 @@ import { Card, Spinner, Tag, useToast } from "@/components/ui";
 import { I } from "@/icons";
 import type {
   Project,
+  ProcurementStage,
+  ProcurementStageStatus,
   StakeholderCard,
   StakeholderRoleType,
   StanceLevel,
@@ -274,6 +276,8 @@ export default function MarketingMapPage({ project }: Props) {
               setSubView("cards");
             }}
           />
+        ) : subView === "timeline" ? (
+          <ProcurementTimelineView projectId={project.id} cards={cards} />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -842,6 +846,234 @@ function StanceMatrixView({
   );
 }
 
+// ─── 采购流程时间线（M4.2.5：五阶段通用模板 + 手动填写） ────────
+// 项目级单例：GET /procurement-timeline（null 用默认模板）/ PUT upsert。
+// 整体替换 stages（前端管完整五阶段，含 name 默认值），后端只存不解释。
+
+/** 五阶段默认模板（与后端 PROCUREMENT_STAGE_TEMPLATE 对齐） */
+const DEFAULT_PROCUREMENT_STAGES: ProcurementStage[] = [
+  { key: "need_identification", name: "需求识别", status: "not_started", startDate: null, endDate: null, note: null, ownerCardId: null },
+  { key: "solution_evaluation", name: "方案评估", status: "not_started", startDate: null, endDate: null, note: null, ownerCardId: null },
+  { key: "vendor_screening", name: "供应商筛选", status: "not_started", startDate: null, endDate: null, note: null, ownerCardId: null },
+  { key: "commercial_negotiation", name: "商务谈判", status: "not_started", startDate: null, endDate: null, note: null, ownerCardId: null },
+  { key: "contract_signing", name: "合同签署", status: "not_started", startDate: null, endDate: null, note: null, ownerCardId: null },
+];
+
+const STAGE_STATUS_META: { value: ProcurementStageStatus; label: string; color: string }[] = [
+  { value: "not_started", label: "未开始", color: "var(--ink-4)" },
+  { value: "in_progress", label: "进行中", color: "var(--accent)" },
+  { value: "completed", label: "已完成", color: "var(--success)" },
+  { value: "blocked", label: "受阻", color: "var(--danger)" },
+];
+
+function stageStatusColor(status: ProcurementStageStatus | null | undefined): string {
+  return STAGE_STATUS_META.find((s) => s.value === status)?.color ?? "var(--ink-4)";
+}
+
+function ProcurementTimelineView({
+  projectId,
+  cards,
+}: {
+  projectId: number;
+  cards: StakeholderCard[];
+}) {
+  const toast = useToast();
+  const [stages, setStages] = useState<ProcurementStage[]>(DEFAULT_PROCUREMENT_STAGES);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  // 拉取时间线（null → 用默认模板；有数据则与默认模板合并补齐缺失字段/阶段）
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .getProcurementTimeline(projectId)
+      .then((tl) => {
+        if (cancelled) return;
+        if (tl && Array.isArray(tl.stages) && tl.stages.length > 0) {
+          const merged = DEFAULT_PROCUREMENT_STAGES.map((tpl) => {
+            const s = tl.stages.find((x) => x.key === tpl.key);
+            return s ? { ...tpl, ...s } : tpl;
+          });
+          setStages(merged);
+          setLastSaved(tl.updated_at);
+        } else {
+          setStages(DEFAULT_PROCUREMENT_STAGES);
+          setLastSaved(null);
+        }
+        setDirty(false);
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : "加载采购时间线失败";
+        toast.showToast(msg, "error");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, toast]);
+
+  const updateStage = (key: string, patch: Partial<ProcurementStage>) => {
+    setStages((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const tl = await api.upsertProcurementTimeline(projectId, { stages });
+      setStages(tl.stages);
+      setLastSaved(tl.updated_at);
+      setDirty(false);
+      toast.showToast("采购时间线已保存", "success");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "保存失败";
+      toast.showToast(msg, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const completed = stages.filter((s) => s.status === "completed").length;
+  const inProgress = stages.filter((s) => s.status === "in_progress").length;
+  const blocked = stages.filter((s) => s.status === "blocked").length;
+
+  return (
+    <div style={{ display: "flex", gap: 20, height: "100%" }}>
+      <Card style={{ flex: 1, padding: 0, overflow: "auto", display: "flex", flexDirection: "column" }}>
+        {/* 头部：标题 + 进度统计 */}
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>采购流程时间线</div>
+            <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>
+              五阶段通用模板（需求识别 → 方案评估 → 供应商筛选 → 商务谈判 → 合同签署），手动填写各阶段进度。
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--ink-3)", whiteSpace: "nowrap" }}>
+            <span>已完成 <b style={{ color: "var(--success)" }}>{completed}</b>/5</span>
+            {inProgress > 0 && <span>进行中 <b style={{ color: "var(--accent)" }}>{inProgress}</b></span>}
+            {blocked > 0 && <span>受阻 <b style={{ color: "var(--danger)" }}>{blocked}</b></span>}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
+            <Spinner size={16} /> 加载采购时间线…
+          </div>
+        ) : (
+          <div style={{ padding: "20px 20px 8px 20px", flex: 1 }}>
+            {/* 时间线主体：左侧编号圆点 + 竖向连接线 */}
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: 19, top: 12, bottom: 12, width: 2, background: "var(--line)" }} />
+              {stages.map((s, idx) => {
+                const color = stageStatusColor(s.status);
+                const owner = s.ownerCardId != null ? cards.find((c) => c.id === s.ownerCardId) ?? null : null;
+                return (
+                  <div key={s.key} style={{ display: "flex", gap: 16, paddingBottom: 18 }}>
+                    {/* 编号圆点（颜色随状态） */}
+                    <div style={{ flexShrink: 0, width: 40, display: "flex", justifyContent: "center" }}>
+                      <div
+                        style={{
+                          width: 28, height: 28, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: color,
+                          border: "3px solid var(--surface)", boxShadow: "var(--shadow-sm)", zIndex: 1,
+                        }}
+                      >
+                        {idx + 1}
+                      </div>
+                    </div>
+                    {/* 阶段卡 */}
+                    <div style={{ flex: 1, background: "var(--bg-2)", border: "1px solid var(--line)", borderRadius: 10, padding: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{s.name}</span>
+                        {/* 状态选择（四态切换） */}
+                        <div style={{ display: "flex", gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
+                          {STAGE_STATUS_META.map((m) => {
+                            const active = s.status === m.value;
+                            return (
+                              <button key={m.value} onClick={() => updateStage(s.key, { status: m.value })} style={statusBtnStyle(active, m.color)}>
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+                        <label style={fieldLabelStyle}>
+                          <span style={miniLabelStyle}>开始日期</span>
+                          <input type="date" value={s.startDate ?? ""} onChange={(e) => updateStage(s.key, { startDate: e.target.value || null })} style={dateInputStyle} />
+                        </label>
+                        <label style={fieldLabelStyle}>
+                          <span style={miniLabelStyle}>结束日期</span>
+                          <input type="date" value={s.endDate ?? ""} onChange={(e) => updateStage(s.key, { endDate: e.target.value || null })} style={dateInputStyle} />
+                        </label>
+                        <label style={fieldLabelStyle}>
+                          <span style={miniLabelStyle}>关键角色</span>
+                          <select value={s.ownerCardId ?? ""} onChange={(e) => updateStage(s.key, { ownerCardId: e.target.value ? Number(e.target.value) : null })} style={selectStyle}>
+                            <option value="">（未指定）</option>
+                            {cards.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}{c.position ? ` · ${c.position}` : ""}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label style={{ display: "block" }}>
+                        <span style={miniLabelStyle}>阶段说明</span>
+                        <textarea value={s.note ?? ""} onChange={(e) => updateStage(s.key, { note: e.target.value || null })} placeholder="该阶段的关键事件、卡点、下一步…" rows={2} style={textareaStyle} />
+                      </label>
+                      {owner && (
+                        <div style={{ marginTop: 8, fontSize: 11, color: "var(--ink-3)" }}>
+                          关键角色：<b style={{ color: "var(--ink-2)" }}>{owner.name}</b>{owner.department ? ` · ${owner.department}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 底部保存栏（粘底） */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 12 }}>
+          {lastSaved && <span style={{ fontSize: 11, color: "var(--ink-4)" }}>最近保存：{new Date(lastSaved).toLocaleString("zh-CN")}</span>}
+          {dirty && <span style={{ fontSize: 11, color: "var(--warn)" }}>● 有未保存更改</span>}
+          <div style={{ flex: 1 }} />
+          <button onClick={save} disabled={!dirty || saving} style={saveBtnStyle(!dirty || saving)}>
+            {saving ? "保存中…" : "保存时间线"}
+          </button>
+        </div>
+      </Card>
+
+      {/* 右：五阶段释义 */}
+      <Card style={{ width: 280, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>📖 五阶段释义</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, lineHeight: 1.6, color: "var(--ink-2)" }}>
+          {([
+            ["需求识别", "客户内部立项、明确预算与需求清单。关注经济决策人与预算来源。"],
+            ["方案评估", "客户评估各方案技术与可行性。技术评估人主导，需对接方案亮点。"],
+            ["供应商筛选", "客户圈定入围供应商短名单。差异化价值与教练支持关键。"],
+            ["商务谈判", "价格/条款/交付周期博弈。采购财务介入，需准备让步底线。"],
+            ["合同签署", "法务/合同流程收口。维持关系，为交付与续约铺垫。"],
+          ] as [string, string][]).map(([name, desc]) => (
+            <div key={name} style={{ padding: 10, background: "var(--bg-2)", borderRadius: 8, borderLeft: "3px solid var(--accent)" }}>
+              <div style={{ fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>{name}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{desc}</div>
+            </div>
+          ))}
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, color: "var(--ink-3)", fontSize: 11 }}>
+            该时间线为项目级共享，保存后团队成员均可见，可作为赢单里程碑跟踪。
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── 占位视图（后续 M4.2.x 替换） ──────────────────────────────
 
 const PLACEHOLDER_TASK: Record<SubView, { task: string; desc: string }> = {
@@ -955,3 +1187,75 @@ const linkBtnStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 500,
 };
+
+// ─── 采购时间线视图样式（M4.2.5）──────────────────────────────
+
+/** 状态切换胶囊按钮（激活态着色） */
+function statusBtnStyle(active: boolean, color: string): React.CSSProperties {
+  return {
+    padding: "3px 9px",
+    fontSize: 11,
+    fontWeight: active ? 600 : 400,
+    border: `1px solid ${active ? color : "var(--line)"}`,
+    background: active ? color + "22" : "transparent",
+    color: active ? color : "var(--ink-3)",
+    borderRadius: 999,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+}
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
+};
+
+const miniLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  color: "var(--ink-3)",
+};
+
+const dateInputStyle: React.CSSProperties = {
+  padding: "5px 8px",
+  fontSize: 12,
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  fontFamily: "inherit",
+  color: "var(--ink-2)",
+  background: "var(--surface)",
+};
+
+const selectStyle: React.CSSProperties = {
+  ...dateInputStyle,
+  cursor: "pointer",
+};
+
+const textareaStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "6px 8px",
+  fontSize: 12,
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  fontFamily: "inherit",
+  color: "var(--ink-2)",
+  background: "var(--surface)",
+  resize: "vertical",
+};
+
+/** 保存按钮（禁用态降低不透明度） */
+function saveBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    padding: "7px 16px",
+    fontSize: 12,
+    fontWeight: 600,
+    border: "none",
+    borderRadius: 8,
+    background: "var(--accent)",
+    color: "var(--on-accent)",
+    fontFamily: "inherit",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.5 : 1,
+  };
+}

@@ -198,6 +198,53 @@ class KnowledgeBaseOut(BaseModel):
     updated_at: str | None = None
 
 
+# ─── 采购流程时间线（M4.2.5）──────────────────────────────────
+
+
+class ProcurementStageIn(BaseModel):
+    """采购单阶段（camelCase JSONB；键契约见 service.PROCUREMENT_STAGE_TEMPLATE）。"""
+
+    key: str = Field(..., description="阶段 key，五阶段通用模板之一")
+    name: str | None = None
+    status: str | None = Field(
+        None,
+        pattern="^(not_started|in_progress|completed|blocked)$",
+        description="未开始/进行中/已完成/受阻",
+    )
+    startDate: str | None = None
+    endDate: str | None = None
+    note: str | None = None
+    ownerCardId: int | None = None
+
+
+class ProcurementStageOut(BaseModel):
+    key: str
+    name: str | None = None
+    status: str | None = None
+    startDate: str | None = None
+    endDate: str | None = None
+    note: str | None = None
+    ownerCardId: int | None = None
+
+
+class ProcurementTimelineInput(BaseModel):
+    """采购时间线 upsert（一个项目一份，整体替换 stages）。"""
+
+    stages: list[ProcurementStageIn]
+
+
+class ProcurementTimelineOut(BaseModel):
+    """采购时间线输出。"""
+
+    id: int
+    project_id: int
+    stages: list[ProcurementStageOut]
+    created_by: int
+    created_by_name: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 # ─── 态度变化（§7.6） ─────────────────────────────────────────
 
 

@@ -18,6 +18,8 @@ from app.schemas.marketing_map import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
     KnowledgeBaseUpdate,
+    ProcurementTimelineInput,
+    ProcurementTimelineOut,
     StakeholderCardCreate,
     StakeholderCardOut,
     StakeholderCardUpdate,
@@ -292,3 +294,28 @@ async def delete_kb(
 ) -> None:
     if not await mm_service.delete_kb(db, project_id, kb_id):
         raise HTTPException(status_code=404, detail="知识条目不存在")
+
+
+# ─── 采购流程时间线（M4.2.5）───────────────────────────────────
+
+
+@router.get("/procurement-timeline", response_model=ProcurementTimelineOut | None)
+async def get_procurement_timeline(
+    project_id: int,
+    _=Depends(require_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> ProcurementTimelineOut | None:
+    """读取项目采购时间线（五阶段通用模板；未建返回 None，前端用默认模板渲染）。"""
+    return await mm_service.get_procurement_timeline(db, project_id)
+
+
+@router.put("/procurement-timeline", response_model=ProcurementTimelineOut)
+async def upsert_procurement_timeline(
+    project_id: int,
+    payload: ProcurementTimelineInput,
+    pu: tuple[Project, User] = Depends(require_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> ProcurementTimelineOut:
+    """创建或更新采购时间线（一个项目一份，整体替换五阶段）。"""
+    _, user = pu
+    return await mm_service.upsert_procurement_timeline(db, project_id, payload, user)

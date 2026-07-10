@@ -284,6 +284,15 @@
 - **选择 E — ReactFlow（非 D3）**：§5.2 明示「前端使用 ReactFlow/D3」；选 ReactFlow（v11 `reactflow`，`import 'reactflow/dist/style.css'`），声明式 nodes/edges + 内置拖拽/缩放，4 种 relation_type 用不同边样式区分，无需手写力导向。已 `npm i reactflow`。
 - **理由**：与 #35 完全一致的工程范式（全局选择器 / snake_case+camelCase / 子任务独立提交 / 纯前端 tsc+build 校验）；ReactFlow 是 §5.2 钦定二选一中的声明式更优解。可校验性：无后端改动 → tsc -b + vite build；fail 集不涉及前端必然未扩大。
 
+## 决策 #37：M4.2.5 采购时间线 — 后端项目级单例持久化（非 localStorage）
+
+- **背景**：M4.2.5「采购流程时间线视图 | 五阶段通用模板（需求识别→方案评估→供应商筛选→商务谈判→合同签署）| 用户手动填写」。后端 M2.2 四表（StakeholderCard/Relation/TalkScript/KnowledgeBase）**无采购时间线表**；规格明示数据源=「用户手动填写」。抉择：① 持久化在哪——后端新表 vs 浏览器 localStorage vs 前端纯内存；② 数据形态——5 行明细表 vs 单行 JSONB。
+- **选择 A — 后端新建项目级单例表 `ProcurementTimeline`（非 localStorage）**：项目是 team 共享（visibility=team，成员全透明），「手动填写」的进度必须跨会话/跨成员持久，localStorage 仅浏览器本地、换人换设备即丢，与项目级数据语义冲突。故新建后端表，走 `require_project_member` 隔离，与 StakeholderCard 等同级。表结构仿 `PreAnalysis`（业务地图的项目级单例先例）：`UniqueConstraint(project_id)` 一项目一行 + `created_by` + 时间戳。
+- **选择 B — 单行 JSONB `stages` 数组（非 5 行明细表）**：五阶段是**固定通用模板**（key/name 不可变，用户只填 status/起止日期/说明/关键角色），不是可任意增删的实体集合。单行 JSONB 整体读写最贴合「模板填充」语义；5 行明细表会引入 per-stage CRUD + 排序 + 模板初始化的过度设计。stages 内部 camelCase（`startDate`/`endDate`/`ownerCardId`，§5.2 JSONB 契约，与 StakeholderCard 分层一致），前端 types 用 `ProcurementStage`/`ProcurementStageStatus`/`ProcurementStageKey` 精确建模。
+- **选择 C — upsert 整体替换（非逐阶段 PATCH）+ 前端显式保存**：GET 返回 null 时前端用 `DEFAULT_PROCUREMENT_STAGES` 默认模板渲染（与后端 `PROCUREMENT_STAGE_TEMPLATE` 对齐）；编辑全部在前端本地 state 完成，PUT 时整体替换 stages（前端管完整 5 阶段含 name 默认值，后端只存不解释）。用显式「保存时间线」按钮 + 「● 有未保存更改」脏标记，不做自动保存（避免 debounce 惊扰用户、与业务地图健康度等既有「动作触发 PUT」模式一致）。
+- **为何后端默认模板也兜底**：`_default_procurement_stages()` 在 service `_proc_to_out` 与前端 `DEFAULT_PROCUREMENT_STAGES` 双端各一份——后端兜底防止脏数据（stages 为 null/空）时前端拿到空数组；前端兜底 + 与默认模板 merge 补齐缺失阶段/字段，保证渲染永远 5 阶段。两份模板是「契约常量」镜像，非重复逻辑。
+- **理由**：team 共享项目数据须服务端持久（否 #35/#36 全局选择器 + require_project_member 的隔离体系就失去意义）；固定五阶段用 JSONB 单例最简；upsert 整体替换 + 显式保存贴合「手动填写模板」心智且改动可控。可校验性：23 测试零回归（test_marketing_map_api 12 + test_business_map_api 11，新表由 init_db `create_all` 在 test 库自动建）+ 真机 GET(null)→PUT(建 id=1)→GET(回读) 全链路通；前端 tsc -b + vite build 过。fail 集仅新增 procurement 路由分支，既有 stakeholder/relation/script/kb 路径行为不变 → 未扩大。
+
 
 
 
