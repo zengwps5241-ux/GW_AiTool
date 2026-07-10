@@ -44,6 +44,17 @@ export default function App() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   /** 待采纳徽标"跳回原对话"：要打开的会话 id（M4.4.5） */
   const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
+  /**
+   * 跨页定位聚焦（M4.3.7 证据关联跳转）：一次性消费。
+   * - 证据「关联假设」标签 → 业务地图假设节点（objectId）
+   * - 证据「来源角色」标签 → 营销地图角色卡（cardId）
+   * 目标页 useEffect 选中定位后回调 onFocusConsumed 清空，避免重复触发。
+   */
+  const [focusTarget, setFocusTarget] = useState<
+    | { view: "businessMap"; objectId: number }
+    | { view: "marketingMap"; cardId: number }
+    | null
+  >(null);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(THEME_KEY);
     return saved === "dark" ? "dark" : "light";
@@ -118,6 +129,16 @@ export default function App() {
 
   const openTeamSpaces = useCallback(() => {
     setView("teamSpaces");
+  }, []);
+
+  // 跨页跳转（M4.3.7 证据关联）：证据标签 → 业务地图节点 / 营销地图角色卡
+  const jumpToHypothesis = useCallback((objectId: number) => {
+    setFocusTarget({ view: "businessMap", objectId });
+    setView("businessMap");
+  }, []);
+  const jumpToCard = useCallback((cardId: number) => {
+    setFocusTarget({ view: "marketingMap", cardId });
+    setView("marketingMap");
   }, []);
 
   const openSelectedTeamDetail = useCallback(() => {
@@ -214,12 +235,26 @@ export default function App() {
         <BusinessMapPage
           project={selectedProject}
           onOpenVisitRecords={() => setView("visitRecords")}
+          focusObjectId={focusTarget?.view === "businessMap" ? focusTarget.objectId : null}
+          onFocusConsumed={() => setFocusTarget(null)}
         />
       );
     if (view === "marketingMap")
-      return <MarketingMapPage project={selectedProject} />;
+      return (
+        <MarketingMapPage
+          project={selectedProject}
+          focusCardId={focusTarget?.view === "marketingMap" ? focusTarget.cardId : null}
+          onFocusConsumed={() => setFocusTarget(null)}
+        />
+      );
     if (view === "visitRecords")
-      return <VisitRecordsPage project={selectedProject} />;
+      return (
+        <VisitRecordsPage
+          project={selectedProject}
+          onJumpToHypothesis={jumpToHypothesis}
+          onJumpToCard={jumpToCard}
+        />
+      );
 
     // 用户审批页面（管理员）
     if (view === "userApproval" && auth.me.role !== "user") return <UserApprovalPage />;

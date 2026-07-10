@@ -90,11 +90,15 @@ const ROLE_TYPE_ORDER: StakeholderRoleType[] = [
 interface Props {
   /** 全局选中项目（Topbar ProjectSelector 驱动） */
   project: Project | null;
+  /** 跨页聚焦目标角色卡 id（M4.3.7 证据→营销地图），一次性消费 */
+  focusCardId?: number | null;
+  /** 聚焦应用完毕回调（清空 App.focusTarget，防重复触发） */
+  onFocusConsumed?: () => void;
 }
 
 // ─── 页面组件 ─────────────────────────────────────────────────
 
-export default function MarketingMapPage({ project }: Props) {
+export default function MarketingMapPage({ project, focusCardId, onFocusConsumed }: Props) {
   const toast = useToast();
   const [cards, setCards] = useState<StakeholderCard[]>([]);
   const [scripts, setScripts] = useState<TalkScript[]>([]);
@@ -140,6 +144,17 @@ export default function MarketingMapPage({ project }: Props) {
     setSelectedCardId(null);
     setSubView("cards");
   }, [projectId]);
+
+  // 跨页聚焦（M4.3.7 证据→角色卡）：选中目标卡 + 切到「角色卡」子视图
+  // cards 为空时数据尚未加载，等待；加载后无论是否命中均一次性消费 focusCardId。
+  useEffect(() => {
+    if (focusCardId == null || cards.length === 0) return;
+    setSelectedCardId(focusCardId);
+    setSubView("cards");
+    onFocusConsumed?.();
+    // 仅依赖 focusCardId 与 cards；onFocusConsumed 为一次性内联回调，不计入依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCardId, cards]);
 
   const selectedCard = useMemo(
     () => cards.find((c) => c.id === selectedCardId) ?? null,

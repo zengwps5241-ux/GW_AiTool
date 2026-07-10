@@ -58,11 +58,15 @@ interface Props {
   project: Project | null;
   /** 预留：关联证据跳转拜访记录（M4.1.10 接入） */
   onOpenVisitRecords?: (objectId?: number) => void;
+  /** 跨页聚焦目标节点 id（M4.3.7 证据→业务地图），一次性消费 */
+  focusObjectId?: number | null;
+  /** 聚焦应用完毕回调（清空 App.focusTarget，防重复触发） */
+  onFocusConsumed?: () => void;
 }
 
 // ─── 页面组件 ─────────────────────────────────────────────────
 
-export default function BusinessMapPage({ project, onOpenVisitRecords }: Props) {
+export default function BusinessMapPage({ project, onOpenVisitRecords, focusObjectId, onFocusConsumed }: Props) {
   const toast = useToast();
   const [objects, setObjects] = useState<BusinessMapObject[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,6 +110,29 @@ export default function BusinessMapPage({ project, onOpenVisitRecords }: Props) 
     setSelectedId(null);
     setSubView("hypothesis");
   }, [projectId]);
+
+  // 跨页聚焦（M4.3.7 证据→业务地图节点）：选中目标 + 切对应子视图 + 展开祖先链使节点在树中可见
+  // objects 为空时数据尚未加载，等待；加载后无论是否命中均一次性消费 focusObjectId。
+  useEffect(() => {
+    if (focusObjectId == null || objects.length === 0) return;
+    const obj = objects.find((o) => o.id === focusObjectId);
+    if (obj) {
+      setSelectedId(obj.id);
+      setSubView(obj.map_type === "current" ? "current" : "hypothesis");
+      // 沿 parent_id 上溯展开 L1/L2 祖先，让目标节点在左侧树可视
+      let parentId: number | null = obj.parent_id;
+      while (parentId != null) {
+        const parent = objects.find((o) => o.id === parentId);
+        if (!parent) break;
+        if (parent.level === "L1") setExpandedL1((s) => new Set(s).add(parent.id));
+        else if (parent.level === "L2") setExpandedL2((s) => new Set(s).add(parent.id));
+        parentId = parent.parent_id;
+      }
+    }
+    onFocusConsumed?.();
+    // 仅依赖 focusObjectId 与 objects；onFocusConsumed 为一次性内联回调，不计入依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusObjectId, objects]);
 
   // ─── 派生：层级分组 + 父子关系 ──────────────────────────────
   const byLevel = useMemo(() => {

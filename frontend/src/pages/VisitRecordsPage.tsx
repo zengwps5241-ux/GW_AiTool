@@ -74,11 +74,15 @@ const evidenceTypeLabel: Record<string, string> = {
 interface Props {
   /** 全局选中项目（Topbar ProjectSelector 驱动） */
   project: Project | null;
+  /** 跨页跳转（M4.3.7）：证据「关联假设」标签 → 业务地图假设节点 */
+  onJumpToHypothesis?: (objectId: number) => void;
+  /** 跨页跳转（M4.3.7）：证据「来源角色」标签 → 营销地图角色卡 */
+  onJumpToCard?: (cardId: number) => void;
 }
 
 // ─── 页面组件 ─────────────────────────────────────────────────
 
-export default function VisitRecordsPage({ project }: Props) {
+export default function VisitRecordsPage({ project, onJumpToHypothesis, onJumpToCard }: Props) {
   const toast = useToast();
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [evidences, setEvidences] = useState<EvidenceSource[]>([]);
@@ -340,6 +344,8 @@ export default function VisitRecordsPage({ project }: Props) {
                 onAddEvidence={() => setEvidenceModal({ mode: "create", visit: v })}
                 onEditEvidence={(e) => setEvidenceModal({ mode: "edit", visit: v, evidence: e })}
                 onDeleteEvidence={handleDeleteEvidence}
+                onJumpToHypothesis={onJumpToHypothesis}
+                onJumpToCard={onJumpToCard}
               />
             ))
           )}
@@ -798,6 +804,8 @@ function VisitRow({
   onAddEvidence,
   onEditEvidence,
   onDeleteEvidence,
+  onJumpToHypothesis,
+  onJumpToCard,
 }: {
   visit: VisitRecord;
   cardMap: Map<number, string>;
@@ -809,6 +817,10 @@ function VisitRow({
   onAddEvidence: () => void;
   onEditEvidence: (e: EvidenceSource) => void;
   onDeleteEvidence: (e: EvidenceSource) => void;
+  /** 证据关联假设 → 业务地图节点（M4.3.7） */
+  onJumpToHypothesis?: (objectId: number) => void;
+  /** 证据来源角色 → 营销地图角色卡（M4.3.7） */
+  onJumpToCard?: (cardId: number) => void;
 }) {
   const date = visit.visit_date;
   const ourNames = visit.participants_our?.join("、") || null;
@@ -933,6 +945,8 @@ function VisitRow({
                     evidence={e}
                     onEdit={() => onEditEvidence(e)}
                     onDelete={() => onDeleteEvidence(e)}
+                    onJumpToHypothesis={onJumpToHypothesis}
+                    onJumpToCard={onJumpToCard}
                   />
                 ))}
               </div>
@@ -950,10 +964,16 @@ function EvidenceDetail({
   evidence: e,
   onEdit,
   onDelete,
+  onJumpToHypothesis,
+  onJumpToCard,
 }: {
   evidence: EvidenceSource;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** 证据关联假设 → 业务地图节点（M4.3.7） */
+  onJumpToHypothesis?: (objectId: number) => void;
+  /** 证据来源角色 → 营销地图角色卡（M4.3.7） */
+  onJumpToCard?: (cardId: number) => void;
 }) {
   // §7.6：角色态度信号证据携带 implied_from_stance → implied_to_stance，确认后自动记录态度变化
   const hasStanceChange =
@@ -987,14 +1007,36 @@ function EvidenceDetail({
             {e.strength}证据
           </span>
           {e.source_role_name && (
-            <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--info-soft)", color: "var(--info)" }}>
-              {e.source_role_name}
-            </span>
+            onJumpToCard && e.source_role_id != null ? (
+              <button
+                type="button"
+                onClick={() => onJumpToCard(e.source_role_id!)}
+                title="跳转到营销地图角色卡"
+                style={jumpTagBtnStyle(roleTagStyle)}
+                onMouseEnter={(ev) => (ev.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={(ev) => (ev.currentTarget.style.textDecoration = "none")}
+              >
+                {e.source_role_name}
+              </button>
+            ) : (
+              <span style={roleTagStyle}>{e.source_role_name}</span>
+            )
           )}
           {e.related_hypothesis_name && (
-            <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--accent-soft)", color: "var(--accent)", fontWeight: 500 }}>
-              🔗 {e.related_hypothesis_name}
-            </span>
+            onJumpToHypothesis && e.related_hypothesis_id != null ? (
+              <button
+                type="button"
+                onClick={() => onJumpToHypothesis(e.related_hypothesis_id!)}
+                title="跳转到业务地图假设节点"
+                style={jumpTagBtnStyle(hypoTagStyle)}
+                onMouseEnter={(ev) => (ev.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={(ev) => (ev.currentTarget.style.textDecoration = "none")}
+              >
+                🔗 {e.related_hypothesis_name}
+              </button>
+            ) : (
+              <span style={hypoTagStyle}>🔗 {e.related_hypothesis_name}</span>
+            )
           )}
         </div>
         {/* 态度联动（§7.6）：本次态度信号引发的态度变化 */}
@@ -1146,4 +1188,25 @@ const metaTagStyle = ({
   weight?: number;
 }): React.CSSProperties => ({
   padding: "0 5px", borderRadius: 3, fontSize: 9, background: bg, color, fontWeight: weight,
+});
+
+/** 证据「来源角色」标签静态样式（M4.3.7 抽出，供 button/span 复用） */
+const roleTagStyle: React.CSSProperties = {
+  padding: "1px 6px", borderRadius: 4, fontSize: 10,
+  background: "var(--info-soft)", color: "var(--info)",
+};
+
+/** 证据「关联假设」标签静态样式（M4.3.7 抽出，供 button/span 复用） */
+const hypoTagStyle: React.CSSProperties = {
+  padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 500,
+  background: "var(--accent-soft)", color: "var(--accent)",
+};
+
+/** 可点击跳转标签：在静态样式基础上加无边框 button 外观 + 手型（M4.3.7 证据关联跳转） */
+const jumpTagBtnStyle = (base: React.CSSProperties): React.CSSProperties => ({
+  ...base,
+  border: "none",
+  fontFamily: "inherit",
+  cursor: "pointer",
+  transition: "filter 120ms",
 });
