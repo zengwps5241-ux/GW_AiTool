@@ -345,3 +345,29 @@
 
 
 
+
+## 决策 #43：M4.3 拜访记录页面 — 6 子任务渐进拆分 + 展开 Option B + 单一数据源（§2.5）
+
+- **背景**：M4.3「拜访记录页面」（开发计划行 211-220，6 子任务）替换 VisitRecordsPage 原型为真实后端。布局 §2.5 = 拜访记录列表（时间倒序）+ 证据筛选面板。后端 M2.3 全套就绪（/visit-records + /evidence-sources CRUD，派生 evidenceCount/verifiedHypotheses 读取时算）。抉择：① 6 子任务如何切分使每提交可回滚且页面始终可用；② 拜访卡折叠/展开如何分到 M4.3.2 与 M4.3.4；③ 数据加载范围。
+- **选择 A — 6 子任务渐进、每提交页面可用**：M4.3.1 骨架（项目 prop + 上下文栏 + 统计 + 列表加载 + 证据概览 + 加载/错误/空态）→ M4.3.2 折叠卡全字段（参与人姓名解析/地点/时长/关联角色卡数）→ M4.3.3 筛选面板（类型/强度/角色 + 结果列表 + 统计，替换概览）→ M4.3.4 展开体（KeyTakeaways/NextSteps/本次证据清单）→ M4.3.5 §7.6 态度联动 → M4.3.6 CRUD。每子任务独立 commit，页面始终可构建可运行。
+- **选择 B — 展开 Option B（M4.3.2 放基本信息行，M4.3.4 追加洞察/证据）**：避免「M4.3.2 加展开 toggle 但无内容」的半成品——M4.3.2 折叠头部可点击展开，展开体先放基本信息行（我方/客户/地点/时长），M4.3.4 再往同一展开体追加 KeyTakeaways + NextSteps（MarkdownView）+ 证据清单（EvidenceDetail 组件，M4.3.5 在其上扩展态度联动）。每个展开都是自洽可用的。
+- **选择 C — 单一数据源 + 客户参与人姓名解析**：refresh 并行拉 reviewed VisitRecord + reviewed EvidenceSource + reviewed StakeholderCard（cardMap 解析 participants_client 角色 ID→姓名，未知回退 角色#id）。统计栏「涉及角色」= related_card_ids 去重计数；「总证据」= evidences.length（与强度分布自洽）；拜访时间倒序（visit_date 降序，空置底）。与 §2.5「reviewed VisitRecord + 已确认 EvidenceSource 单一数据源」一致。
+- **理由**：渐进拆分兑现「每子任务独立提交保持可回滚」的自主授权要求；Option B 避免半成品 toggle；单一数据源对齐 §2.5。可校验性：GET /visit-records?review_status=reviewed 及 /evidence-sources 烟测 200 字段对齐 types；tsc -b 0 错 + vite build 过（6 子任务逐个）。与 #35-#42 一致工程范式。纯前端无后端改动。
+
+## 决策 #44：M4.3.6 拜访/证据 CRUD — 表单字段映射 + §7.6 态度信号录入（§2.5 §7.5 §7.6）
+
+- **背景**：M4.3.6 为 M4.3 补齐手动 CRUD（新增/编辑/删除拜访 + 拜访内证据）。后端 create/update 默认 review_status=reviewed（手动写入直接进正式库，§7.3）。抉择：① 拜访表单 participants_client（角色 ID 列表）与 related_card_ids 关系；② 证据表单是否收集 related_hypothesis_id；③ §7.6 角色态度信号证据的立场变化如何录入。
+- **选择 A — 客户参与人多选同步 related_card_ids**：手动录入场景「参与人」与「关联角色卡」高度重合（你见的角色即关联角色），VisitFormModal 单个角色卡 checkbox 多选同时写 participants_client 与 related_card_ids，简化表单避免两套近似多选。我方参与 participants_our 是自由文本（顿号/逗号/换行分割）。
+- **选择 B — 证据手动表单省略 related_hypothesis_id**：假设节点关联（§7.5 验证联动）本质是 AI/对话驱动的流程，手动录入证据时让用户从 BusinessMapObject 下拉选假设节点价值低且需额外加载业务地图对象。EvidenceFormModal 只收集 evidence_type/strength/content(必填)/source_role_id（单选角色卡自动带出 source_role_name）。related_hypothesis_id 留 null，AI 流程负责挂接。
+- **选择 C — §7.6 角色态度信号条件录入立场变化**：EvidenceFormModal 当 evidence_type==='角色态度信号' 时条件显示「态度变化：从→到」（STANCES=支持/中立/反对/观望 两 select），写 implied_from_stance/implied_to_stance；非态度信号证据不显示。与 EvidenceDetail（M4.3.5）的展示对称——录入侧与展示侧同一字段集。
+- **选择 D — 复用既定 Modal/表单样式 + window.confirm 删除**：modalOverlay/modalCard/modalInput/fieldLabel/saveBtn/ghostBtn/iconBtn 对齐 MarketingMapPage（同仓内复制，非共享导出）；删除用 window.confirm（与 M4.2.x 角色卡/话术删除一致约定）；EvidenceDetail 右上角可选 onEdit/onDelete 图标（filter 面板不传则不显示，复用组件不污染筛选结果）。
+- **理由**：client 同步 related 简化表单契合手动录入语义；省略 hypothesis 手动挂接聚焦 AI 流程；§7.6 录入与展示对称闭环。可校验性：真机 UTF-8 文件传 body（规避 Git Bash 中文编码）全 CRUD——拜访 CREATE 201→PUT 200→DELETE 204→GET 404；证据 CREATE 201（含立场变化字段反对→中立）→PUT 200→DELETE 204→临时拜访级联删 204；**测后清理 dev 库**（仅剩原始 visit 1，0 证据）。tsc -b 0 错 + vite build 过。
+
+## 决策 #45：M4.4.4 对话页待审核 Banner — 绑定项目 Owner + 自包含刷新 + 静默（§3.4）
+
+- **背景**：M4.4.4「审批提醒 Banner | Deputy 采纳后 Owner 在对话 Banner 收到待审核提醒」。后端 M2.4：GET /pending-reviews（跨模块聚合 pending_review）+ POST /reviews/{type}/{id}/approve|reject（require_project_owner）。抉择：① Banner 绑定哪个项目上下文；② 仅提醒还是可处置；③ 失败如何处理。
+- **选择 A — 绑定 selectedProject（Topbar 选择）+ my_role==='owner' 守卫**：Topbar selectedProject 携带 my_role（owner/deputy），是用户当前工作的项目上下文。Banner 仅当 selectedProject.my_role==='owner' 时渲染（Deputy/非成员不渲染——审批是 Owner 权限）。未选项目或非 owner → 不渲染。
+- **选择 B — 提醒 + 就地处置（approve/reject）**：Banner 不止提醒——warn 条「本项目 N 项待审核」可展开列出每项（entity_label/name/提交人/时间），逐项「通过/驳回」直接调 approve/review 端点，处置后自刷新（处置完该项移出列表，全处置完 Banner 自动隐藏）。API 已 trivial，就地处置让 Banner 立即可用而非等 M5.2.3 审核通知。
+- **选择 C — 自包含 fetch + 静默错误**：PendingReviewBanner 自管 items/loading/acting 状态，useEffect 依 projectId 拉取，approve/reject 后 refresh 自身。**失败静默**（catch 空）——Banner 是辅助提醒，绝不应因它失败阻塞对话主流程（与主对话错误处理隔离）。items.length===0 时 return null（DOM 不留痕）。
+- **选择 D — 复用 CSS 变量 + 顶部 Banner 位**：warn-soft 背景（global.css 已定义 light/dark），插在 ChatWorkspace 头部（agent/project Tag 行）与消息流之间，flexShrink:0 不被滚动区吞掉。ChevronDown 旋转表展开态，与拜访卡展开交互一致。
+- **理由**：owner 守卫对齐审批权限；就地处置兑现「收到提醒」并提前可用；静默错误保护对话主流程。可校验性：真机全链路——建 pending_review 拜访 → GET /pending-reviews 返回该条（PendingReviewItem 字段 entity_label/name/submitted_by_name 与渲染匹配）→ POST approve 置 reviewed → 复查 pending-reviews 为空 → 删除清理。tsc -b 0 错 + vite build 过。纯前端无后端改动。
