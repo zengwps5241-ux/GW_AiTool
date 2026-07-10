@@ -119,6 +119,7 @@ def _visit_to_out(
         is_public=bool(v.is_public),
         shared_with=v.shared_with,
         sensitivity_level=v.sensitivity_level,
+        source_session_id=v.source_session_id,
         created_at=iso(v.created_at),
         updated_at=iso(v.updated_at),
     )
@@ -217,7 +218,8 @@ async def get_visit(
 
 
 async def create_visit(
-    db: AsyncSession, project_id: int, payload: VisitRecordCreate, user: User
+    db: AsyncSession, project_id: int, payload: VisitRecordCreate, user: User,
+    *, source_session_id: str | None = None,
 ) -> VisitRecordOut:
     v = VisitRecord(
         project_id=project_id,
@@ -236,6 +238,7 @@ async def create_visit(
         is_public=1 if payload.is_public else 0,
         shared_with=payload.shared_with,
         sensitivity_level=payload.sensitivity_level,
+        source_session_id=source_session_id,
     )
     db.add(v)
     await db.commit()

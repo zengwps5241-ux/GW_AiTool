@@ -189,7 +189,7 @@ def _draft_pending_event(
 # 故在覆盖前抓取关键字段快照作为 previous（不持久化到实体表，只在事件里携带供对比）。
 
 _CARD_SNAPSHOT_FIELDS = (
-    "name", "position", "department", "reports_to", "role_type",
+    "name", "position", "department", "reports_to", "contact_info", "role_type",
     "decision_power", "objective_layer", "subjective_layer", "behaviors",
 )
 _VISIT_SNAPSHOT_FIELDS = (
@@ -252,9 +252,14 @@ async def handle_save_business_map_draft(
             ctx.project_id,
             preview={
                 "object_count": len(objects),
-                # 当前版节点摘要（level+name），与 previous（上一版完整 objects）对照做 diff
+                # 节点摘要（level/name/map_type/payload），供采纳卡片分组展示 + 节点展开 payload 关键字段
                 "objects": [
-                    {"level": o.get("level"), "name": o.get("name")}
+                    {
+                        "level": o.get("level"),
+                        "name": o.get("name"),
+                        "map_type": o.get("map_type"),
+                        "payload": o.get("payload"),
+                    }
                     for o in objects
                     if isinstance(o, dict)
                 ],
@@ -326,7 +331,8 @@ async def handle_save_stakeholder_card_draft(
             except Exception as exc:  # pydantic 校验失败（如 role_type 枚举）
                 return _error_result(f"角色卡字段不合法：{exc}")
             card = await marketing_map_service.create_card(
-                db, ctx.project_id, payload, user
+                db, ctx.project_id, payload, user,
+                source_session_id=ctx.source_session_id,
             )
             previous = None
             is_update = False
@@ -337,7 +343,7 @@ async def handle_save_stakeholder_card_draft(
             "角色卡草稿",
             card.id,
             ctx.project_id,
-            preview={"name": card.name, "role_type": card.role_type},
+            preview=_snapshot_card(card),
             previous=previous,
             is_update=is_update,
         )
@@ -404,7 +410,8 @@ async def handle_save_visit_record_draft(
             except Exception as exc:
                 return _error_result(f"拜访记录字段不合法：{exc}")
             visit = await visits_service.create_visit(
-                db, ctx.project_id, payload, user
+                db, ctx.project_id, payload, user,
+                source_session_id=ctx.source_session_id,
             )
             previous = None
             is_update = False
@@ -415,10 +422,7 @@ async def handle_save_visit_record_draft(
             "拜访记录草稿",
             visit.id,
             ctx.project_id,
-            preview={
-                "visit_type": visit.visit_type,
-                "summary": (visit.summary or "")[:80],
-            },
+            preview=_snapshot_visit(visit),
             previous=previous,
             is_update=is_update,
         )

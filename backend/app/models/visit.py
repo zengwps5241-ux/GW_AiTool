@@ -77,6 +77,8 @@ class VisitRecord(Base):
     is_public: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
     shared_with: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     sensitivity_level: Mapped[str] = mapped_column(String, nullable=False, default="internal")
+    # 产出该草稿的会话 ID（Chat Session；M4.4.5 待采纳徽标"跳回原对话"用）
+    source_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False

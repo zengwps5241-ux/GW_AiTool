@@ -104,6 +104,7 @@ def _card_to_out(card: StakeholderCard, created_by_name, reviewed_by_name) -> St
         is_public=bool(card.is_public),
         shared_with=card.shared_with,
         sensitivity_level=card.sensitivity_level,
+        source_session_id=card.source_session_id,
         created_at=iso(card.created_at),
         updated_at=iso(card.updated_at),
     )
@@ -155,7 +156,8 @@ async def get_card(db, project_id, card_id) -> StakeholderCardOut | None:
 
 
 async def create_card(
-    db, project_id, payload: StakeholderCardCreate, user: User
+    db, project_id, payload: StakeholderCardCreate, user: User,
+    *, source_session_id: str | None = None,
 ) -> StakeholderCardOut:
     card = StakeholderCard(
         project_id=project_id,
@@ -175,6 +177,7 @@ async def create_card(
         is_public=1 if payload.is_public else 0,
         shared_with=payload.shared_with,
         sensitivity_level=payload.sensitivity_level,
+        source_session_id=source_session_id,
     )
     db.add(card)
     await db.commit()

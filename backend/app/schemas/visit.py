@@ -77,6 +77,7 @@ class VisitRecordOut(BaseModel):
     is_public: bool = False
     shared_with: list[int] | None = None
     sensitivity_level: str = "internal"
+    source_session_id: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

@@ -556,3 +556,14 @@ async def init_db() -> None:
                 await conn.execute(text(
                     f"ALTER TABLE business_map_drafts ADD COLUMN {col} {col_type}"
                 ))
+
+        # stakeholder_cards / visit_records 补 source_session_id（M4.4.5 待采纳徽标"跳回原对话"）
+        for table_name in ("stakeholder_cards", "visit_records"):
+            result = await conn.execute(text(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                f"WHERE table_name='{table_name}' AND column_name='source_session_id'"
+            ))
+            if result.scalar() == 0:
+                await conn.execute(text(
+                    f"ALTER TABLE {table_name} ADD COLUMN source_session_id VARCHAR NULL"
+                ))
