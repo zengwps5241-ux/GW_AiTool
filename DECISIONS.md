@@ -293,6 +293,16 @@
 - **为何后端默认模板也兜底**：`_default_procurement_stages()` 在 service `_proc_to_out` 与前端 `DEFAULT_PROCUREMENT_STAGES` 双端各一份——后端兜底防止脏数据（stages 为 null/空）时前端拿到空数组；前端兜底 + 与默认模板 merge 补齐缺失阶段/字段，保证渲染永远 5 阶段。两份模板是「契约常量」镜像，非重复逻辑。
 - **理由**：team 共享项目数据须服务端持久（否 #35/#36 全局选择器 + require_project_member 的隔离体系就失去意义）；固定五阶段用 JSONB 单例最简；upsert 整体替换 + 显式保存贴合「手动填写模板」心智且改动可控。可校验性：23 测试零回归（test_marketing_map_api 12 + test_business_map_api 11，新表由 init_db `create_all` 在 test 库自动建）+ 真机 GET(null)→PUT(建 id=1)→GET(回读) 全链路通；前端 tsc -b + vite build 过。fail 集仅新增 procurement 路由分支，既有 stakeholder/relation/script/kb 路径行为不变 → 未扩大。
 
+## 决策 #38：M4.2.6 角色卡牌视图 — 5 子 Tab 全字段 + 三栏关联面板（§5.2）
+
+- **背景**：M4.2.6 把 M4.2.1 的角色卡「只读种子」（左列表 + 右单栏平铺部分字段）升级为「左侧角色列表 + 中间 5 子 Tab 详情卡（客观/主观/行为/态度历史/话术）+ 右侧关联面板」。开发计划明示详情字段须覆盖 §5.2 全量，且主观层含 M3.2.8 补的 `confidence`。抉择：① 5 子 Tab 怎么切；② 右侧「关联 L3 场景/拜访记录/话术」三项各用什么数据源——尤其 L3 场景。
+- **选择 A — 5 子 Tab = §5.2 四大板块拆 + 话术独立 Tab**：客观信息（objectiveLayer 7 字段）/ 主观分析（subjectiveLayer 全含 confidence + 三维评分综合）/ 行为分析（behaviors[] observation-interpretation-suggestedAction 三行卡）/ 态度历史（stance_change_log[] 时间线 from→to）/ 话术（TalkScript 按 stakeholder_card_id 过滤）。这正好对应 §5.2「角色卡完整字段」的四大子节 + 「话术库（角色卡内子Tab）」。子 Tab 栏 sticky 吸顶，数组类 Tab 带数量角标（行为 N / 态度 N / 话术 N），客观/主观不带（字段固定无计数意义）。
+- **选择 B — 全字段覆盖，confidence 等可选字段条件渲染**：客观 7 字段全列（education/previousCompanies/personality/communicationPreference/relationships/historyWithUs/historyWithCompetitor，缺则 Field 占位「未填写」+ 顶部「已填 X/7」）；主观层 stance + confidence + gradeLevel + compositeScore 作立场徽标行，其余 6 文本字段（explicitKPI/personalMotivation/attitudeToUs/attitudeToCompetitor/coreConcerns/leverage）作 Field，coreConcerns/leverage 高亮（关键阻力/可改变因素）。confidence 在历史卡（pre-M3.2.8）可能为 null → `sl.confidence && <Tag>` 条件渲染，不报错不占位（字段与 Skill 契约已由 M3.2.8 落定，新卡会有值）。
+- **选择 C — 右侧关联面板三项，L3 场景诚实空态**：① **关联拜访记录** = `listVisitRecords(projectId, {card_id})`（card_id 过滤 related_card_ids/participants_client，M2.3 已支持），按日期倒序最多 6 条（日期/类型 Tag/summary 两行截断），超 6 提示去拜访记录页；② **关联话术** = cardScripts 数量 + 「查看 N 条 →」跳话术子 Tab；③ **关联 L3 场景** = 诚实 roadmap 空态。**为何 L3 不造假数据**：StakeholderCard 与业务地图 L3 节点在当前数据模型**无 FK**（StakeholderRelation 是卡↔卡，VisitRecord 是卡↔拜访，均不触达 L3）。规格「关联 L3 场景」的真正语义是「证据→角色→场景」关联链，须待 M4.3 拜访记录打通后才有数据基础。故渲染明确说明「待 M4.3 拜访记录打通后建立」，而非用 TalkScript.scenario 之类近似字段冒充 L3 场景（scenario 是初次拜访/方案汇报等话术场景，非业务地图 L3 节点，混用会误导）。
+- **选择 D — 话术子 Tab 分「定制 + 同类型模板」两组**：§5.2 明示「选中角色后展示其关联话术 + 同类型角色的通用话术模板」。故 cardScripts（stakeholder_card_id === 本卡）+ templateScripts（stakeholder_card_id == null && role_type === 本卡 role_type，即跨客户通用模板）分组渲染，模板用虚线边区分。复用父级已拉取的 scripts（M4.2.1 一次 listTalkScripts），不额外发请求。
+- **为何 visit 单独按卡拉取而非父级一次拉全**：拜访记录是项目级大列表（可能数十条），且只在选中某卡时需要该卡子集。父级 MarketingMapPage 已拉 cards+scripts（角色卡/话术是营销地图核心、多视图共享）；拜访记录是 M4.3 拜访页的主场，营销地图只在角色卡右侧面板需要「本卡关联」子集 → 在 CardsView 内 useEffect[current.id] 按 card_id 拉取最经济，切换角色时 cancelled flag 防竞态。
+- **理由**：5 子 Tab 严格对齐 §5.2 四大子节 + 话术子 Tab 规格全字段；confidence 条件渲染兼容历史卡 null；右侧三项中拜访/话术用真实后端数据（M2.3/M2.2 已就绪），L3 诚实空态避免造假。与 #35/#36/#37 一致的工程范式（全局选择器 / snake_case+camelCase 分层 / 子任务独立提交 / 纯前端 tsc+build 校验）。可校验性：真机 GET stakeholder-cards（卡 id=1 客观全 7 字段 + 主观全字段 + 2 behaviors observation/interpretation/suggestedAction）+ visit-records?card_id=1（HTTP 200 [] 空态）+ talk-scripts（HTTP 200 [] 空态）全链路通；tsc -b 0 错 + vite build 72 模块过。纯前端无后端改动 → fail 集不涉及前端必然未扩大。
+
 
 
 

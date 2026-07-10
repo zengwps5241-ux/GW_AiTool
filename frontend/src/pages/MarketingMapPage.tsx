@@ -9,13 +9,16 @@ import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
 import { I } from "@/icons";
 import type {
+  BehaviorEntry,
   Project,
   ProcurementStage,
   ProcurementStageStatus,
   StakeholderCard,
+  StanceChangeEntry,
   StakeholderRoleType,
   StanceLevel,
   TalkScript,
+  VisitRecord,
 } from "@/types";
 
 // ─── 常量 ─────────────────────────────────────────────────────
@@ -246,6 +249,7 @@ export default function MarketingMapPage({ project }: Props) {
           </Card>
         ) : subView === "cards" ? (
           <CardsView
+            projectId={project.id}
             cards={cards}
             scripts={scripts}
             selectedCard={selectedCard}
@@ -286,21 +290,44 @@ export default function MarketingMapPage({ project }: Props) {
   );
 }
 
-// ─── 角色卡视图（M4.2.1 种子：左列表 + 右只读详情；M4.2.6 升级为 5 子 Tab） ──
+// ─── 角色卡视图（M4.2.6：左侧角色列表 + 中间 5 子 Tab 详情卡 + 右侧关联面板） ──
+// 5 子 Tab：客观信息 / 主观分析 / 行为分析 / 态度历史 / 话术。
+// 详情字段覆盖 §5.2 全量：客观层 7 字段（education/previousCompanies/personality/
+// communicationPreference/relationships/historyWithUs/historyWithCompetitor）+
+// 主观层全含 confidence + behaviors（observation/interpretation/suggestedAction）+
+// stance_change_log（date/from/to/reason）+ 话术（按 stakeholder_card_id 过滤）。
+// 右侧关联面板：关联拜访记录（listVisitRecords?card_id）+ 关联话术 + 关联 L3 场景。
+
+/** 角色卡详情子 Tab */
+type CardTab = "objective" | "subjective" | "behaviors" | "stance" | "scripts";
+
+const CARD_TABS: { key: CardTab; label: string; icon: keyof typeof I }[] = [
+  { key: "objective", label: "客观信息", icon: "UserCheck" },
+  { key: "subjective", label: "主观分析", icon: "Target" },
+  { key: "behaviors", label: "行为分析", icon: "Activity" },
+  { key: "stance", label: "态度历史", icon: "Calendar" },
+  { key: "scripts", label: "话术", icon: "MessageText" },
+];
 
 function CardsView({
+  projectId,
   cards,
   scripts,
   selectedCard,
   onSelect,
   onChanged: _onChanged,
 }: {
+  projectId: number;
   cards: StakeholderCard[];
   scripts: TalkScript[];
   selectedCard: StakeholderCard | null;
   onSelect: (id: number) => void;
   onChanged: () => void;
 }) {
+  const [tab, setTab] = useState<CardTab>("objective");
+  const [visits, setVisits] = useState<VisitRecord[]>([]);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+
   // 空项目无角色卡
   if (cards.length === 0) {
     return (
@@ -308,7 +335,7 @@ function CardsView({
         <I.UserCheck size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
         <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>尚未建立角色卡</div>
         <div style={{ maxWidth: 380, margin: "0 auto", lineHeight: 1.7 }}>
-          前往「对话」页对项目 Agent 说「生成角色卡」或使用 WF08 chip，AI 会基于拜访证据产出角色卡草稿，采纳后此处可见；也可在 M4.2.9 上线后手动新增。
+          前往「对话」页对项目 Agent 说「生成角色卡」或使用 WF12 chip，AI 会基于拜访证据产出角色卡草稿，采纳后此处可见；也可在 M4.2.9 上线后手动新增。
         </div>
       </Card>
     );
@@ -317,11 +344,49 @@ function CardsView({
   // 默认选中第一个
   const current = selectedCard ?? cards[0];
   const cardScripts = scripts.filter((s) => s.stakeholder_card_id === current.id);
+  // 同角色类型的通用模板话术（跨客户通用，stakeholder_card_id 为 null 且 role_type 匹配）
+  const templateScripts = scripts.filter(
+    (s) => s.stakeholder_card_id == null && s.role_type === current.role_type,
+  );
+
+  // 切换角色：重置子 Tab + 拉取关联拜访记录（card_id 过滤 related_card_ids / participants_client）
+  useEffect(() => {
+    setTab("objective");
+    let cancelled = false;
+    setVisitsLoading(true);
+    setVisits([]);
+    api
+      .listVisitRecords(projectId, { card_id: current.id })
+      .then((list) => {
+        if (!cancelled) setVisits(list);
+      })
+      .catch(() => {
+        if (!cancelled) setVisits([]);
+      })
+      .finally(() => {
+        if (!cancelled) setVisitsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [current.id, projectId]);
+
+  const behaviors = current.behaviors ?? [];
+  const stanceLog = current.stance_change_log ?? [];
+
+  // 子 Tab 角标计数（仅数组类 Tab 显示数量）
+  const tabBadge: Record<CardTab, number> = {
+    objective: 0,
+    subjective: 0,
+    behaviors: behaviors.length,
+    stance: stanceLog.length,
+    scripts: cardScripts.length,
+  };
 
   return (
-    <div style={{ display: "flex", gap: 20, height: "100%" }}>
+    <div style={{ display: "flex", gap: 16, height: "100%" }}>
       {/* 左：角色列表 */}
-      <Card style={{ width: 240, padding: 0, flexShrink: 0, overflow: "auto" }}>
+      <Card style={{ width: 220, padding: 0, flexShrink: 0, overflow: "auto" }}>
         <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6 }}>
           角色列表（{cards.length}）
         </div>
@@ -371,31 +436,342 @@ function CardsView({
         })}
       </Card>
 
-      {/* 右：角色卡只读详情（种子，M4.2.6 将扩展为 5 子 Tab） */}
-      <Card style={{ flex: 1, padding: 0, overflow: "auto" }}>
+      {/* 中：详情卡（头 + 5 子 Tab + 内容） */}
+      <Card style={{ flex: 1, padding: 0, overflow: "auto", minWidth: 0 }}>
         <CardDetailHeader card={current} />
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, fontSize: 13 }}>
-          {/* 三维评分 + 综合 */}
-          <ScoreRow card={current} />
-          <Field label="显性 KPI" value={current.subjective_layer?.explicitKPI} />
-          <Field label="隐性个人诉求" value={current.subjective_layer?.personalMotivation} />
-          <Field label="对我方方案的态度" value={current.subjective_layer?.attitudeToUs} />
-          <Field label="核心顾虑" value={current.subjective_layer?.coreConcerns} highlight />
-          <Field label="影响杠杆" value={current.subjective_layer?.leverage} highlight />
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-            <Field label="与我方历史合作" value={current.objective_layer?.historyWithUs} />
-            <div style={{ marginTop: 10 }}>
-              <Field label="与竞品历史合作" value={current.objective_layer?.historyWithCompetitor} />
-            </div>
-          </div>
-          {/* 行为分析条数 + 态度变化条数 + 话术条数（M4.2.6 展开） */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-            <Tag tone="info">行为分析 {current.behaviors?.length ?? 0}</Tag>
-            <Tag tone="accent">态度变化 {current.stance_change_log?.length ?? 0}</Tag>
-            <Tag tone="success">话术 {cardScripts.length}</Tag>
-          </div>
+        {/* 子 Tab 栏 */}
+        <div style={cardTabBarStyle}>
+          {CARD_TABS.map((t) => {
+            const Icon = I[t.icon];
+            const active = tab === t.key;
+            const badge = tabBadge[t.key];
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)} style={cardTabBtnStyle(active)}>
+                <Icon size={13} />
+                {t.label}
+                {badge > 0 && <span style={cardTabBadgeStyle(active)}>{badge}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {/* 子 Tab 内容 */}
+        <div style={{ padding: 20, fontSize: 13 }}>
+          {tab === "objective" && <ObjectiveTab card={current} />}
+          {tab === "subjective" && <SubjectiveTab card={current} />}
+          {tab === "behaviors" && <BehaviorsTab behaviors={behaviors} />}
+          {tab === "stance" && <StanceHistoryTab log={stanceLog} />}
+          {tab === "scripts" && (
+            <ScriptsTab
+              cardName={current.name}
+              roleType={current.role_type}
+              cardScripts={cardScripts}
+              templateScripts={templateScripts}
+            />
+          )}
         </div>
       </Card>
+
+      {/* 右：关联面板（关联拜访记录 / 关联话术 / 关联 L3 场景） */}
+      <Card style={{ width: 260, padding: 0, flexShrink: 0, overflow: "auto" }}>
+        <RelatedPanel
+          visits={visits}
+          visitsLoading={visitsLoading}
+          scriptCount={cardScripts.length}
+          onJumpScripts={() => setTab("scripts")}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── 5 子 Tab 内容组件 ────────────────────────────────────────
+
+/** 客观信息子 Tab：§5.2 objectiveLayer 7 字段 */
+function ObjectiveTab({ card }: { card: StakeholderCard }) {
+  const ol = card.objective_layer ?? {};
+  const fields: [string, string | undefined][] = [
+    ["教育背景", ol.education],
+    ["过往公司与年限", ol.previousCompanies],
+    ["性格特征", ol.personality],
+    ["沟通偏好", ol.communicationPreference],
+    ["人际关系", ol.relationships],
+    ["与我方历史合作", ol.historyWithUs],
+    ["与竞品历史合作", ol.historyWithCompetitor],
+  ];
+  const filled = fields.filter(([, v]) => v).length;
+  return (
+    <div>
+      <div style={tabIntroStyle}>客观信息层（相对稳定，数月更新）· 已填 {filled}/7</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {fields.map(([label, value]) => (
+          <Field key={label} label={label} value={value} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 主观分析子 Tab：三维评分 + 综合 + 全字段（§5.2 subjectiveLayer，含 confidence） */
+function SubjectiveTab({ card }: { card: StakeholderCard }) {
+  const sl = card.subjective_layer ?? {};
+  return (
+    <div>
+      <ScoreRow card={card} />
+      <div style={{ ...stanceRowStyle, marginTop: 14 }}>
+        {sl.stance && <StanceChip stance={sl.stance} />}
+        {sl.confidence && <Tag tone="neutral">置信度：{sl.confidence}</Tag>}
+        {sl.gradeLevel && <Tag tone={gradeTone(sl.gradeLevel)}>等级：{sl.gradeLevel}</Tag>}
+        {sl.compositeScore != null && (
+          <Tag tone="accent">综合 {sl.compositeScore}/10</Tag>
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14 }}>
+        <Field label="显性 KPI" value={sl.explicitKPI} />
+        <Field label="隐性个人诉求" value={sl.personalMotivation} />
+        <Field label="对我方方案的态度" value={sl.attitudeToUs} />
+        <Field label="对竞品的态度" value={sl.attitudeToCompetitor} />
+        <Field label="核心顾虑" value={sl.coreConcerns} highlight />
+        <Field label="影响杠杆" value={sl.leverage} highlight />
+      </div>
+    </div>
+  );
+}
+
+/** 行为分析子 Tab：behaviors[]（观察 / 解读 / 建议动作，§5.2 行为分析矩阵） */
+function BehaviorsTab({ behaviors }: { behaviors: BehaviorEntry[] }) {
+  if (behaviors.length === 0) {
+    return <EmptyTab icon="Activity" text="尚无行为分析记录。拜访后由 AI 基于证据产出（观察 → 解读 → 建议动作），M4.2.9 上线后也可手动新增。" />;
+  }
+  return (
+    <div>
+      <div style={tabIntroStyle}>行为分析矩阵（每次接触后更新）· {behaviors.length} 条</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {behaviors.map((b, i) => (
+          <div key={i} style={behaviorCardStyle}>
+            <BehaviorRow icon="👁" label="观察" color="var(--info)" text={b.observation} />
+            <BehaviorRow icon="🧠" label="解读" color="var(--accent)" text={b.interpretation} />
+            <BehaviorRow icon="➡" label="建议动作" color="var(--success)" text={b.suggestedAction} last />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 行为分析单行（图标 + 标签 + 内容） */
+function BehaviorRow({ icon, label, color, text, last }: { icon: string; label: string; color: string; text?: string; last?: boolean }) {
+  return (
+    <div style={{ display: "flex", gap: 10, paddingBottom: last ? 0 : 10, borderBottom: last ? "none" : "1px dashed var(--line)" }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color, flexShrink: 0, width: 78, display: "flex", alignItems: "center", gap: 4 }}>
+        {icon} {label}
+      </span>
+      <div style={{ flex: 1, fontSize: 13, color: text ? "var(--ink-2)" : "var(--ink-4)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+        {text || "（未填写）"}
+      </div>
+    </div>
+  );
+}
+
+/** 态度历史子 Tab：stance_change_log[]（date / from→to / reason，§5.2） */
+function StanceHistoryTab({ log }: { log: StanceChangeEntry[] }) {
+  if (log.length === 0) {
+    return <EmptyTab icon="Calendar" text="尚无态度变化记录。新证据关联本角色且暗示态度变化时自动生成（§7.6），也可手动编辑。" />;
+  }
+  // 按日期降序（无日期沉底）
+  const sorted = [...log].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  return (
+    <div>
+      <div style={tabIntroStyle}>态度变化历史 · {log.length} 条</div>
+      <div style={{ position: "relative", paddingLeft: 2 }}>
+        <div style={{ position: "absolute", left: 8, top: 8, bottom: 8, width: 2, background: "var(--line)" }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {sorted.map((e, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, position: "relative" }}>
+              <div style={timelineDotStyle} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)" }}>{e.date || "（无日期）"}</span>
+                  {e.from ? <StanceChip stance={e.from} small /> : <span style={{ fontSize: 11, color: "var(--ink-4)" }}>未知</span>}
+                  <I.ChevronRight size={12} style={{ color: "var(--ink-4)" }} />
+                  {e.to ? <StanceChip stance={e.to} small /> : <span style={{ fontSize: 11, color: "var(--ink-4)" }}>未知</span>}
+                </div>
+                {e.reason && <div style={{ fontSize: 12, color: "var(--ink-3)", lineHeight: 1.6 }}>{e.reason}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 话术子 Tab：该角色定制话术 + 同角色类型通用模板（§5.2 话术库） */
+function ScriptsTab({
+  cardName,
+  roleType,
+  cardScripts,
+  templateScripts,
+}: {
+  cardName: string;
+  roleType: StakeholderRoleType | null;
+  cardScripts: TalkScript[];
+  templateScripts: TalkScript[];
+}) {
+  const hasAny = cardScripts.length > 0 || templateScripts.length > 0;
+  return (
+    <div>
+      <div style={tabIntroStyle}>
+        {cardName} 定制话术 {cardScripts.length} 条
+        {roleType && <> · 同类型（{ROLE_TYPE_LABELS[roleType]}）通用模板 {templateScripts.length} 条</>}
+      </div>
+      {!hasAny ? (
+        <EmptyTab icon="MessageText" text="尚无话术。前往顶部「话术库」Tab 新增，或在对话中让 AI 基于本角色生成。" />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {cardScripts.length > 0 && (
+            <div>
+              <div style={sectionLabelStyle}>定制话术（针对本角色）</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {cardScripts.map((s) => <ScriptCard key={s.id} script={s} />)}
+              </div>
+            </div>
+          )}
+          {templateScripts.length > 0 && (
+            <div>
+              <div style={sectionLabelStyle}>通用模板（{roleType ? ROLE_TYPE_LABELS[roleType] : ""}）</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {templateScripts.map((s) => <ScriptCard key={s.id} script={s} template />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 单条话术卡（场景标签 + 内容 + 展开/收起） */
+function ScriptCard({ script, template }: { script: TalkScript; template?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={scriptCardStyle(template)}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+        {script.scenario && <Tag tone={template ? "neutral" : "accent"}>{script.scenario}</Tag>}
+        {template && <Tag tone="info">模板</Tag>}
+        {script.source_customer_quote && (
+          <span title="源自客户原话" style={{ fontSize: 11, color: "var(--ink-4)" }}>📎 原话</span>
+        )}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: expanded ? undefined : 72, overflow: "hidden" }}>
+        {script.content}
+      </div>
+      <button onClick={() => setExpanded((v) => !v)} style={linkBtnStyle}>{expanded ? "收起" : "展开全部"}</button>
+    </div>
+  );
+}
+
+// ─── 右侧关联面板 ─────────────────────────────────────────────
+
+/** 关联面板：关联拜访记录 + 关联话术 + 关联 L3 场景 */
+function RelatedPanel({
+  visits,
+  visitsLoading,
+  scriptCount,
+  onJumpScripts,
+}: {
+  visits: VisitRecord[];
+  visitsLoading: boolean;
+  scriptCount: number;
+  onJumpScripts: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* 关联拜访记录 */}
+      <div style={relatedSectionStyle}>
+        <div style={relatedHeaderStyle}>
+          <I.Calendar size={13} />
+          <span>关联拜访记录</span>
+          <span style={relatedCountStyle}>{visitsLoading ? "…" : visits.length}</span>
+        </div>
+        {visitsLoading ? (
+          <div style={relatedEmptyStyle}>加载中…</div>
+        ) : visits.length === 0 ? (
+          <div style={relatedEmptyStyle}>暂无关联拜访</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {visits.slice(0, 6).map((v) => (
+              <div key={v.id} style={relatedItemStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: "var(--ink-3)" }}>{v.visit_date || "（无日期）"}</span>
+                  <Tag tone="neutral">{v.visit_type}</Tag>
+                </div>
+                {v.summary && (
+                  <div style={clamp2Style}>{v.summary}</div>
+                )}
+              </div>
+            ))}
+            {visits.length > 6 && (
+              <div style={{ fontSize: 10, color: "var(--ink-4)", textAlign: "center" }}>
+                还有 {visits.length - 6} 条，前往「拜访记录」页查看
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 关联话术 */}
+      <div style={relatedSectionStyle}>
+        <div style={relatedHeaderStyle}>
+          <I.MessageText size={13} />
+          <span>关联话术</span>
+          <span style={relatedCountStyle}>{scriptCount}</span>
+        </div>
+        {scriptCount === 0 ? (
+          <div style={relatedEmptyStyle}>暂无定制话术</div>
+        ) : (
+          <button onClick={onJumpScripts} style={linkBtnStyle}>查看 {scriptCount} 条定制话术 →</button>
+        )}
+      </div>
+
+      {/* 关联 L3 场景（跨模块 FK 待 M4.3 打通） */}
+      <div style={relatedSectionStyle}>
+        <div style={relatedHeaderStyle}>
+          <I.Map size={13} />
+          <span>关联 L3 场景</span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--ink-4)", lineHeight: 1.6 }}>
+          角色卡与业务地图 L3 场景的跨模块关联，待 M4.3 拜访记录打通（证据 → 角色 → 场景）后建立。
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 角色卡详情通用小组件 ─────────────────────────────────────
+
+/** 立场徽标（带底色，可选小尺寸） */
+function StanceChip({ stance, small }: { stance: StanceLevel; small?: boolean }) {
+  const color = stanceColor(stance);
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: small ? "1px 7px" : "2px 9px",
+      fontSize: small ? 11 : 12, fontWeight: 500,
+      borderRadius: 999, background: color + "22", color,
+    }}>
+      {small && <span style={{ width: 5, height: 5, borderRadius: 999, background: color }} />}
+      {stance}
+    </span>
+  );
+}
+
+/** 子 Tab 空状态 */
+function EmptyTab({ icon, text }: { icon: keyof typeof I; text: string }) {
+  const Icon = I[icon];
+  return (
+    <div style={{ padding: 30, textAlign: "center", color: "var(--ink-4)", fontSize: 13 }}>
+      <Icon size={28} style={{ marginBottom: 8 }} />
+      <div style={{ maxWidth: 320, margin: "0 auto", lineHeight: 1.7 }}>{text}</div>
     </div>
   );
 }
@@ -1186,6 +1562,160 @@ const linkBtnStyle: React.CSSProperties = {
   color: "var(--accent)",
   fontSize: 12,
   fontWeight: 500,
+};
+
+// ─── 角色卡详情子 Tab 样式（M4.2.6）──────────────────────────
+
+const cardTabBarStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 0,
+  padding: "0 16px",
+  borderBottom: "1px solid var(--line)",
+  flexShrink: 0,
+  position: "sticky",
+  top: 0,
+  background: "var(--surface)",
+  zIndex: 1,
+};
+
+/** 子 Tab 按钮（激活态底线 + 强调色） */
+function cardTabBtnStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "10px 12px",
+    background: "transparent",
+    border: "none",
+    borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+    color: active ? "var(--accent)" : "var(--ink-2)",
+    fontSize: 12,
+    fontWeight: active ? 600 : 400,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    whiteSpace: "nowrap",
+    marginBottom: -1,
+  };
+}
+
+/** 子 Tab 数量角标 */
+function cardTabBadgeStyle(active: boolean): React.CSSProperties {
+  return {
+    minWidth: 16,
+    height: 16,
+    padding: "0 4px",
+    borderRadius: 999,
+    background: active ? "var(--accent)" : "var(--bg-3)",
+    color: active ? "var(--on-accent)" : "var(--ink-3)",
+    fontSize: 10,
+    fontWeight: 700,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+}
+
+const tabIntroStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--ink-3)",
+  marginBottom: 14,
+};
+
+const stanceRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const behaviorCardStyle: React.CSSProperties = {
+  padding: 12,
+  background: "var(--bg-2)",
+  border: "1px solid var(--line)",
+  borderRadius: 10,
+};
+
+const timelineDotStyle: React.CSSProperties = {
+  width: 10,
+  height: 10,
+  borderRadius: 999,
+  background: "var(--accent)",
+  border: "2px solid var(--surface)",
+  boxShadow: "var(--shadow-sm)",
+  flexShrink: 0,
+  marginTop: 4,
+  zIndex: 1,
+};
+
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: "var(--ink-3)",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  marginBottom: 8,
+};
+
+/** 话术卡（模板态用虚线边区分） */
+function scriptCardStyle(template?: boolean): React.CSSProperties {
+  return {
+    padding: 12,
+    background: template ? "transparent" : "var(--bg-2)",
+    border: template ? "1px dashed var(--line)" : "1px solid var(--line)",
+    borderRadius: 10,
+  };
+}
+
+// ─── 右侧关联面板样式 ─────────────────────────────────────────
+
+const relatedSectionStyle: React.CSSProperties = {
+  padding: "14px 16px",
+  borderBottom: "1px solid var(--line)",
+};
+
+const relatedHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 11,
+  fontWeight: 700,
+  color: "var(--ink-3)",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  marginBottom: 10,
+};
+
+const relatedCountStyle: React.CSSProperties = {
+  marginLeft: "auto",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "var(--accent)",
+  background: "var(--accent-soft)",
+  borderRadius: 999,
+  padding: "1px 8px",
+};
+
+const relatedEmptyStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--ink-4)",
+};
+
+const relatedItemStyle: React.CSSProperties = {
+  padding: 10,
+  background: "var(--bg-2)",
+  borderRadius: 8,
+};
+
+/** 两行截断（webkit line clamp） */
+const clamp2Style: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--ink-2)",
+  marginTop: 3,
+  lineHeight: 1.5,
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
 };
 
 // ─── 采购时间线视图样式（M4.2.5）──────────────────────────────
