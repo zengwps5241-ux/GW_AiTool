@@ -35,6 +35,7 @@ import type {
   StakeholderRoleType,
   StanceLevel,
   TalkScript,
+  TalkScriptInput,
   VisitRecord,
 } from "@/types";
 
@@ -310,6 +311,8 @@ export default function MarketingMapPage({ project }: Props) {
               setSubView("cards");
             }}
           />
+        ) : subView === "scripts" ? (
+          <TalkScriptsView projectId={project.id} scripts={scripts} cards={cards} onChanged={refresh} />
         ) : (
           <PlaceholderView subView={subView} />
         )}
@@ -2428,6 +2431,231 @@ function RelationEditModal({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
           <button onClick={onClose} style={kbGhostBtnStyle}>取消</button>
           <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>{saving ? "保存中…" : "添加"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 话术库管理（M4.2.10：按角色类型 × 场景组织 + Markdown 编辑，§5.2） ──
+// TalkScript：stakeholder_card_id（关联角色，可空）+ role_type + scenario + content（Markdown）
+// + source_customer_quote + is_template（跨客户通用模板）。分组：通用模板 / 5 角色类型 / 未分类。
+
+function TalkScriptsView({
+  projectId,
+  scripts,
+  cards,
+  onChanged,
+}: {
+  projectId: number;
+  scripts: TalkScript[];
+  cards: StakeholderCard[];
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [editor, setEditor] = useState<{ script: TalkScript | null } | null>(null);
+
+  const handleDelete = async (s: TalkScript) => {
+    if (!window.confirm(`确认删除话术${s.scenario ? `「${s.scenario}」` : ""}？`)) return;
+    try {
+      await api.deleteTalkScript(projectId, s.id);
+      toast.showToast("已删除", "success");
+      onChanged();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+    }
+  };
+
+  // 分组：通用模板（is_template）+ 5 角色类型 + 未分类
+  const groups: { key: string; label: string; list: TalkScript[] }[] = [
+    { key: "template", label: "🌐 通用模板（跨客户通用）", list: scripts.filter((s) => s.is_template) },
+    ...ROLE_TYPE_ORDER.map((rt) => ({
+      key: rt,
+      label: ROLE_TYPE_LABELS[rt],
+      list: scripts.filter((s) => !s.is_template && s.role_type === rt),
+    })),
+    { key: "none", label: "未分类", list: scripts.filter((s) => !s.is_template && !s.role_type) },
+  ].filter((g) => g.list.length > 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 960 }}>
+      {/* 顶部：标题 + 新增 */}
+      <Card style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+        <I.MessageText size={16} style={{ color: "var(--accent)" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "var(--serif)" }}>话术库</div>
+          <div style={{ fontSize: 11, color: "var(--ink-3)" }}>
+            按角色类型 × 场景组织，共 {scripts.length} 条 · 支持 Markdown 富文本 · 项目内团队共享
+          </div>
+        </div>
+        <button onClick={() => setEditor({ script: null })} style={primaryBtnStyle}>
+          <I.Plus size={14} /> 新增话术
+        </button>
+      </Card>
+
+      {scripts.length === 0 ? (
+        <Card style={{ padding: 40, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+          <I.MessageText size={32} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", marginBottom: 6 }}>尚无话术</div>
+          <div style={{ maxWidth: 380, margin: "0 auto", lineHeight: 1.7 }}>
+            点击「新增话术」沉淀针对角色 / 场景（初次拜访 / 方案汇报 / 技术交流 / 预算讨论等）的话术，或在对话中让 AI 基于角色卡生成。
+          </div>
+        </Card>
+      ) : (
+        groups.map((g) => (
+          <Card key={g.key} style={{ padding: 0, overflow: "hidden" }}>
+            <div style={kbCatHeaderStyle}>
+              <I.Folder size={14} style={{ color: "var(--ink-3)" }} />
+              <span style={{ fontWeight: 600, color: "var(--ink)", fontSize: 13 }}>{g.label}</span>
+              <Tag tone="neutral">{g.list.length}</Tag>
+            </div>
+            <div>
+              {g.list.map((s) => {
+                const card = s.stakeholder_card_id != null ? cards.find((c) => c.id === s.stakeholder_card_id) : null;
+                return (
+                  <div key={s.id} style={kbEntryStyle}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                      {s.scenario && <Tag tone="accent">{s.scenario}</Tag>}
+                      {card && <Tag tone="info">关联：{card.name}</Tag>}
+                      {s.source_customer_quote && <span title="源自客户原话" style={{ fontSize: 11, color: "var(--ink-4)" }}>📎 原话</span>}
+                      <div style={{ flex: 1 }} />
+                      <button onClick={() => setEditor({ script: s })} style={iconBtnStyle} title="编辑"><I.Edit size={13} /></button>
+                      <button onClick={() => handleDelete(s)} style={iconBtnStyle} title="删除"><I.Trash size={13} /></button>
+                    </div>
+                    <MarkdownView text={s.content} />
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ))
+      )}
+
+      {editor && (
+        <TalkScriptEditor
+          projectId={projectId}
+          script={editor.script}
+          cards={cards}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            onChanged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 话术编辑器（新建/编辑，Markdown 编辑 + 预览） */
+function TalkScriptEditor({
+  projectId,
+  script,
+  cards,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  script: TalkScript | null;
+  cards: StakeholderCard[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const isEdit = script != null;
+  const [cardId, setCardId] = useState<number | "">(script?.stakeholder_card_id ?? "");
+  const [roleType, setRoleType] = useState<StakeholderRoleType | "">(script?.role_type ?? "");
+  const [scenario, setScenario] = useState(script?.scenario ?? "");
+  const [content, setContent] = useState(script?.content ?? "");
+  const [quote, setQuote] = useState(script?.source_customer_quote ?? "");
+  const [isTemplate, setIsTemplate] = useState(script?.is_template ?? false);
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  const save = async () => {
+    if (!content.trim()) {
+      toast.showToast("话术内容不能为空", "error");
+      return;
+    }
+    setSaving(true);
+    const payload: TalkScriptInput = {
+      stakeholder_card_id: cardId === "" ? null : cardId,
+      role_type: roleType || null,
+      scenario: scenario.trim() || null,
+      content,
+      source_customer_quote: quote.trim() || null,
+      is_template: isTemplate,
+    };
+    try {
+      if (isEdit && script) {
+        await api.updateTalkScript(projectId, script.id, payload);
+      } else {
+        await api.createTalkScript(projectId, payload);
+      }
+      toast.showToast(isEdit ? "已更新话术" : "已新增话术", "success");
+      onSaved();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 640, maxHeight: "85vh", overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>{isEdit ? "编辑话术" : "新增话术"}</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle} title="关闭">✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          <label style={{ ...fieldLabelStyle, flex: "1 1 200px" }}>
+            <span style={miniLabelStyle}>场景（如：初次拜访 / 方案汇报）</span>
+            <input value={scenario} onChange={(e) => setScenario(e.target.value)} style={modalInputStyle} placeholder="方案汇报" />
+          </label>
+          <label style={{ ...fieldLabelStyle, flex: "1 1 150px" }}>
+            <span style={miniLabelStyle}>角色类型</span>
+            <select value={roleType} onChange={(e) => setRoleType(e.target.value as StakeholderRoleType | "")} style={selectStyle}>
+              <option value="">（通用）</option>
+              {ROLE_TYPE_ORDER.map((rt) => <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt]}</option>)}
+            </select>
+          </label>
+          <label style={{ ...fieldLabelStyle, flex: "1 1 180px" }}>
+            <span style={miniLabelStyle}>关联角色（可选）</span>
+            <select value={cardId} onChange={(e) => setCardId(e.target.value ? Number(e.target.value) : "")} style={selectStyle}>
+              <option value="">（不关联具体角色）</option>
+              {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.position ? ` · ${c.position}` : ""}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 12, color: "var(--ink-2)", cursor: "pointer" }}>
+          <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
+          标记为通用模板（跨客户通用，归入「通用模板」分组）
+        </label>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={miniLabelStyle}>话术内容（支持 Markdown）</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setPreview((p) => !p)} style={linkBtnStyle}>{preview ? "✎ 编辑" : "👁 预览"}</button>
+        </div>
+        {preview ? (
+          <div style={{ ...textareaStyle, minHeight: 200, overflow: "auto" }}>
+            {content.trim() ? <MarkdownView text={content} /> : <span style={{ color: "var(--ink-4)" }}>（无内容）</span>}
+          </div>
+        ) : (
+          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={10} placeholder="支持 Markdown：## 要点 / - 列表 / **强调**" style={{ ...textareaStyle, minHeight: 200 }} />
+        )}
+
+        <label style={{ ...fieldLabelStyle, marginTop: 12 }}>
+          <span style={miniLabelStyle}>源自客户原话（可选，记录话术依据）</span>
+          <textarea value={quote} onChange={(e) => setQuote(e.target.value)} rows={2} style={textareaStyle} />
+        </label>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={kbGhostBtnStyle}>取消</button>
+          <button onClick={save} disabled={saving} style={saveBtnStyle(saving)}>{saving ? "保存中…" : "保存"}</button>
         </div>
       </div>
     </div>

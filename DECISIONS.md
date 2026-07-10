@@ -332,6 +332,15 @@
 - **为何关系无编辑只有增删**：StakeholderRelation 业务语义轻（from/to/type/description），改类型等同于重建关系，UI 上「删旧+建新」比「编辑」更清晰，且后端 update relation 端点本就不在 M2.2 套件（只有 create/delete）。故 RelationEditModal 固定新建语义。
 - **理由**：全字段编辑器兑现「手动新增/编辑角色卡」规格（§2.4 line 335），compositeScore 后端算避免前后端重复公式；关系增删补齐 M4.2.8 图视图的编辑能力；hooks 顺序修复消除 M4.2.6 遗留的 delete-last-card 崩溃隐患（测试时删卡回 0 节点不再崩）。与 #35-#40 一致的工程范式。可校验性：真机 ASCII 全 CRUD（建卡 id=4 review_status=reviewed composite=6 grade=倾向我方 / 更新三维全 9→composite=9 grade=Champion 公式正确 / 关系 create id=2 / 删关系 204 / 删卡 204）→ **测后清理恢复 dev 库**（1 节点/0 边）；tsc -b 0 错 + vite build 过。（中文 curl body 仍受 Windows Git Bash 编码限制，前端 fetch UTF-8 不受影响，已用 ASCII 验证全链路含计算字段。）纯前端无后端改动 → fail 集不涉及前端必然未扩大。
 
+## 决策 #42：M4.2.10 话术库管理 — 角色类型分组 + Markdown 编辑 + CRUD（M4.2 收尾，§5.2）
+
+- **背景**：M4.2.10「话术库管理 | 按角色类型×场景组织，支持 Markdown 编辑」。后端 TalkScript（M2.2）= stakeholder_card_id（关联角色，可空）+ role_type + scenario + content（Text）+ source_customer_quote + is_template；create/update/delete/list 全套就绪。规格 §5.2「话术库（角色卡内子Tab）」要求按角色类型×场景组织 + 关联话术 + 同类型通用模板 + 手动增删改。M4.2.6 已在角色卡详情做了「话术子 Tab」（只读展示），M4.2.10 是**项目级独立话术库视图**（8 顶 Tab 之「话术库」），是话术的全局管理入口。
+- **选择 A — 分组：通用模板 + 5 角色类型 + 未分类**：is_template 的话术归「🌐 通用模板（跨客户通用）」组；非模板按 role_type 分入五类角色组（经济决策人/技术评估人/终端用户/教练支持者/采购财务）；无 role_type 且非模板归「未分类」。空组不渲染。每条话术卡显示 scenario Tag + 关联角色 Tag（stakeholder_card_id 命中）+ 📎原话标记（source_customer_quote）+ Markdown 内容 + 编辑/删除。「按角色类型×场景组织」= 组内每条带的 scenario Tag 即场景维度，组=角色类型维度，二维清晰。
+- **选择 B — 复用 Markdown 编辑器模式（同 M4.2.7 KB）**：TalkScriptEditor 弹窗 = 场景 input + 角色类型 select + 关联角色 select（cards 列表，可空）+ is_template checkbox + content Markdown（编辑/预览切换，复用 MarkdownView）+ source_customer_quote textarea。保存调 create/updateTalkScript。与 KB 编辑器一致的 Markdown 编辑/预览交互，零新组件。
+- **选择 C — 消费父级 scripts + onChanged 刷新（非自取）**：MarketingMapPage 父级 refresh() 已拉 cards+scripts（M4.2.1 起 CardsView 复用），TalkScriptsView 接收 `scripts` prop + `onChanged`（父级 refresh）——CRUD 后 onChanged 触发父级重拉，scripts 更新传入。**不自取 listTalkScripts**（避免与 KB/Relations 自取模式不同的双取；scripts 已在父级内存，复用最经济）。TalkScriptEditor 的关联角色 select 用父级 `cards` prop。
+- **为何角色卡子 Tab（M4.2.6）与本项目级视图（M4.2.10）并存**：M4.2.6 的话术子 Tab 是「选中某角色卡 → 看其定制话术 + 同类型模板」的**角色视角**（只读，按卡过滤）；M4.2.10 是「全项目话术库 → 按角色类型分组管理」的**全局视角**（CRUD）。两者数据同源（listTalkScripts），视角互补：浏览某角色时看子 Tab，管理全部话术时用顶 Tab。无重复造数据。
+- **理由**：分组兑现「角色类型×场景组织」；Markdown 编辑复用 M4.2.7 模式零新依赖；消费父级 scripts 避免双取。**M4.2 营销地图页面 10/10 全部完成**（M4.2.1-10）。与 #35-#41 一致的工程范式。可校验性：真机话术 CRUD（create id=1 scenario=demo role=technical_evaluator template=true / list 回读 / update scenario=demo-v2 / delete 204 / 恢复 0）全链路通；tsc -b 0 错 + vite build 过。（8 顶 Tab 现已全部落地，PlaceholderView 沦为不可达安全网，保留不删避免额外 churn。）纯前端无后端改动 → fail 集不涉及前端必然未扩大。
+
 
 
 
