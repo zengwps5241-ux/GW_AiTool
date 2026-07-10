@@ -267,6 +267,36 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 
 **回归测试**：test_draft_tools +5（business_map revision=2+previous / stakeholder update_draft_id 更新+previous+无新增第二张 / visit update_draft_id+未传字段保留 / wrong-state 拒绝 / not-found 拒绝）/ test_sessions_project_binding +3（brief 无草稿→None / 有草稿含节点名+revision / stream 传入 draft_brief），聚焦全过 33+22=55；test_business_map_api（11）+ test_reviews_api（11）既有 22 测零回归。**fail 集未扩大**（改动为纯增字段+新增分支，create/既有路径行为不变；全量本次未跑，以聚焦测试覆盖全部改动点 + 既有零回归确认）。前端 tsc -b + vite build 通过（71 模块，0 错误，构建 1.21s）。
 
+---
+
+## Phase 4：前端页面
+
+### M4.1.1–M4.1.5 业务地图页面（骨架 + L1-L4 树形 + 假设/现状/偏差视图）✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| M4.1.1 页面骨架 | ✅ | 2026-07-10 | BusinessMapPage 重写：项目上下文栏 + 层级统计 + 5 子视图 Tab + 加载/错误/空/未选项目状态；消费全局 selectedProject（决策#35） |
+| M4.1.2 L1-L4 树形 | ✅ | 2026-07-10 | 真实数据树（parent_id 父子）+ L1 横向支撑域分组 + 展开收起 + 右侧层级差异化详情面板 |
+| M4.1.3 假设地图视图 | ✅ | 2026-07-10 | map_type=hypothesis 过滤，置信度/来源/验证状态标签 |
+| M4.1.4 现状地图视图 | ✅ | 2026-07-10 | map_type=current 过滤，linked_hypothesis_id 可点击跳转假设节点 |
+| M4.1.5 偏差池视图 | ✅ | 2026-07-10 | verification_status=推翻 的 current 节点，假设 vs 现状对比 + 红色高亮 + 跳转节点 |
+
+**前置基础（数据契约 + API 接线）**：
+- **types/index.ts**：追加 BusinessMapObject/Input、BusinessMapPayload（L1-L4 层级差异化 camelCase 字段 + 索引签名）、FiveDimHealth/Score、OntologyExtraction、PreAnalysis/Input、BusinessMapVersion、FiveDimHealthOut。顶层字段 snake_case（对齐 BusinessMapObjectOut），payload 内部 camelCase（§5.2 规格契约，已用 test_business_map_api 的 `payload: {"coreActivities":...}` 与草稿 `draft_data.objects[].payload` 双重确认）。
+- **api/client.ts**：追加业务地图全套 API（list/get/create/update/delete objects、get/upsert pre-analysis、list/get/rollback versions、recompute/compute/set health）—— M2.1 后端早已就绪，前端本次接线，后续 M4.1.6-10 直接复用无需再改 client。
+- **App.tsx**：`<BusinessMapPage project={selectedProject} />`，复用 M1.3.9/M4.4.1 全局 Topbar ProjectSelector，不在页内重复项目选择器（决策#35）。
+
+**设计要点**：
+- **真实数据树**：`objects`（仅 reviewed 正式库）按 level + parent_id 构建父子关系；假设/现状视图按 `map_type` 过滤同一棵树；横向支撑域 = parent_id=null 的 L2（业务域/职能域/共性技术域）。详情面板按 `node.level` 渲染 payload 对应层级字段（L1 5要素、L2 8要素、L3 11要素+本体抽取、L4 9要素）+ 通用五维健康条形雷达。
+- **偏差池**：纯派生（verification_status=推翻 的 current 节点 + 其 linked_hypothesis 假设），无需额外 API；点击「查看节点」跳转现状视图并选中。
+- **空状态引导**：未选项目→引导用顶部选择器；假设/现状视图空→引导去对话页用 WF07/WF10 chip 生成草稿（衔接到已完成的 M3.x 全链路）。
+- **层级配色**：L1=accent/L2=info/L3=success/L4=warn，选中态用 `${color}`→`-soft` 派生软背景（复用主题既有 `--xxx-soft` 变量）。
+
+**未覆盖（后续任务）**：M4.1.6 前置分析（查看+编辑）、M4.1.7 五维健康（评分表+重算+手动覆盖）、M4.1.8 节点 CRUD、M4.1.9 版本管理、M4.1.10 关联证据。本次这两个视图以 PlaceholderView 占位（含任务编号提示），不污染数据流。
+
+**回归测试**：纯前端任务，无后端改动 → 不跑 pytest。前端 tsc -b 0 错误 + vite build 通过（71 模块，构建 1.25s）。fail 集不涉及前端，必然未扩大。
+
+
 
 
 

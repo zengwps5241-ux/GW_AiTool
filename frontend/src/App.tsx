@@ -205,8 +205,9 @@ export default function App() {
       : ["对话"];
 
   const renderPage = () => {
-    // 🧪 PROTOTYPE — 新增 3 个业务页面
-    if (view === "businessMap") return <BusinessMapPage />;
+    // 业务地图页面（M4.1）：消费全局 selectedProject
+    if (view === "businessMap")
+      return <BusinessMapPage project={selectedProject} />;
     if (view === "marketingMap") return <MarketingMapPage />;
     if (view === "visitRecords") return <VisitRecordsPage />;
 

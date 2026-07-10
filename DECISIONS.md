@@ -265,5 +265,15 @@
 - **为何 update_draft_id 可选**：保留 M3.1 create 行为完全不变（向后兼容，既有测试零改动）；AI 据 brief 注入的提示在"更新"语义时带 id，"首次生成"不带。update_draft_id 指向不存在/非本项目/非 draft 态 → `is_error` 回写 Claude 自我修正，不落库不推送（与既有校验一致）。
 - **理由**：四层均在既有「草稿工具进程内 MCP（#29）+ run_state 回放（#30）+ 整图草稿单元（#18）」地基上扩展，零新表（仅加列）、零新协议。business_map 是 diff 主战场（整图草稿单元语义最清晰、规格 §7.1.7 明确"增量更新草稿"）；stakeholder/visit 的 previous 走事件级快照避免侵入实体表。可校验性：test_draft_tools +5（revision/diff/update_draft_id 各分支含 wrong-state/not-found）/ test_sessions_project_binding +3（brief 无草稿/有草稿/stream 传入）聚焦全过，test_business_map_api/test_reviews_api 既有 22 测零回归；前端 tsc -b + vite build（71 模块 0 错）。改动为纯增字段+新增分支，create/既有路径行为不变 → fail 集未扩大。
 
+## 决策 #35：M4.1 业务地图页面 — 复用全局项目选择器 + 子任务打包（M4.1.1-5 / §2.3 §5.2）
+
+- **背景**：进入 Phase 4 前端页面。M4.1 要求「替换 BusinessMapPage 原型」，原型自带 MOCK 项目选择器 + MOCK 数据。需抉择：① 项目选择器放页内还是复用全局；② 10 个子任务（M4.1.1 骨架→M4.1.10 证据）如何切分提交。
+- **选择 A — 复用全局 Topbar ProjectSelector**：BusinessMapPage 接收 `project: Project | null` prop（App.tsx 传入 `selectedProject`），不在页内重复选择器。理由：M1.3.9/M4.4.1 已确立「Topbar ProjectSelector 驱动全局 selectedProject，业务地图/营销地图/拜访记录/对话共享」的模式（决策#32 同源）；页内再放一个选择器会造成双真源、状态不同步。页内仅显示项目上下文（名称+客户+my_role）只读栏 + 统计。
+- **选择 B — 数据契约确认**：顶层对象字段 snake_case（`map_type`/`verification_status`/`parent_id`/`linked_hypothesis_id`，对齐后端 BusinessMapObjectOut），payload 内部 camelCase（`coreActivities`/`fiveDimHealth`/`domainType`，§5.2 规格 + test_business_map_api 的 `payload:{"coreActivities":...}` + 草稿 `draft_data.objects[].payload` 双重确认）。types 用 BusinessMapPayload 单一接口覆盖 L1-L4 全部字段（可选 + 索引签名），前端按 `node.level` 渲染对应字段，不为每层建独立类型（payload 本是自由 JSONB，schema 层都不约束）。
+- **选择 C — 子任务打包 M4.1.1-5 一个提交**：原型 1194 行一次性重写为真实数据，骨架（M4.1.1）的「主内容」即 L1-L4 树（M4.1.2），假设/现状（M4.1.3/4）只是同一棵树的 map_type 过滤，偏差池（M4.1.5）是推翻节点的纯派生——四者共用一次 list objects 调用 + 一套树渲染，强拆会让骨架提交只剩空占位、随即被下一提交覆盖，浪费且不可独立回滚验证。故打包为「骨架+树+假设/现状/偏差」一个连贯提交；前置分析（M4.1.6，需 GET+编辑表单）、五维健康（M4.1.7，需评分表+重算+覆盖）、节点 CRUD（M4.1.8）、版本管理（M4.1.9）、关联证据（M4.1.10）各为独立关注点，分别独立提交。前置分析/五维健康本次以 PlaceholderView（含任务编号）占位，不污染数据流。
+- **为何一次性把 client 全套 API 都接上**：M2.1 后端早已就绪（objects/pre-analysis/versions/health 全套），本次顺手接全，后续 M4.1.6-10 直接复用、无需再改 client.ts，减少跨提交冲突。
+- **理由**：复用全局选择器避免双真源（与 #32 一致）；snake_case/camelCase 分层是后端 schema 既定事实，前端类型如实映射；子任务打包遵循「一个连贯可独立验证的功能单元一个提交」，骨架不可无树独立。可校验性：纯前端、无后端改动 → tsc -b 0 错 + vite build（71 模块 1.25s）；fail 集不涉及前端，必然未扩大。
+
+
 
 

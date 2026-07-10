@@ -640,3 +640,169 @@ export interface ProjectDepartmentAccess {
   granted_by_name: string | null;
   granted_at: string | null;
 }
+
+// ─── 业务地图（M4.1 / §5.2）──────────────────────────────────
+// 顶层对象字段为 snake_case（与后端 BusinessMapObjectOut 对齐），
+// payload 内部为 camelCase（§5.2 规格契约，由 Skill/前端约定）。
+
+/** 五维健康单维评分 */
+export interface FiveDimScore {
+  score: number; // 1-5
+  desc: string;
+}
+
+/** 五维健康（5 个维度，键名含中文；保留索引签名兼容宽松数据） */
+export interface FiveDimHealth {
+  L5_数字意识?: FiveDimScore;
+  L4_数字神经?: FiveDimScore;
+  L3_数字器官?: FiveDimScore;
+  L2_数字血液?: FiveDimScore;
+  L1_数字骨架?: FiveDimScore;
+  [key: string]: FiveDimScore | undefined;
+}
+
+/** L3 业务本体抽取（先本体后 AI） */
+export interface OntologyExtraction {
+  entities?: string;
+  relations?: string;
+  rules?: string;
+  actions?: string;
+}
+
+/** 业务地图节点 payload（层级差异化，camelCase，§5.2） */
+export interface BusinessMapPayload {
+  // 通用
+  confidenceLevel?: string; // 高 / 中 / 低
+  sourceType?: string; // 搜索采集 / 用户上传 / 行业模板 / 模型知识
+  sourceRef?: string[];
+  evidenceIds?: string[];
+  generatedByAI?: boolean;
+  // L1（5 要素 + 五维健康）
+  coreActivities?: string;
+  capabilityChain?: string;
+  itSystems?: string;
+  organization?: string;
+  fiveDimHealth?: FiveDimHealth;
+  // L2（8 要素 + 五维健康）
+  domainType?: string; // 业务域 / 职能域 / 共性技术域
+  domainGoal?: string;
+  valueStream?: string;
+  subScenarios?: string;
+  coreCapabilities?: string;
+  supportITSystems?: string;
+  keyOrganizations?: string;
+  keyDataEntities?: string;
+  disconnectionPoints?: string;
+  // L3（11 要素 + 本体抽取 + 五维健康）
+  businessObjective?: string;
+  businessProcess?: string;
+  keyActivities?: string;
+  capabilityUnits?: string;
+  dataFlow?: string;
+  positions?: string;
+  supportSystems?: string;
+  painPoints?: string;
+  ontologyExtraction?: OntologyExtraction;
+  aiOpportunity?: string;
+  // L4（9 要素）
+  l3KeyActivity?: string;
+  capabilityUnitName?: string;
+  capabilityType?: string;
+  capabilityDetail?: string;
+  masteryLevel?: string;
+  associatedPosition?: string;
+  currentRate?: string;
+  talentGap?: string;
+  [key: string]: unknown;
+}
+
+export type BusinessMapLevel = "L1" | "L2" | "L3" | "L4";
+export type BusinessMapType = "hypothesis" | "current";
+export type BusinessMapReviewStatus =
+  | "draft"
+  | "pending_review"
+  | "reviewed"
+  | "rejected";
+
+/** 业务地图节点（输出） */
+export interface BusinessMapObject {
+  id: number;
+  project_id: number;
+  level: BusinessMapLevel;
+  name: string;
+  parent_id: number | null;
+  map_type: BusinessMapType;
+  verification_status: string; // 未验证 / 成立 / 部分成立 / 推翻 / 待补充
+  linked_hypothesis_id: number | null;
+  payload: BusinessMapPayload | null;
+  review_status: BusinessMapReviewStatus;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  generated_by_ai: boolean;
+  created_by: number;
+  created_by_name: string | null;
+  is_public: boolean;
+  shared_with: number[] | null;
+  sensitivity_level: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 业务地图节点（创建/更新入参） */
+export interface BusinessMapObjectInput {
+  level: BusinessMapLevel;
+  name: string;
+  parent_id?: number | null;
+  map_type?: BusinessMapType;
+  verification_status?: string;
+  linked_hypothesis_id?: number | null;
+  payload?: BusinessMapPayload | null;
+  review_status?: BusinessMapReviewStatus;
+  generated_by_ai?: boolean;
+  is_public?: boolean;
+  shared_with?: number[] | null;
+  sensitivity_level?: string;
+}
+
+/** 前置分析（项目级，一份） */
+export interface PreAnalysis {
+  id: number;
+  project_id: number;
+  industry_value_chain: string | null;
+  customer_position: string | null;
+  industry_trends: string | null;
+  strategic_positioning: string | null;
+  digitalization_drivers: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PreAnalysisInput {
+  industry_value_chain?: string | null;
+  customer_position?: string | null;
+  industry_trends?: string | null;
+  strategic_positioning?: string | null;
+  digitalization_drivers?: string | null;
+}
+
+/** 业务地图版本快照 */
+export interface BusinessMapVersion {
+  id: number;
+  project_id: number;
+  version_number: number;
+  snapshot_data: Record<string, unknown> | null;
+  change_description: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  created_at: string | null;
+}
+
+/** 五维健康计算结果（单节点） */
+export interface FiveDimHealthOut {
+  object_id: number;
+  five_dim_health: FiveDimHealth;
+  source: "auto" | "manual" | string;
+}

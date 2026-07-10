@@ -2,6 +2,9 @@
 import type {
   Agent,
   AgentCommand,
+  BusinessMapObject,
+  BusinessMapObjectInput,
+  BusinessMapVersion,
   Category,
   ChatModelSelection,
   ChatEvent,
@@ -13,6 +16,7 @@ import type {
   FeedbackIssueDetail,
   FeedbackIssueList,
   FileNode,
+  FiveDimHealthOut,
   LoginWhitelistConfig,
   LoginWhitelistDepartment,
   LoginWhitelistDepartmentSearchItem,
@@ -24,6 +28,8 @@ import type {
   OrganizationInput,
   OrganizationTreeNode,
   Plugin,
+  PreAnalysis,
+  PreAnalysisInput,
   Project,
   ProjectDepartmentAccess,
   ProjectInput,
@@ -844,6 +850,94 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ entity_type: entityType, draft_id: draftId }),
     }),
+
+  // ─── 业务地图（M4.1 / M2.1 后端就绪）─────────────────────────
+  listBusinessMapObjects: (
+    projectId: number,
+    params?: {
+      level?: string;
+      map_type?: string;
+      review_status?: string;
+      include_drafts?: boolean;
+    },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.level) qs.set("level", params.level);
+    if (params?.map_type) qs.set("map_type", params.map_type);
+    if (params?.review_status) qs.set("review_status", params.review_status);
+    if (params?.include_drafts) qs.set("include_drafts", "true");
+    const query = qs.toString();
+    return request<BusinessMapObject[]>(
+      `/api/projects/${projectId}/business-map/objects${query ? "?" + query : ""}`,
+    );
+  },
+  getBusinessMapObject: (projectId: number, objectId: number) =>
+    request<BusinessMapObject>(
+      `/api/projects/${projectId}/business-map/objects/${objectId}`,
+    ),
+  createBusinessMapObject: (projectId: number, data: BusinessMapObjectInput) =>
+    request<BusinessMapObject>(
+      `/api/projects/${projectId}/business-map/objects`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  updateBusinessMapObject: (
+    projectId: number,
+    objectId: number,
+    data: Partial<BusinessMapObjectInput>,
+  ) =>
+    request<BusinessMapObject>(
+      `/api/projects/${projectId}/business-map/objects/${objectId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+  deleteBusinessMapObject: (projectId: number, objectId: number) =>
+    request<void>(
+      `/api/projects/${projectId}/business-map/objects/${objectId}`,
+      { method: "DELETE" },
+    ),
+
+  getPreAnalysis: (projectId: number) =>
+    request<PreAnalysis | null>(
+      `/api/projects/${projectId}/business-map/pre-analysis`,
+    ),
+  upsertPreAnalysis: (projectId: number, data: PreAnalysisInput) =>
+    request<PreAnalysis>(
+      `/api/projects/${projectId}/business-map/pre-analysis`,
+      { method: "PUT", body: JSON.stringify(data) },
+    ),
+
+  listBusinessMapVersions: (projectId: number) =>
+    request<BusinessMapVersion[]>(
+      `/api/projects/${projectId}/business-map/versions`,
+    ),
+  getBusinessMapVersion: (projectId: number, versionId: number) =>
+    request<BusinessMapVersion>(
+      `/api/projects/${projectId}/business-map/versions/${versionId}`,
+    ),
+  rollbackBusinessMapVersion: (projectId: number, versionId: number) =>
+    request<BusinessMapVersion>(
+      `/api/projects/${projectId}/business-map/versions/${versionId}/rollback`,
+      { method: "POST" },
+    ),
+
+  recomputeBusinessMapHealth: (projectId: number) =>
+    request<FiveDimHealthOut[]>(
+      `/api/projects/${projectId}/business-map/health/recompute`,
+      { method: "POST" },
+    ),
+  computeBusinessMapNodeHealth: (projectId: number, objectId: number) =>
+    request<FiveDimHealthOut>(
+      `/api/projects/${projectId}/business-map/objects/${objectId}/health`,
+      { method: "POST" },
+    ),
+  setBusinessMapNodeHealth: (
+    projectId: number,
+    objectId: number,
+    fiveDimHealth: Record<string, unknown>,
+  ) =>
+    request<FiveDimHealthOut>(
+      `/api/projects/${projectId}/business-map/objects/${objectId}/health`,
+      { method: "PUT", body: JSON.stringify(fiveDimHealth) },
+    ),
 };
 
 /**
