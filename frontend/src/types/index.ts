@@ -1176,3 +1176,19 @@ export interface EvidenceSourceInput {
   implied_to_stance?: string | null;
   review_status?: string;
 }
+
+/** 待审批项（统一形态，跨模块聚合；对齐 PendingReviewOut，M2.4 / M4.4.4） */
+export interface PendingReviewItem {
+  entity_type: string; // business_map_object / stakeholder_card / visit_record / evidence_source
+  entity_id: number;
+  project_id: number;
+  entity_label: string; // 实体中文名（业务地图节点/角色卡/拜访记录/证据）
+  name: string | null; // 展示名（节点名/角色名/摘要/证据内容，截断）
+  review_status: string;
+  submitted_by: number | null;
+  submitted_by_name: string | null;
+  submitted_at: string | null;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+}

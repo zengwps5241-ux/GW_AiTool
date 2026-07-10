@@ -18,6 +18,7 @@ import type {
   ChatEvent,
   ModelSettings,
   Project,
+  PendingReviewItem,
   Session,
   TeamSpace,
   ThinkingLevelValue,
@@ -2179,6 +2180,11 @@ export default function ChatWorkspace({
             </Tag>
           )}
         </div>
+
+        {/* 待审核提醒 Banner（项目 Owner 可见，M4.4.4：副手采纳后进入待审核） */}
+        {selectedProject?.my_role === "owner" && selectedProject.id != null && (
+          <PendingReviewBanner projectId={selectedProject.id} />
+        )}
 
         {/* 消息流 */}
         <div ref={scrollRef} style={{ flex: 1, overflow: "auto" }}>
@@ -5402,4 +5408,160 @@ function PreviewError({
       </button>
     </div>
   );
+}
+
+// ─── 待审核提醒 Banner（M4.4.4：项目 Owner 在对话页查看/处置副手提交的待审核项）──
+
+function PendingReviewBanner({ projectId }: { projectId: number }) {
+  const { showToast } = useToast();
+  const [items, setItems] = useState<PendingReviewItem[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const [acting, setActing] = useState<string | null>(null); // 进行中的 `${entity_type}:${entity_id}`
+
+  const refresh = useCallback(async () => {
+    try {
+      setItems(await api.listPendingReviews(projectId));
+    } catch {
+      // 静默：Banner 不阻塞对话主流程
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // 无待审核项 → 不渲染
+  if (items.length === 0) return null;
+
+  const act = async (item: PendingReviewItem, approve: boolean) => {
+    const key = `${item.entity_type}:${item.entity_id}`;
+    setActing(key);
+    try {
+      if (approve) {
+        await api.approveReview(projectId, item.entity_type, item.entity_id);
+        showToast(`已通过：${item.entity_label}`, "success");
+      } else {
+        await api.rejectReview(projectId, item.entity_type, item.entity_id);
+        showToast(`已驳回：${item.entity_label}`, "info");
+      }
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "操作失败", "error");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  return (
+    <div style={pendingBannerWrapStyle}>
+      <div
+        onClick={() => setExpanded((v) => !v)}
+        style={pendingBannerBarStyle}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-2)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "var(--warn-soft)"; }}
+      >
+        <I.CircleAlert size={14} style={{ color: "var(--warn)", flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: "var(--ink-2)" }}>
+          本项目有 <b style={{ color: "var(--warn)" }}>{items.length}</b> 项待审核（副手提交，点击{expanded ? "收起" : "处置"}）
+        </span>
+        <span style={{ flex: 1 }} />
+        <I.ChevronDown
+          size={13}
+          style={{
+            color: "var(--ink-3)",
+            transform: expanded ? "rotate(180deg)" : "none",
+            transition: "transform 200ms",
+          }}
+        />
+      </div>
+      {expanded && (
+        <div style={pendingBannerListStyle}>
+          {items.map((it) => {
+            const key = `${it.entity_type}:${it.entity_id}`;
+            const busy = acting === key;
+            return (
+              <div key={key} style={pendingItemStyle}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "var(--ink-2)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: 10, background: "var(--bg-3)", color: "var(--ink-3)", flexShrink: 0 }}>
+                      {it.entity_label}
+                    </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.name || "（无标题）"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--ink-4)", marginTop: 2 }}>
+                    {it.submitted_by_name ?? "未知"} 提交{it.submitted_at ? ` · ${it.submitted_at.slice(0, 10)}` : ""}
+                  </div>
+                </div>
+                <button
+                  onClick={() => act(it, true)}
+                  disabled={busy}
+                  style={pendingApproveBtnStyle(busy)}
+                >
+                  通过
+                </button>
+                <button
+                  onClick={() => act(it, false)}
+                  disabled={busy}
+                  style={pendingRejectBtnStyle(busy)}
+                >
+                  驳回
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const pendingBannerWrapStyle: CSSProperties = {
+  borderBottom: "1px solid var(--line)",
+  flexShrink: 0,
+};
+
+const pendingBannerBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 20px",
+  background: "var(--warn-soft)",
+  cursor: "pointer",
+  transition: "background 120ms",
+};
+
+const pendingBannerListStyle: CSSProperties = {
+  padding: "8px 20px 10px",
+  background: "var(--bg)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const pendingItemStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 10px",
+  background: "var(--surface)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+};
+
+function pendingApproveBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    padding: "4px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+    border: "none", borderRadius: 6, background: "var(--success)", color: "#fff",
+    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, flexShrink: 0,
+  };
+}
+
+function pendingRejectBtnStyle(disabled: boolean): CSSProperties {
+  return {
+    padding: "4px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+    border: "1px solid var(--line)", borderRadius: 6, background: "transparent", color: "var(--ink-2)",
+    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, flexShrink: 0,
+  };
 }

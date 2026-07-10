@@ -14,6 +14,7 @@ import type {
   EvidenceSourceInput,
   Customer,
   CustomerInput,
+  PendingReviewItem,
   FeedbackIssueCreated,
   FeedbackIssueDetail,
   FeedbackIssueList,
@@ -867,6 +868,41 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ entity_type: entityType, draft_id: draftId }),
     }),
+
+  // ─── 待审批列表 + Owner 审批（M2.4 / M4.4.4 对话 Banner）─────────
+  /** 待审批列表（跨模块聚合 pending_review，§3.4） */
+  listPendingReviews: (projectId: number, entityType?: string) => {
+    const qs = new URLSearchParams();
+    if (entityType) qs.set("entity_type", entityType);
+    const query = qs.toString();
+    return request<PendingReviewItem[]>(
+      `/api/projects/${projectId}/pending-reviews${query ? "?" + query : ""}`,
+    );
+  },
+  /** Owner 通过待审批项（§7.3 发布） */
+  approveReview: (
+    projectId: number,
+    entityType: string,
+    entityId: number,
+  ) =>
+    request<PendingReviewItem>(
+      `/api/projects/${projectId}/reviews/${entityType}/${entityId}/approve`,
+      { method: "POST" },
+    ),
+  /** Owner 驳回待审批项（§3.4 退回，可选意见） */
+  rejectReview: (
+    projectId: number,
+    entityType: string,
+    entityId: number,
+    comment?: string,
+  ) =>
+    request<PendingReviewItem>(
+      `/api/projects/${projectId}/reviews/${entityType}/${entityId}/reject`,
+      {
+        method: "POST",
+        body: JSON.stringify(comment != null ? { comment } : {}),
+      },
+    ),
 
   // ─── 业务地图（M4.1 / M2.1 后端就绪）─────────────────────────
   listBusinessMapObjects: (
