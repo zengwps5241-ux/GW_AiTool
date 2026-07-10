@@ -329,6 +329,18 @@ M1.1 认证体系重构 → M1.2 组织架构 → M1.3 客户与项目模型 →
 **设计要点**：通用字段（名称/父节点/地图类型/验证状态/关联假设/置信度/来源）走表单控件；payload 层级差异化字段太多不做逐字段表单，提供「高级 JSON」入口给高级用户（AI 产出仍是 payload 主来源）。父节点选项按 PARENT_LEVEL 映射动态生成（L2→L1 节点含「横向支撑域」无父项；L1 顶级无父）。create 默认 hypothesis/未验证；current 类型才显示关联假设选择。复用 M2.1 objects CRUD API（早已就绪）。
 **回归**：纯前端，tsc -b 0 错 + vite build 通过（1.34s）。
 
+### M4.1.9 版本管理（列表 + 查看快照 + 回滚）✅ 已完成（commit 本会话）
+
+| 任务 | 状态 | 完成时间 | 备注 |
+|------|------|---------|------|
+| 版本列表 | ✅ | 2026-07-10 | 新增「版本管理」Tab：VersionView 列出版本（vN + 描述 + 时间/作者 + 对象计数 L1-L4），listBusinessMapVersions |
+| 历史版本查看 | ✅ | 2026-07-10 | SnapshotModal：按 L1-L4 分组展示 snapshot_data.objects 节点名 + 地图类型/验证状态 |
+| 回滚操作 | ✅ | 2026-07-10 | ConfirmDialog 确认 → rollbackBusinessMapVersion（仅 owner/admin；canRollback=my_role∈{owner,admin}）→ onChanged 刷新 objects + 版本列表 |
+
+**设计要点**：snapshot_data 结构 = `{objects:[{level,name,map_type,verification_status,...}]}`（后端 _snapshot_reviewed_objects + 采纳/回滚均此结构，已确认）。回滚后端 require_project_owner（owner 或 admin），前端按 my_role 控制「回滚」按钮显隐，非授权角色右侧说明栏提示「无回滚权限」。回滚仅替换 reviewed 正式数据（§7.4），后端自动留存审计快照（可再回滚回来）。复用 M2.1.8 版本 API。
+**回归**：纯前端，tsc -b 0 错 + vite build 通过（1.65s）。
+
+
 
 
 

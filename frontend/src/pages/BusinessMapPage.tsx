@@ -12,6 +12,7 @@ import type {
   BusinessMapObject,
   BusinessMapPayload,
   BusinessMapType,
+  BusinessMapVersion,
   FiveDimHealth,
   PreAnalysis,
   PreAnalysisInput,
@@ -20,7 +21,7 @@ import type {
 
 // ─── 常量 ─────────────────────────────────────────────────────
 
-type SubView = "hypothesis" | "current" | "deviation" | "preanalysis" | "health";
+type SubView = "hypothesis" | "current" | "deviation" | "preanalysis" | "health" | "version";
 
 /** 五维健康维度展示顺序（规格 §5.2，键名含中文） */
 const DIM_ORDER: { key: keyof FiveDimHealth; label: string }[] = [
@@ -44,6 +45,7 @@ const SUBVIEWS: { key: SubView; label: string; icon: keyof typeof I }[] = [
   { key: "deviation", label: "偏差池", icon: "AlertTriangle" },
   { key: "preanalysis", label: "前置分析", icon: "Search" },
   { key: "health", label: "五维健康", icon: "Activity" },
+  { key: "version", label: "版本管理", icon: "Database" },
 ];
 
 // 已结案的验证状态（成立/部分成立=已证实；推翻=已证伪）
@@ -331,6 +333,12 @@ export default function BusinessMapPage({ project }: Props) {
               setSubView(node.map_type === "current" ? "current" : "hypothesis");
             }}
           />
+        ) : subView === "version" ? (
+          <VersionView
+            projectId={project.id}
+            canRollback={project.my_role === "owner" || project.my_role === "admin"}
+            onChanged={refresh}
+          />
         ) : loading ? (
           <Card style={{ flex: 1, padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
@@ -483,6 +491,210 @@ export default function BusinessMapPage({ project }: Props) {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+// ─── 版本管理（M4.1.9：列表 + 查看快照 + 回滚） ───────────────
+
+interface SnapshotObjectSpec {
+  level?: string;
+  name?: string;
+  map_type?: string;
+  parent_id?: number | null;
+  verification_status?: string;
+}
+
+function VersionView({
+  projectId,
+  canRollback,
+  onChanged,
+}: {
+  projectId: number;
+  canRollback: boolean;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [versions, setVersions] = useState<BusinessMapVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewing, setViewing] = useState<BusinessMapVersion | null>(null);
+  const [rollbackTarget, setRollbackTarget] = useState<BusinessMapVersion | null>(null);
+  const [rolling, setRolling] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setVersions(await api.listBusinessMapVersions(projectId));
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "加载版本失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const doRollback = async () => {
+    if (!rollbackTarget) return;
+    const target = rollbackTarget;
+    setRollbackTarget(null);
+    setRolling(true);
+    try {
+      await api.rollbackBusinessMapVersion(projectId, target.id);
+      toast.showToast(`已回滚到版本 #${target.version_number}`, "success");
+      onChanged();
+      refresh();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "回滚失败（仅负责人/管理员可操作）", "error");
+    } finally {
+      setRolling(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card style={{ flex: 1, padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
+          <Spinner size={16} /> 加载版本…
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card style={{ flex: 1, padding: 20, overflow: "auto" }}>
+        <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)", marginBottom: 4 }}>版本管理</div>
+        <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 16 }}>
+          每次采纳业务地图草稿会自动生成版本快照（M2.1.8）；回滚仅替换 reviewed 正式数据，不影响草稿。
+        </div>
+        {versions.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+            <I.Database size={28} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
+            暂无版本快照。在对话中生成业务地图草稿（WF07）并采纳后，将自动生成首个版本。
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {versions.map((v) => {
+              const objs = (v.snapshot_data?.objects as SnapshotObjectSpec[] | undefined) ?? [];
+              return (
+                <div key={v.id} style={{ padding: 14, border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ padding: "2px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, background: "var(--accent-soft)", color: "var(--accent)" }}>
+                      v{v.version_number}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink-2)", flex: 1 }}>{v.change_description}</span>
+                    <span style={{ fontSize: 11, color: "var(--ink-4)" }}>
+                      {v.created_at?.slice(0, 16).replace("T", " ")}
+                      {v.created_by_name ? ` · ${v.created_by_name}` : ""}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, color: "var(--ink-3)" }}>
+                      {objs.length > 0 ? `含 ${objs.length} 个对象（L1:${objs.filter((o) => o.level === "L1").length} / L2:${objs.filter((o) => o.level === "L2").length} / L3:${objs.filter((o) => o.level === "L3").length} / L4:${objs.filter((o) => o.level === "L4").length}）` : "空快照"}
+                    </span>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setViewing(v)} style={linkBtnStyle}>查看快照</button>
+                      {canRollback && (
+                        <button
+                          onClick={() => setRollbackTarget(v)}
+                          disabled={rolling}
+                          style={{ ...linkBtnStyle, color: "var(--warn)" }}
+                        >
+                          回滚到此版本
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ width: 300, padding: 20, flexShrink: 0, overflow: "auto" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", marginBottom: 12 }}>
+          📖 版本说明
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 12, color: "var(--ink-2)", lineHeight: 1.6 }}>
+          <div><b>版本生成</b>：每次采纳业务地图草稿自动生成一个版本快照（含当时全部 reviewed 对象）。</div>
+          <div><b>回滚</b>：把当前正式数据替换为目标版本内容；回滚前会先留存一份审计快照（可再次回滚回来）。仅<b>负责人/管理员</b>可操作。</div>
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, color: "var(--ink-3)" }}>
+            回滚仅影响 reviewed 正式对象，草稿区与 pending_review 数据不受影响（§7.4）。
+          </div>
+          {!canRollback && (
+            <div style={{ padding: 8, background: "var(--warn-soft)", borderRadius: 6, fontSize: 11, color: "var(--warn)" }}>
+              当前角色无回滚权限（需负责人或管理员）。
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {viewing && <SnapshotModal version={viewing} onClose={() => setViewing(null)} />}
+      <ConfirmDialog
+        open={rollbackTarget != null}
+        title="回滚版本"
+        message={rollbackTarget ? `确认回滚到版本 #${rollbackTarget.version_number}？当前正式数据将被替换（会先留存审计快照）。` : ""}
+        confirmText="确认回滚"
+        variant="danger"
+        onConfirm={doRollback}
+        onCancel={() => setRollbackTarget(null)}
+      />
+    </>
+  );
+}
+
+/** 历史版本快照查看弹窗 */
+function SnapshotModal({ version, onClose }: { version: BusinessMapVersion; onClose: () => void }) {
+  const objs = (version.snapshot_data?.objects as SnapshotObjectSpec[] | undefined) ?? [];
+  const grouped: Record<string, SnapshotObjectSpec[]> = { L1: [], L2: [], L3: [], L4: [] };
+  for (const o of objs) {
+    const lv = o.level && grouped[o.level] ? o.level : "L1";
+    grouped[lv].push(o);
+  }
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 520, maxHeight: "80vh", overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
+            版本 #{version.version_number} 快照
+            <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 400, marginLeft: 8 }}>
+              {version.created_at?.slice(0, 16).replace("T", " ")}
+            </span>
+          </div>
+          <button onClick={onClose} style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)" }}>
+            <I.X size={16} />
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 12 }}>{version.change_description}</div>
+        {objs.length === 0 ? (
+          <div style={{ color: "var(--ink-3)", fontSize: 13, textAlign: "center", padding: 20 }}>该版本为空快照。</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {LEVELS.map((lv) =>
+              grouped[lv].length > 0 ? (
+                <div key={lv}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: LEVEL_COLOR[lv], marginBottom: 6 }}>{lv}（{grouped[lv].length}）</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {grouped[lv].map((o, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--ink-2)" }}>
+                        <span style={{ flex: 1 }}>{o.name || "未命名"}</span>
+                        {o.map_type === "current" && <Tag tone="info">现状</Tag>}
+                        {o.verification_status && o.verification_status !== "未验证" && (
+                          <span style={{ fontSize: 10, color: statusColor(o.verification_status) }}>{o.verification_status}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
