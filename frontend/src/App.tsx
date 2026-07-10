@@ -218,7 +218,8 @@ export default function App() {
       );
     if (view === "marketingMap")
       return <MarketingMapPage project={selectedProject} />;
-    if (view === "visitRecords") return <VisitRecordsPage />;
+    if (view === "visitRecords")
+      return <VisitRecordsPage project={selectedProject} />;
 
     // 用户审批页面（管理员）
     if (view === "userApproval" && auth.me.role !== "user") return <UserApprovalPage />;
