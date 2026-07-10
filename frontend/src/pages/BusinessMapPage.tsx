@@ -5,11 +5,13 @@
 // + M4.1.5 偏差池（前置分析/五维健康/节点CRUD/版本/证据见后续任务）。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
-import { Btn, Card, Spinner, Tag, TextArea, useToast } from "@/components/ui";
+import { Btn, Card, ConfirmDialog, Input, Spinner, Tag, TextArea, useToast } from "@/components/ui";
 import { I } from "@/icons";
 import type {
+  BusinessMapLevel,
   BusinessMapObject,
   BusinessMapPayload,
+  BusinessMapType,
   FiveDimHealth,
   PreAnalysis,
   PreAnalysisInput,
@@ -133,6 +135,24 @@ export default function BusinessMapPage({ project }: Props) {
     () => objects.find((o) => o.id === selectedId) ?? null,
     [objects, selectedId],
   );
+
+  // 节点 CRUD（M4.1.8）：编辑/新增弹窗 + 删除确认
+  const [nodeEdit, setNodeEdit] = useState<{ mode: "create" | "edit"; node?: BusinessMapObject } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BusinessMapObject | null>(null);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || projectId == null) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      await api.deleteBusinessMapObject(projectId, target.id);
+      if (selectedId === target.id) setSelectedId(null);
+      toast.showToast("节点已删除", "success");
+      refresh();
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "删除失败", "error");
+    }
+  };
 
   // ─── 派生：统计栏 ───────────────────────────────────────────
   const stats = useMemo(() => {
@@ -330,6 +350,14 @@ export default function BusinessMapPage({ project }: Props) {
           <>
             {/* 左侧：L1-L4 树形 */}
             <Card style={{ flex: 1, padding: 16, overflow: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)" }}>
+                  {subView === "current" ? "现状地图" : "假设地图"}
+                </div>
+                <Btn size="sm" variant="ghost" icon={<I.Plus size={13} />} onClick={() => setNodeEdit({ mode: "create" })}>
+                  新增节点
+                </Btn>
+              </div>
               <div style={{ fontSize: 13 }}>
                 {l1Nodes.map((l1) => (
                   <div key={l1.id} style={{ marginBottom: 4 }}>
@@ -408,7 +436,13 @@ export default function BusinessMapPage({ project }: Props) {
             {/* 右侧：详情面板 */}
             <Card style={{ width: 360, padding: 20, flexShrink: 0, overflow: "auto" }}>
               {selected ? (
-                <NodeDetail node={selected} allObjects={objects} onJump={(id) => setSelectedId(id)} />
+                <NodeDetail
+                  node={selected}
+                  allObjects={objects}
+                  onJump={(id) => setSelectedId(id)}
+                  onEdit={(node) => setNodeEdit({ mode: "edit", node })}
+                  onDelete={(node) => setDeleteTarget(node)}
+                />
               ) : (
                 <div style={{ fontSize: 13, color: "var(--ink-3)", textAlign: "center", paddingTop: 40 }}>
                   👈 点击左侧树节点
@@ -420,8 +454,275 @@ export default function BusinessMapPage({ project }: Props) {
           </>
         )}
       </div>
+
+      {/* 节点 CRUD 弹窗 / 删除确认（M4.1.8） */}
+      {nodeEdit && (
+        <NodeEditModal
+          mode={nodeEdit.mode}
+          node={nodeEdit.node}
+          allObjects={objects}
+          projectId={project.id}
+          onClose={() => setNodeEdit(null)}
+          onSaved={(id) => {
+            setNodeEdit(null);
+            if (id) setSelectedId(id);
+            refresh();
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title="删除节点"
+        message={
+          deleteTarget
+            ? `确认删除节点「${deleteTarget.name}」（${deleteTarget.level}）？该操作不可撤销，子节点需另行处理。`
+            : ""
+        }
+        confirmText="删除"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
+}
+
+// ─── 节点新增/编辑弹窗（M4.1.8） ──────────────────────────────
+
+const LEVELS: BusinessMapLevel[] = ["L1", "L2", "L3", "L4"];
+const PARENT_LEVEL: Record<BusinessMapLevel, BusinessMapLevel | undefined> = {
+  L1: undefined,
+  L2: "L1",
+  L3: "L2",
+  L4: "L3",
+};
+const VERIFICATION_STATUSES = ["未验证", "成立", "部分成立", "推翻", "待补充"];
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  height: 34,
+  fontSize: 13,
+  padding: "0 8px",
+  borderRadius: 8,
+  border: "1px solid var(--line)",
+  background: "var(--bg)",
+  color: "var(--ink)",
+};
+
+function NodeEditModal({
+  mode,
+  node,
+  allObjects,
+  projectId,
+  onClose,
+  onSaved,
+}: {
+  mode: "create" | "edit";
+  node?: BusinessMapObject;
+  allObjects: BusinessMapObject[];
+  projectId: number;
+  onClose: () => void;
+  onSaved: (id?: number) => void;
+}) {
+  const toast = useToast();
+  const isEdit = mode === "edit";
+  const [level, setLevel] = useState<BusinessMapLevel>(node?.level ?? "L1");
+  const [name, setName] = useState(node?.name ?? "");
+  const [parentId, setParentId] = useState<number | null>(node?.parent_id ?? null);
+  const [mapType, setMapType] = useState<BusinessMapType>(node?.map_type ?? "hypothesis");
+  const [verificationStatus, setVerificationStatus] = useState(node?.verification_status ?? "未验证");
+  const [linkedHypothesisId, setLinkedHypothesisId] = useState<number | null>(node?.linked_hypothesis_id ?? null);
+  const [confidence, setConfidence] = useState(node?.payload?.confidenceLevel ?? "");
+  const [source, setSource] = useState(node?.payload?.sourceType ?? "");
+  const [payloadJson, setPayloadJson] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const parentLevel = PARENT_LEVEL[level];
+  const parentOptions = parentLevel
+    ? allObjects.filter((o) => o.level === parentLevel)
+    : [];
+  const hypothesisOptions = allObjects.filter((o) => o.map_type === "hypothesis" && o.level === level);
+
+  const save = async () => {
+    if (!name.trim()) {
+      toast.showToast("请填写节点名称", "error");
+      return;
+    }
+    // 组装 payload：高级 JSON 优先；否则合并通用字段
+    let payload: BusinessMapPayload;
+    if (payloadJson.trim()) {
+      try {
+        payload = JSON.parse(payloadJson);
+      } catch {
+        toast.showToast("payload JSON 格式错误", "error");
+        return;
+      }
+    } else {
+      payload = {
+        ...(isEdit ? (node?.payload ?? {}) : {}),
+        ...(confidence ? { confidenceLevel: confidence } : {}),
+        ...(source ? { sourceType: source } : {}),
+      };
+    }
+    setSaving(true);
+    try {
+      if (isEdit && node) {
+        await api.updateBusinessMapObject(projectId, node.id, {
+          name: name.trim(),
+          parent_id: parentId,
+          map_type: mapType,
+          verification_status: verificationStatus,
+          linked_hypothesis_id: mapType === "current" ? linkedHypothesisId : null,
+          payload,
+        });
+        toast.showToast("节点已更新", "success");
+        onSaved(node.id);
+      } else {
+        const created = await api.createBusinessMapObject(projectId, {
+          level,
+          name: name.trim(),
+          parent_id: parentId,
+          map_type: mapType,
+          verification_status: verificationStatus,
+          linked_hypothesis_id: mapType === "current" ? linkedHypothesisId : null,
+          payload,
+          review_status: "reviewed", // 手动新增直接进正式库（§7.3）
+          generated_by_ai: false,
+        });
+        toast.showToast("节点已新增", "success");
+        onSaved(created.id);
+      }
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "保存失败", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 480 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
+            {isEdit ? "编辑节点" : "新增节点"}
+          </div>
+          <button onClick={onClose} style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)" }}>
+            <I.X size={16} />
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Lbl>层级</Lbl>
+              <select
+                style={selectStyle}
+                value={level}
+                disabled={isEdit}
+                onChange={(e) => {
+                  setLevel(e.target.value as BusinessMapLevel);
+                  setParentId(null);
+                  setLinkedHypothesisId(null);
+                }}
+              >
+                {LEVELS.map((lv) => (
+                  <option key={lv} value={lv}>{lv}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 2 }}>
+              <Lbl>名称</Lbl>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="节点名称" />
+            </div>
+          </div>
+
+          {parentLevel && (
+            <div>
+              <Lbl>父节点（{parentLevel}）</Lbl>
+              <select style={selectStyle} value={parentId ?? ""} onChange={(e) => setParentId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{level === "L2" ? "无（横向支撑域）" : "无"}</option>
+                {parentOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Lbl>地图类型</Lbl>
+              <select style={selectStyle} value={mapType} onChange={(e) => setMapType(e.target.value as BusinessMapType)}>
+                <option value="hypothesis">假设（hypothesis）</option>
+                <option value="current">现状（current）</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Lbl>验证状态</Lbl>
+              <select style={selectStyle} value={verificationStatus} onChange={(e) => setVerificationStatus(e.target.value)}>
+                {VERIFICATION_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {mapType === "current" && (
+            <div>
+              <Lbl>关联假设节点（可选）</Lbl>
+              <select style={selectStyle} value={linkedHypothesisId ?? ""} onChange={(e) => setLinkedHypothesisId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">无</option>
+                {hypothesisOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Lbl>置信度</Lbl>
+              <select style={selectStyle} value={confidence} onChange={(e) => setConfidence(e.target.value)}>
+                <option value="">不标注</option>
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Lbl>来源类型</Lbl>
+              <select style={selectStyle} value={source} onChange={(e) => setSource(e.target.value)}>
+                <option value="">不标注</option>
+                <option value="搜索采集">搜索采集</option>
+                <option value="用户上传">用户上传</option>
+                <option value="行业模板">行业模板</option>
+                <option value="模型知识">模型知识</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <Lbl>高级：payload（JSON，可选，填写则覆盖）</Lbl>
+            <TextArea
+              rows={3}
+              style={{ width: "100%", fontSize: 12, fontFamily: "monospace" }}
+              placeholder={isEdit ? "留空则保留原 payload，仅更新上方通用字段" : "留空则仅写入上方通用字段"}
+              value={payloadJson}
+              onChange={(e) => setPayloadJson(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <Btn variant="ghost" onClick={onClose}>取消</Btn>
+          <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "保存中…" : "保存"}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Lbl({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-3)", marginBottom: 4 }}>{children}</div>;
 }
 
 // ─── 树节点行 ─────────────────────────────────────────────────
@@ -538,10 +839,14 @@ function NodeDetail({
   node,
   allObjects,
   onJump,
+  onEdit,
+  onDelete,
 }: {
   node: BusinessMapObject;
   allObjects: BusinessMapObject[];
   onJump: (id: number) => void;
+  onEdit: (node: BusinessMapObject) => void;
+  onDelete: (node: BusinessMapObject) => void;
 }) {
   const p: BusinessMapPayload = node.payload ?? {};
   const color = LEVEL_COLOR[node.level] ?? "var(--ink-3)";
@@ -551,7 +856,7 @@ function NodeDetail({
 
   return (
     <div style={{ fontSize: 13 }}>
-      {/* 标题 */}
+      {/* 标题 + 操作 */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         <span
           style={{
@@ -565,7 +870,15 @@ function NodeDetail({
         >
           {node.level}
         </span>
-        <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>{node.name}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {node.name}
+        </span>
+        <button onClick={() => onEdit(node)} title="编辑" style={iconBtnStyle}>
+          <I.Edit size={14} />
+        </button>
+        <button onClick={() => onDelete(node)} title="删除" style={{ ...iconBtnStyle, color: "var(--danger)" }}>
+          <I.Trash size={14} />
+        </button>
       </div>
 
       {/* 标签条 */}
@@ -1341,4 +1654,14 @@ const linkBtnStyle: React.CSSProperties = {
   color: "var(--accent)",
   fontSize: 12,
   fontWeight: 500,
+};
+
+const iconBtnStyle: React.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  color: "var(--ink-3)",
+  display: "inline-flex",
+  alignItems: "center",
+  padding: 4,
+  borderRadius: 6,
 };
