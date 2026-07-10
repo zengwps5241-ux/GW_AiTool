@@ -37,6 +37,14 @@ const visitTypeColor = (t: string): string => {
 const strengthColor = (s: string): string =>
   s === "强" ? "var(--success)" : s === "中" ? "var(--warn)" : "var(--ink-3)";
 
+/** 立场 → 配色（对齐 MarketingMapPage stanceColor：支持/反对/中立/观望） */
+const stanceColor = (s: string): string => {
+  if (s === "支持") return "var(--success)";
+  if (s === "反对") return "var(--danger)";
+  if (s === "中立") return "var(--warn)";
+  return "var(--ink-3)"; // 观望 / 未知
+};
+
 const STRENGTHS = ["强", "中", "弱"] as const;
 
 /** 证据类型枚举（§2.5 / §7.5） */
@@ -515,6 +523,9 @@ function VisitRow({
 // ─── 证据条目（展开体内部，M4.3.5 将追加态度联动展示）──────────
 
 function EvidenceDetail({ evidence: e }: { evidence: EvidenceSource }) {
+  // §7.6：角色态度信号证据携带 implied_from_stance → implied_to_stance，确认后自动记录态度变化
+  const hasStanceChange =
+    e.evidence_type === "角色态度信号" && (e.implied_from_stance || e.implied_to_stance);
   return (
     <div style={{
       display: "flex", gap: 10, padding: "10px 12px",
@@ -544,8 +555,38 @@ function EvidenceDetail({ evidence: e }: { evidence: EvidenceSource }) {
             </span>
           )}
         </div>
+        {/* 态度联动（§7.6）：本次态度信号引发的态度变化 */}
+        {hasStanceChange && (
+          <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+            <span style={{ color: "var(--ink-3)" }}>态度变化</span>
+            {e.implied_from_stance ? (
+              <StancePill stance={e.implied_from_stance} />
+            ) : (
+              <span style={{ color: "var(--ink-4)" }}>未知</span>
+            )}
+            <span style={{ color: "var(--ink-4)" }}>→</span>
+            {e.implied_to_stance ? (
+              <StancePill stance={e.implied_to_stance} />
+            ) : (
+              <span style={{ color: "var(--ink-4)" }}>未知</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+/** 立场小药丸（态度联动展示用，配色对齐 stanceColor） */
+function StancePill({ stance }: { stance: string }) {
+  const c = stanceColor(stance);
+  return (
+    <span style={{
+      padding: "1px 7px", borderRadius: 999, fontSize: 11, fontWeight: 500,
+      background: c + "22", color: c,
+    }}>
+      {stance}
+    </span>
   );
 }
 
