@@ -567,3 +567,29 @@ async def init_db() -> None:
                 await conn.execute(text(
                     f"ALTER TABLE {table_name} ADD COLUMN source_session_id VARCHAR NULL"
                 ))
+
+        # person_disambiguation_candidates 表（M5.5.1 角色去重候选）
+        result = await conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_name='person_disambiguation_candidates'"
+        ))
+        if result.scalar() == 0:
+            await conn.execute(text(
+                "CREATE TABLE person_disambiguation_candidates ("
+                "id SERIAL PRIMARY KEY, "
+                "project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+                "draft_card_id INTEGER NULL REFERENCES stakeholder_cards(id) ON DELETE SET NULL, "
+                "new_draft_snapshot JSONB NOT NULL, "
+                "candidates JSONB NOT NULL, "
+                "status VARCHAR NOT NULL DEFAULT 'pending', "
+                "decision VARCHAR NULL, "
+                "merge_into_card_id INTEGER NULL REFERENCES stakeholder_cards(id) ON DELETE SET NULL, "
+                "resolved_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL, "
+                "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                "resolved_at TIMESTAMP WITH TIME ZONE NULL"
+                ")"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX ix_pdc_project_status "
+                "ON person_disambiguation_candidates (project_id, status)"
+            ))

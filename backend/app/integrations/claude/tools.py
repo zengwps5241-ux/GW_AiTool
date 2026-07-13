@@ -305,6 +305,8 @@ async def handle_save_stakeholder_card_draft(
         if user is None:
             return _error_result("当前用户不存在，无法保存草稿")
 
+        # M5.5.1：仅新建草稿时检测去重；更新既有草稿不重复检测
+        has_dup = False
         if update_id:
             old = await db.get(StakeholderCard, update_id)
             if old is None or old.project_id != ctx.project_id:
@@ -334,6 +336,15 @@ async def handle_save_stakeholder_card_draft(
                 db, ctx.project_id, payload, user,
                 source_session_id=ctx.source_session_id,
             )
+            # M5.5.1 角色去重：新建草稿后检测项目内既有卡是否疑似同人，
+            # 命中则生成 person_disambiguation 候选（前端跟进渲染确认 UI）。
+            # 检测失败不阻塞草稿主流程（去重是辅助提醒）。
+            try:
+                has_dup = await marketing_map_service.detect_and_create_disambiguation(
+                    db, ctx.project_id, card.id
+                )
+            except Exception:
+                has_dup = False
             previous = None
             is_update = False
 
@@ -349,10 +360,15 @@ async def handle_save_stakeholder_card_draft(
         )
     )
     verb = "已更新角色卡草稿" if is_update else "已保存角色卡草稿"
+    dup_hint = (
+        "（检测到疑似重复角色，已生成去重候选待用户在前端确认：新建或合并到既有卡）"
+        if has_dup else ""
+    )
     return _ok_result(
         f"{verb}「{card.name}」（草稿ID #{card.id}）。"
         "等待用户采纳后才进入正式营销地图。"
         "若用户要求调整，请带 update_draft_id=<本草稿ID> 重新调用本工具覆盖更新。"
+        + dup_hint
     )
 
 

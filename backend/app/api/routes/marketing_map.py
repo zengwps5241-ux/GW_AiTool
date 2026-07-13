@@ -15,6 +15,8 @@ from app.db.session import get_db
 from app.models import Project, User
 from app.modules.marketing_map import service as mm_service
 from app.schemas.marketing_map import (
+    DisambiguationCandidateOut,
+    DisambiguationResolveIn,
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
     KnowledgeBaseUpdate,
@@ -319,3 +321,42 @@ async def upsert_procurement_timeline(
     """创建或更新采购时间线（一个项目一份，整体替换五阶段）。"""
     _, user = pu
     return await mm_service.upsert_procurement_timeline(db, project_id, payload, user)
+
+
+# ─── 角色去重候选（M5.5.1 person_disambiguation，§7.1）─────────
+
+
+@router.get(
+    "/disambiguation-candidates", response_model=list[DisambiguationCandidateOut]
+)
+async def list_disambiguation_candidates(
+    project_id: int,
+    status: str | None = Query("pending"),
+    _=Depends(require_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> list[DisambiguationCandidateOut]:
+    """列出项目下的角色去重候选（默认仅 pending，供前端确认 UI 消费）。"""
+    return await mm_service.list_disambiguation_candidates(db, project_id, status=status)
+
+
+@router.post(
+    "/disambiguation-candidates/{candidate_id}/resolve",
+    response_model=DisambiguationCandidateOut,
+)
+async def resolve_disambiguation_candidate(
+    project_id: int,
+    candidate_id: int,
+    payload: DisambiguationResolveIn,
+    pu: tuple[Project, User] = Depends(require_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> DisambiguationCandidateOut:
+    """用户确认去重候选：new（草稿独立建卡→reviewed）/ merge（合并进既有卡，删除草稿）。"""
+    _, user = pu
+    try:
+        return await mm_service.resolve_disambiguation(
+            db, project_id, candidate_id, payload, user
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

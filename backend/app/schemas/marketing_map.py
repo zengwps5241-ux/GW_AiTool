@@ -265,5 +265,43 @@ class StanceChangeOut(BaseModel):
     reason: str
 
 
+# ─── 角色去重候选（M5.5.1 person_disambiguation）──────────────
+
+
+class DisambiguationCandidateCard(BaseModel):
+    """去重候选中的既有角色卡（比对项，含相似度评分与命中原因）。"""
+
+    id: int
+    name: str
+    position: str | None = None
+    department: str | None = None
+    role_type: str | None = None
+    score: float
+    reasons: list[str]
+
+
+class DisambiguationCandidateOut(BaseModel):
+    """一条去重候选：新草稿 vs 项目内疑似同人的既有卡列表。"""
+
+    id: int
+    project_id: int
+    draft_card_id: int | None = None
+    new_draft_snapshot: dict[str, Any]
+    candidates: list[DisambiguationCandidateCard]
+    status: str  # pending|resolved
+    decision: str | None = None  # new|merge（resolved 后有值）
+    merge_into_card_id: int | None = None
+    resolved_by: int | None = None
+    created_at: str | None = None
+    resolved_at: str | None = None
+
+
+class DisambiguationResolveIn(BaseModel):
+    """用户去重确认决策。merge 时必须给 merge_into_card_id（候选列表内的既有卡 id）。"""
+
+    decision: str = Field(..., pattern="^(new|merge)$")
+    merge_into_card_id: int | None = None
+
+
 def iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None

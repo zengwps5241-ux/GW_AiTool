@@ -176,6 +176,51 @@ class KnowledgeBase(Base):
     )
 
 
+class PersonDisambiguationCandidate(Base):
+    """角色去重候选（M5.5.1）。
+
+    AI 在对话中新建角色卡草稿时，若与项目内既有卡疑似同人（姓名相似 + 部门/角色类型加成），
+    生成一条去重候选记录供用户在前端确认（§7.1 角色去重）：
+    - decision="new"：草稿确认为新人 → promote draft→reviewed（独立建卡）。
+    - decision="merge"：草稿实为既有卡的同人 → 合并草稿字段进既有卡并删除草稿。
+
+    draft_card_id / merge_into_card_id 用 SET NULL：草稿被删除/合并后仍保留候选行作审计。
+    new_draft_snapshot / candidates 为 JSONB（检测时刻的快照，供前端展示，不随后续变动改变）。
+    """
+
+    __tablename__ = "person_disambiguation_candidates"
+    __table_args__ = (
+        Index("ix_pdc_project_status", "project_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    # 触发去重的新草稿卡（合并后草稿被删，SET NULL 保留审计）
+    draft_card_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("stakeholder_cards.id", ondelete="SET NULL"), nullable=True
+    )
+    # 新草稿字段快照（name/position/department/role_type 等）
+    new_draft_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # 候选既有卡列表：[{id,name,position,department,role_type,score,reasons}]
+    candidates: Mapped[list] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")  # pending|resolved
+    # 用户决策：new|merge（仅 resolved 后有值）
+    decision: Mapped[str | None] = mapped_column(String, nullable=True)
+    # decision=merge 时指向被合并进的目标卡
+    merge_into_card_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("stakeholder_cards.id", ondelete="SET NULL"), nullable=True
+    )
+    resolved_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ProcurementTimeline(Base):
     """项目级采购流程时间线（一个项目一份，M4.2.5）。
 

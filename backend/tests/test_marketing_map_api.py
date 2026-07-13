@@ -269,3 +269,217 @@ async def test_marketing_map_admin_bypass(admin_client, other_logged_in_client):
     pid = (await other_logged_in_client.post("/api/projects", json={"customer_id": cid, "name": "p"})).json()["id"]
     res = await admin_client.get(f"{_base(pid)}/stakeholder-cards")
     assert res.status_code == 200
+
+
+# ─── 角色去重候选（M5.5.1 person_disambiguation）──────────────
+#
+# 检测逻辑仅在 save_stakeholder_card_draft 工具（Claude SDK 进程内 MCP）触发，
+# 纯代码测试无法走 SDK，故直接调 service.detect_and_create_disambiguation 模拟触发。
+
+
+async def _detect(pid: int, draft_id: int) -> bool:
+    """用独立 session 触发去重检测（模拟 tools.py 新建草稿后的调用）。"""
+    from app.db.session import async_session
+    from app.modules.marketing_map import service as mm
+
+    async with async_session() as db:
+        return await mm.detect_and_create_disambiguation(db, pid, draft_id)
+
+
+async def test_disambiguation_detects_exact_name_and_resolve_new(logged_in_client):
+    """完全同名 → 生成候选；resolve=new → 草稿 promote 为 reviewed。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    existing = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王主任", "department": "信息部", "role_type": "economic_decision_maker"},
+        )
+    ).json()
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王主任", "department": "信息部", "review_status": "draft"},
+        )
+    ).json()
+
+    assert await _detect(pid, draft["id"]) is True
+
+    cands = (await logged_in_client.get(f"{base}/disambiguation-candidates")).json()
+    assert len(cands) == 1
+    assert cands[0]["draft_card_id"] == draft["id"]
+    assert cands[0]["status"] == "pending"
+    assert len(cands[0]["candidates"]) == 1
+    assert cands[0]["candidates"][0]["id"] == existing["id"]
+    assert cands[0]["candidates"][0]["score"] == 1.0
+    assert "完全同名" in cands[0]["candidates"][0]["reasons"]
+
+    # resolve=new → 草稿 promote
+    res = await logged_in_client.post(
+        f"{base}/disambiguation-candidates/{cands[0]['id']}/resolve",
+        json={"decision": "new"},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "resolved"
+    assert res.json()["decision"] == "new"
+
+    # 草稿已 reviewed；pending 列表清空
+    card = (await logged_in_client.get(f"{base}/stakeholder-cards/{draft['id']}")).json()
+    assert card["review_status"] == "reviewed"
+    assert len((await logged_in_client.get(f"{base}/disambiguation-candidates")).json()) == 0
+
+
+async def test_disambiguation_name_containment_scores_partial(logged_in_client):
+    """姓名包含关系（王志强 vs 王志强主任）→ 0.6 分候选。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    await logged_in_client.post(f"{base}/stakeholder-cards", json={"name": "王志强主任"})
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王志强", "review_status": "draft"},
+        )
+    ).json()
+
+    assert await _detect(pid, draft["id"]) is True
+    cands = (await logged_in_client.get(f"{base}/disambiguation-candidates")).json()
+    assert len(cands) == 1
+    entry = cands[0]["candidates"][0]
+    assert entry["score"] == 0.6
+    assert "姓名相似" in entry["reasons"]
+
+
+async def test_disambiguation_no_false_positive_on_weak_signal(logged_in_client):
+    """姓名不同、仅部门+角色相同（0.4 < 阈值）→ 不生成候选。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    await logged_in_client.post(
+        f"{base}/stakeholder-cards",
+        json={"name": "张三", "department": "信息部", "role_type": "technical_evaluator"},
+    )
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={
+                "name": "李四",
+                "department": "信息部",
+                "role_type": "technical_evaluator",
+                "review_status": "draft",
+            },
+        )
+    ).json()
+
+    assert await _detect(pid, draft["id"]) is False
+    assert len((await logged_in_client.get(f"{base}/disambiguation-candidates")).json()) == 0
+
+
+async def test_disambiguation_merge_enriches_and_deletes_draft(logged_in_client):
+    """resolve=merge → 草稿字段填充目标、主观层重算、草稿删除。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    target = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王志强", "department": "信息部"},  # 目标缺 position/主观层
+        )
+    ).json()
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={
+                "name": "王志强",
+                "department": "信息部",
+                "position": "主任",
+                "review_status": "draft",
+                "subjective_layer": {"stance": "支持", "engagement": 5, "influence": 5, "support": 5},
+            },
+        )
+    ).json()
+    assert await _detect(pid, draft["id"]) is True
+
+    cid = (
+        await logged_in_client.get(f"{base}/disambiguation-candidates")
+    ).json()[0]["id"]
+    res = await logged_in_client.post(
+        f"{base}/disambiguation-candidates/{cid}/resolve",
+        json={"decision": "merge", "merge_into_card_id": target["id"]},
+    )
+    assert res.status_code == 200
+    assert res.json()["decision"] == "merge"
+    assert res.json()["merge_into_card_id"] == target["id"]
+
+    # 草稿已删除（404）
+    assert (
+        await logged_in_client.get(f"{base}/stakeholder-cards/{draft['id']}")
+    ).status_code == 404
+
+    # 目标被填充：position + 主观层 compositeScore
+    merged = (
+        await logged_in_client.get(f"{base}/stakeholder-cards/{target['id']}")
+    ).json()
+    assert merged["position"] == "主任"
+    assert merged["subjective_layer"]["compositeScore"] == 5
+
+
+async def test_disambiguation_merge_rejects_target_not_in_candidates(logged_in_client):
+    """merge 到不在候选列表的卡 → 400（只能合并到检测出的疑似同人卡）。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    # 既有的"王主任"会与草稿"王主任"命中候选
+    await logged_in_client.post(f"{base}/stakeholder-cards", json={"name": "王主任"})
+    # 另一张"赵六"不会命中（与草稿不同名）
+    outsider = (
+        await logged_in_client.post(f"{base}/stakeholder-cards", json={"name": "赵六"})
+    ).json()
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王主任", "review_status": "draft"},
+        )
+    ).json()
+    assert await _detect(pid, draft["id"]) is True
+
+    cid = (
+        await logged_in_client.get(f"{base}/disambiguation-candidates")
+    ).json()[0]["id"]
+    res = await logged_in_client.post(
+        f"{base}/disambiguation-candidates/{cid}/resolve",
+        json={"decision": "merge", "merge_into_card_id": outsider["id"]},
+    )
+    assert res.status_code == 400
+
+
+async def test_disambiguation_resolve_twice_rejected(logged_in_client):
+    """重复 resolve 已处理候选 → 400。"""
+    pid = await _project(logged_in_client)
+    base = _base(pid)
+    await logged_in_client.post(f"{base}/stakeholder-cards", json={"name": "王主任"})
+    draft = (
+        await logged_in_client.post(
+            f"{base}/stakeholder-cards",
+            json={"name": "王主任", "review_status": "draft"},
+        )
+    ).json()
+    assert await _detect(pid, draft["id"]) is True
+
+    cid = (
+        await logged_in_client.get(f"{base}/disambiguation-candidates")
+    ).json()[0]["id"]
+    first = await logged_in_client.post(
+        f"{base}/disambiguation-candidates/{cid}/resolve", json={"decision": "new"}
+    )
+    assert first.status_code == 200
+    second = await logged_in_client.post(
+        f"{base}/disambiguation-candidates/{cid}/resolve", json={"decision": "new"}
+    )
+    assert second.status_code == 400
+
+
+async def test_disambiguation_not_found(logged_in_client):
+    """不存在的候选 id → 404。"""
+    pid = await _project(logged_in_client)
+    res = await logged_in_client.post(
+        f"{_base(pid)}/disambiguation-candidates/99999/resolve",
+        json={"decision": "new"},
+    )
+    assert res.status_code == 404

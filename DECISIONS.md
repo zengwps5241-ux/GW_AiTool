@@ -422,3 +422,12 @@
 - **理由**：客户端过滤零后端成本、随自动归档落地即可用；isPersonal 门控保证团队空间零影响；visibleNodes 仅切视图不切操作语义，路径正确性不受损。可校验性：tsc -b 0 错 + vite build 过（纯前端）。已知边界：当前 consultant-search 归档到 `公开信息/`（非项目作用域，search_tools.py 既有），故筛选某项目时 `公开信息/` 不显示——符合预期（它本就不属于任何项目），随独立自动归档任务把文件按项目名归类后筛选更具实用性。
 
 
+
+## 决策 #52：M5.5.1 角色去重 — person_disambiguation 候选生成 + 用户确认（§7.1，后端先行）
+
+- **背景**：M5.5.1「发现重名或相似角色 → 对话中生成 person_disambiguation 候选 → 用户确认 → 更新或新建」。既有：save_stakeholder_card_draft 工具（tools.py）新建角色卡草稿（review_status=draft），POST /adopt(entity_type=stakeholder_card_draft) 已支持 draft→reviewed 自确认采纳。缺口：① 新建草稿不检测疑似同人；② 无候选持久化模型；③ 无候选列表/确认 API；④ 无确认后的合并语义。抉择：① 评分算法；② 合并语义；③ 检测触发点；④ 新模型放哪。
+- **选择 A — 评分：姓名为主信号 + 部门/角色加成，阈值 0.6**：完全同名 1.0 / 姓名包含（双方均≥2字）0.6 / 同部门 +0.2 / 同角色类型 +0.2（上限 1.0）。仅 score≥0.6 入候选——姓名不同仅部门角色相同=0.4<阈值，不误报。姓名是规格「重名或相似」的核心信号，部门/角色只作加成区分同名不同人。多候选按分降序全列入 candidates（用户选最像的合并）。
+- **选择 B — 合并语义：目标为主、草稿填充缺失（不覆盖既有数据）**：merge 时目标卡为主——标量字段（position/department/reports_to/contact_info/role_type/decision_power）目标为空才用草稿；objective_layer/subjective_layer 浅合并（目标键优先，草稿补缺），主观层重算 compositeScore；behaviors 按 observation 去重追加；stance_change_log 拼接，然后删除草稿。语义：用户认定「草稿=既有卡」，故既有数据不可被草稿覆盖，只补缺。new=草稿独立建卡→promote reviewed（与 /adopt 同语义，幂等：草稿已采纳/删除则只标记候选 resolved）。merge 强约束 merge_into_card_id 必须在候选列表内 + 草稿仍为 draft 态，否则 400。
+- **选择 C — 检测在 tools.py 新建分支触发，失败不阻塞**：仅 update_id 为空（新建草稿）时调 detect_and_create_disambiguation，try/except 包裹——去重是辅助提醒，绝不应阻塞草稿主流程（has_dup 前置初始化=False，规避 update 分支引用未定义变量）。更新既有草稿（update_id 有值）不重复检测。检测命中即落库 PersonDisambiguationCandidate(status=pending)，工具结果文本追加「已生成去重候选」提示给 Claude。
+- **选择 D — 新模型挂 marketing_map.py（非独立文件），规避 reload 舞蹈**：PersonDisambiguationCandidate 与 StakeholderCard 同属营销地图域，放进既有 models/marketing_map.py（model_marketing_map 已在 conftest Layer2 reload），schemas/service/routes 同样挂既有 marketing_map 文件——零新 reload 行，避免漏接 reload 导致 mapper 分裂（交接指令第5节警示）。仅 models/__init__ 加一行导出。表 person_disambiguation_candidates 由 migrations.py CREATE TABLE IF NOT EXISTS 建立（draft_card_id/merge_into_card_id 用 SET NULL，草稿删除后保留候选行作审计）。
+- **理由**：姓名为主信号+阈值规避误报；合并「填充不覆盖」尊重既有数据；tools.py 触发对齐规格「对话中生成」；挂既有文件零 reload 风险。可校验性：新增 7 测试（完全同名+resolve new / 姓名包含 0.6 / 弱信号不误报 / merge 填充+主观层重算+删草稿 / merge 拒绝非候选目标 400 / 重复 resolve 400 / 404）全过；test_marketing_map_api 19（12+7）+ test_draft_tools 19 零回归（中途修一个 has_dup 在 update 分支未定义的真 bug，复测全过）。全量 674 passed/20 failed/3 errors——fail+error 与基线 662/20/3 完全一致（增量 12 含 7 新测），fail 集未扩大。后端先行，前端确认 UI（候选列表渲染 + 新建/合并按钮）作为跟进子任务。
