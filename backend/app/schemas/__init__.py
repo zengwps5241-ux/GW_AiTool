@@ -14,7 +14,14 @@ from app.schemas.feedback import (
     FeedbackIssueListItemOut,
     FeedbackIssueListOut,
 )
-from app.schemas.sessions import ChatRequest, CreateSessionRequest, RenameSessionRequest, SessionOut
+from app.schemas.sessions import (
+    ChatRequest,
+    CreateSessionRequest,
+    KnowledgeFragmentIn,
+    KnowledgeFragmentOut,
+    RenameSessionRequest,
+    SessionOut,
+)
 from app.schemas.organizations import (
     OrganizationCreate,
     OrganizationImportResponse,
@@ -142,6 +149,8 @@ __all__ = [
     "CreateSessionRequest",
     "RenameSessionRequest",
     "ChatRequest",
+    "KnowledgeFragmentIn",
+    "KnowledgeFragmentOut",
     "TeamSpaceCreateIn",
     "TeamSpaceUpdateIn",
     "TeamSpaceMemberAddIn",

@@ -133,3 +133,82 @@ async def rename_session(db: AsyncSession, cs: ChatSession, title: str) -> ChatS
 async def delete_session(db: AsyncSession, cs: ChatSession) -> None:
     await db.delete(cs)
     await db.commit()
+
+
+async def save_knowledge_fragment(
+    db: AsyncSession,
+    cs: ChatSession,
+    user: User,
+    content: str,
+    title: str | None = None,
+) -> dict:
+    """将一段对话内容标记为「有价值的知识片段」，落盘到用户个人空间。
+
+    规格依据：§2.6 line157 — 对话「标记为有价值」→ 个人空间对应项目目录下的
+    Markdown 知识片段；§6.2 资产矩阵 line1126 存放于 ``个人空间/项目名/知识片段/``。
+
+    路径规则：``{项目名}/知识片段/{时间戳}_{标题}.md``；会话未绑项目时落到根
+    ``知识片段/``。文件名经 ``safe_filename`` 净化（防路径穿越 / Windows 非法符），
+    同秒冲突自动追加序号。返回相对个人空间根的路径，供前端提示用户。
+    """
+    from datetime import datetime
+
+    from app.core.config import user_workspace
+    from app.core.utils import safe_filename
+    from app.modules.workspace.paths import resolve_inside_workspace
+
+    # 1. 解析项目名（决定落盘子目录；未绑项目则落根 知识片段/）
+    project_name: str | None = None
+    if getattr(cs, "project_id", None) is not None:
+        project = await db.get(Project, cs.project_id)
+        project_name = project.name if project else None
+
+    dir_parts = ["知识片段"]
+    if project_name:
+        pn = safe_filename(project_name)
+        if pn and pn != "file":
+            dir_parts.insert(0, pn)
+    dir_rel = "/".join(dir_parts)
+
+    # 2. 文件名标题：显式 > 内容首行 > 兜底
+    raw_title = (title or "").strip()
+    if not raw_title:
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped:
+                raw_title = stripped
+                break
+    stem = safe_filename(raw_title or "知识片段") or "知识片段"
+    stem = stem[:40]  # 限长，避免标题过长致整路径超限
+
+    # 3. 唯一化文件名（同秒冲突追加 _2/_3）
+    workspace = user_workspace(user.username)
+    now = datetime.now()
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    suffix = 0
+    while True:
+        name = f"{ts}_{stem}.md" if suffix == 0 else f"{ts}_{stem}_{suffix}.md"
+        rel = f"{dir_rel}/{name}"
+        target = resolve_inside_workspace(workspace, rel)
+        if not target.exists():
+            break
+        suffix += 1
+
+    # 4. 组装 Markdown：HTML 注释记来源（复盘用，渲染不可见）+ 正文
+    meta = (
+        "<!-- 知识片段来源："
+        f"会话「{cs.title or ''}」"
+        + (f" · 项目「{project_name}」" if project_name else "")
+        + f" · 标记时间 {now.strftime('%Y-%m-%d %H:%M:%S')} -->\n\n"
+    )
+    body = meta + content.strip() + "\n"
+
+    # 5. 落盘（建父目录 + utf-8）
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+
+    return {
+        "path": target.relative_to(workspace.resolve()).as_posix(),
+        "filename": target.name,
+        "project_name": project_name,
+    }

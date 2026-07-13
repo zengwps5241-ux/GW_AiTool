@@ -15,6 +15,7 @@ from app.modules.sessions.service import (
     get_accessible_session as get_accessible_session_svc,
     list_sessions as list_sessions_svc,
     rename_session as rename_session_svc,
+    save_knowledge_fragment as save_knowledge_fragment_svc,
 )
 from app.modules.sessions.streaming import (
     get_running_session_state,
@@ -23,7 +24,14 @@ from app.modules.sessions.streaming import (
     stream_session_chat,
 )
 from app.modules.workspace.scope import WorkspaceScope, personal_workspace_scope, team_workspace_scope
-from app.schemas import ChatRequest, CreateSessionRequest, RenameSessionRequest, SessionOut
+from app.schemas import (
+    ChatRequest,
+    CreateSessionRequest,
+    KnowledgeFragmentIn,
+    KnowledgeFragmentOut,
+    RenameSessionRequest,
+    SessionOut,
+)
 
 router = APIRouter(prefix="/api/sessions")
 
@@ -266,3 +274,29 @@ async def stop_chat(
     if cs is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     return await stop_session(session_id)
+
+
+@router.post(
+    "/{session_id}/knowledge-fragments",
+    response_model=KnowledgeFragmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_knowledge_fragment(
+    session_id: str,
+    payload: KnowledgeFragmentIn,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> KnowledgeFragmentOut:
+    """对话「标记为有价值」→ 个人空间知识片段（§2.6 line157 / Phase 4 line1334）。
+
+    将一段 assistant 回复正文落盘为 ``个人空间/{项目名}/知识片段/*.md``，
+    供后续复盘复用。落点为标记者（current_user）的个人空间。
+    """
+    cs = await get_accessible_session_svc(db, session_id, user)
+    if cs is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="内容不能为空")
+    result = await save_knowledge_fragment_svc(db, cs, user, content, payload.title)
+    return KnowledgeFragmentOut(**result)
