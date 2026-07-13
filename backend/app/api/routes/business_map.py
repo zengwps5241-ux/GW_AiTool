@@ -24,6 +24,7 @@ from app.schemas.business_map import (
     FiveDimHealthOut,
     PreAnalysisInput,
     PreAnalysisOut,
+    VersionDiffOut,
 )
 
 router = APIRouter(prefix="/api/projects/{project_id}/business-map")
@@ -192,6 +193,20 @@ async def get_version(
     db: AsyncSession = Depends(get_db),
 ) -> BusinessMapVersionOut:
     out = await bm_service.get_version(db, project_id, version_id)
+    if out is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    return out
+
+
+@router.get("/versions/{version_id}/diff", response_model=VersionDiffOut)
+async def diff_version(
+    project_id: int,
+    version_id: int,
+    project_and_user: tuple[Project, User] = Depends(require_project_member),
+    db: AsyncSession = Depends(get_db),
+) -> VersionDiffOut:
+    """对比历史版本快照与当前 reviewed 数据（M5.3.2）：added / removed / changed。"""
+    out = await bm_service.diff_version_against_current(db, project_id, version_id)
     if out is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
     return out

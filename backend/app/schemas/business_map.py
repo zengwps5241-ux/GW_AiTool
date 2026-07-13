@@ -157,6 +157,37 @@ class BusinessMapVersionOut(BaseModel):
     created_at: str | None = None
 
 
+# ─── 版本对比（M5.3.2）──────────────────────────────────────────
+
+
+class VersionDiffItem(BaseModel):
+    """diff 中的单个节点摘要（新增 / 删除）。"""
+
+    level: str | None = None
+    name: str | None = None
+
+
+class VersionDiffChangedItem(BaseModel):
+    """diff 中发生字段变化的节点（含快照值与当前值）。"""
+
+    level: str | None = None
+    name: str | None = None
+    field: str  # "map_type" | "verification_status"
+    snapshot: Any
+    current: Any
+
+
+class VersionDiffOut(BaseModel):
+    """版本快照与当前 reviewed 数据的对比结果（按 level+name 键比对）。"""
+
+    version_number: int
+    snapshot_count: int
+    current_count: int
+    added: list[VersionDiffItem]  # 当前有、快照无
+    removed: list[VersionDiffItem]  # 快照有、当前无
+    changed: list[VersionDiffChangedItem]  # 两边都有但 map_type/verification_status 变了
+
+
 # ─── 五维健康 ──────────────────────────────────────────────────
 
 

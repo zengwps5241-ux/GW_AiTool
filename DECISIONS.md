@@ -396,3 +396,11 @@
 - **选择 B — 不引入新阈值/配置，复用 DRAFT_TTL_DAYS=7**：过期判定单一真源 = `expires_at < now`，而 expires_at 由既有 create/update 逻辑按 DRAFT_TTL_DAYS 设定。adopt 只校验 status（由 _mark_expired_drafts 按 expires_at 翻转），不重复实现"7天"逻辑，避免双源。
 - **选择 C — 「7天过期提醒」(UI) 留作前端跟进**：draft 输出已暴露 `expires_at`（line 282），前端可据此算"N天后过期"显示徽标。本任务聚焦**正确性关键**的「过期不可采纳」(后端强制)，UI 提醒属打磨性质且数据已就绪，留独立前端任务。
 - **理由**：补齐 adopt 写路径的过期强制，消除「过期草稿可被采纳」的正确性漏洞；复用既有 _mark_expired_drafts 不造新逻辑。可校验性：新增 2 测试（过期草稿 adopt→400 且被标 expired / 新鲜草稿 adopt→200 回归保护）全过；test_business_map_api 19 + test_reviews_api + test_draft_tools 共 49 零回归。改动仅 adopt_draft 4 行前置校验，新鲜草稿（所有既有测试）no-op，无法扩大 fail 集。纯后端改动。
+
+## 决策 #49：M5.3.2 版本对比 — 快照 vs 当前 diff 端点（§7.4）
+
+- **背景**：M5.3.2「版本对比 | 查看历史版本 + 与当前版本 diff」。审计发现 M4.1.9 已实现版本列表/快照查看(SnapshotModal)/回滚，缺「与当前版本 diff」。数据已就绪：`_snapshot_reviewed_objects` 快照含 payload/level/name/map_type/verification_status（无 id），BusinessMapVersion.snapshot_data.objects 可用。抉择：① diff 比对键（无 id）；② 比哪些字段；③ 前后端分工。
+- **选择 A — 按 (level, name) 键比对（非 id）**：快照对象不存 id（_snapshot_reviewed_objects 只序列化业务字段），且对象采纳时每次新建（id 变化），故 id 不可作比对键。用 (level, name) 复合键——同名同层视为同一节点。重命名会被误判为 remove+add，但 v1 可接受的近似（完整 diff 需稳定 id，超出 M5.3.2 范围）。
+- **选择 B — 只比结构性字段 map_type / verification_status，不比 payload**：payload 含五维健康派生数据（M5.5.5 后自动变化）+ 大量业务字段，diff payload 噪声大且语义模糊。仅比 map_type（假设↔现状切换）+ verification_status（未验证→成立/推翻等，最有价值的演进信号）。三类结果：added（当前有快照无）/ removed（快照有当前无）/ changed（结构性字段变）。
+- **选择 C — 后端 diff 端点 + 前端渲染留跟进**：`GET /api/projects/{id}/business-map/versions/{vid}/diff` 返回 VersionDiffOut（version_number/snapshot_count/current_count + added[]/removed[]/changed[]），require_project_member 只读。复用 `_snapshot_reviewed_objects` 取当前数据。前端 VersionView 增「对比当前」按钮渲染 diff 是自然跟进（端点是可测核心，先落）。
+- **理由**：(level,name) 键规避无 id 限制；只比结构性字段避开 payload 噪声聚焦演进信号；后端端点可测先行。可校验性：新增 3 测试（added+changed 命中 / removed 命中 / 404）全过；test_business_map_api 22 零回归。纯增量（新 schema+service 函数+端点），不改既有逻辑，无法扩大 fail 集。纯后端改动。

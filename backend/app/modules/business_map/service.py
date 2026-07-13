@@ -40,6 +40,9 @@ from app.schemas.business_map import (
     FiveDimHealthOut,
     PreAnalysisInput,
     PreAnalysisOut,
+    VersionDiffChangedItem,
+    VersionDiffItem,
+    VersionDiffOut,
     iso,
 )
 
@@ -591,6 +594,77 @@ async def rollback_to_version(
         )
     ).scalar_one()
     return _version_to_out(audit, await _user_name(db, audit.created_by))
+
+
+# ─── 版本对比（M5.3.2）──────────────────────────────────────────
+
+
+def _snapshot_objects(version: BusinessMapVersion) -> list[dict]:
+    """从版本快照中抽取对象列表（兼容空快照）。"""
+    objs = (version.snapshot_data or {}).get("objects") if version.snapshot_data else None
+    if not isinstance(objs, list):
+        return []
+    return [o for o in objs if isinstance(o, dict)]
+
+
+def _diff_key(obj: dict) -> tuple[str, str]:
+    """diff 比对键：(level, name)。同名同层视为同一节点。"""
+    return (obj.get("level") or "", obj.get("name") or "")
+
+
+async def diff_version_against_current(
+    db: AsyncSession, project_id: int, version_id: int
+) -> VersionDiffOut | None:
+    """版本快照 vs 当前 reviewed 数据的对比（§7.4 M5.3.2）。
+
+    按 (level, name) 键比对：added（当前有快照无）/ removed（快照有当前无）/
+    changed（两边都有但 map_type / verification_status 变化）。
+    不比 payload（含五维健康派生数据，噪声大）；仅结构性字段差异。
+    """
+    version = await db.get(BusinessMapVersion, version_id)
+    if version is None or version.project_id != project_id:
+        return None
+    snap = _snapshot_objects(version)
+    current = await _snapshot_reviewed_objects(db, project_id)
+    snap_map = {_diff_key(o): o for o in snap}
+    cur_map = {_diff_key(o): o for o in current}
+
+    added = [
+        VersionDiffItem(level=o.get("level"), name=o.get("name"))
+        for k, o in cur_map.items()
+        if k not in snap_map
+    ]
+    removed = [
+        VersionDiffItem(level=o.get("level"), name=o.get("name"))
+        for k, o in snap_map.items()
+        if k not in cur_map
+    ]
+    changed: list[VersionDiffChangedItem] = []
+    for k, cur_o in cur_map.items():
+        snap_o = snap_map.get(k)
+        if snap_o is None:
+            continue
+        for field in ("map_type", "verification_status"):
+            sv = snap_o.get(field)
+            cv = cur_o.get(field)
+            if sv != cv:
+                changed.append(
+                    VersionDiffChangedItem(
+                        level=cur_o.get("level"),
+                        name=cur_o.get("name"),
+                        field=field,
+                        snapshot=sv,
+                        current=cv,
+                    )
+                )
+    return VersionDiffOut(
+        version_number=version.version_number,
+        snapshot_count=len(snap),
+        current_count=len(current),
+        added=added,
+        removed=removed,
+        changed=changed,
+    )
 
 
 # ─── 五维健康 ──────────────────────────────────────────────────

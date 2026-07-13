@@ -527,3 +527,75 @@ async def test_adopt_accepts_fresh_draft(logged_in_client):
     res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
     assert res.status_code == 200
     assert res.json()["success"] is True
+
+
+# ─── 版本对比（M5.3.2）──────────────────────────────────────────
+
+
+async def test_version_diff_added_removed_changed(logged_in_client):
+    """版本快照 vs 当前 reviewed：检测 added / removed / changed（按 level+name 键）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    # v1：采纳对象 A（L1）
+    r = await logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "A"}]}}
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+    v1 = (await logged_in_client.get(f"{base}/versions")).json()[0]  # 此刻唯一版本
+
+    # v2：追加对象 B
+    r = await logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "B"}]}}
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+
+    # 改 A 的验证状态（未验证 → 成立）
+    objs = {o["name"]: o for o in (await logged_in_client.get(f"{base}/objects")).json()}
+    await logged_in_client.put(
+        f"{base}/objects/{objs['A']['id']}", json={"verification_status": "成立"}
+    )
+
+    # diff v1 vs 当前（A 已存在且状态变 / B 新增）
+    res = await logged_in_client.get(f"{base}/versions/{v1['id']}/diff")
+    assert res.status_code == 200
+    diff = res.json()
+    assert diff["version_number"] == v1["version_number"]
+    assert diff["snapshot_count"] == 1  # v1 快照只有 A
+    assert diff["current_count"] == 2  # 当前 A + B
+    assert {a["name"] for a in diff["added"]} == {"B"}
+    assert diff["removed"] == []
+    assert any(
+        c["name"] == "A" and c["field"] == "verification_status"
+        and c["snapshot"] == "未验证" and c["current"] == "成立"
+        for c in diff["changed"]
+    )
+
+
+async def test_version_diff_removed_after_delete(logged_in_client):
+    """删除节点后 diff v2 → removed 命中被删节点。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    # v2：A + B
+    r = await logged_in_client.put(
+        f"{base}/drafts",
+        json={"draft_data": {"objects": [{"level": "L1", "name": "A"}, {"level": "L1", "name": "B"}]}},
+    )
+    await logged_in_client.post(f"{base}/drafts/{r.json()['id']}/adopt")
+    v2 = (await logged_in_client.get(f"{base}/versions")).json()[0]
+
+    # 删除 B
+    objs = {o["name"]: o for o in (await logged_in_client.get(f"{base}/objects")).json()}
+    await logged_in_client.delete(f"{base}/objects/{objs['B']['id']}")
+
+    res = await logged_in_client.get(f"{base}/versions/{v2['id']}/diff")
+    assert res.status_code == 200
+    diff = res.json()
+    assert {rm["name"] for rm in diff["removed"]} == {"B"}
+    assert diff["added"] == []
+
+
+async def test_version_diff_not_found(logged_in_client):
+    """不存在的版本 → 404。"""
+    pid = await _project(logged_in_client)
+    res = await logged_in_client.get(f"{_bm(pid)}/versions/99999/diff")
+    assert res.status_code == 404
