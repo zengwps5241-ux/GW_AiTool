@@ -72,12 +72,14 @@ class SearchToolContext:
 
     - workspace_root：搜索结果归档根目录（用户个人空间）；为 None 则不归档
     - project_id / user_id / source_session_id：归档路径归属与审计
+    - project_name：项目名，用于按项目名归类归档路径（§6.2）
     """
 
     workspace_root: Path | None
     project_id: int | None
     user_id: int
     source_session_id: str | None
+    project_name: str | None = None
 
 
 # ─── 结果构造 ─────────────────────────────────────────────────
@@ -132,14 +134,22 @@ def _safe_slug(text: str, maxlen: int = 60) -> str:
 def _archive_public_info(
     ctx: SearchToolContext, filename: str, markdown: str
 ) -> tuple[Path | None, bool]:
-    """把搜索结果归档到 workspace_root/公开信息/<filename>。
+    """把搜索结果归档到 workspace_root/{项目名}/资料/公开信息/<filename>。
 
+    有项目名时按 §6.2 归档到项目子目录；无项目时退回根 公开信息/（向后兼容）。
     返回 ``(path, newly_written)``：workspace_root 为 None 时不归档；
     同名文件已存在则跳过写入（§7.8 同一关键词不重复归档的去重语义）。
     """
     if ctx.workspace_root is None:
         return None, False
-    archive_dir = ctx.workspace_root / "公开信息"
+    # §6.2：项目级会话 → {项目名}/资料/公开信息/；非项目 → 公开信息/
+    if ctx.project_name:
+        from app.core.utils import safe_filename
+
+        pn = safe_filename(ctx.project_name)
+        archive_dir = ctx.workspace_root / (pn or "file") / "资料" / "公开信息"
+    else:
+        archive_dir = ctx.workspace_root / "公开信息"
     try:
         archive_dir.mkdir(parents=True, exist_ok=True)
     except OSError:

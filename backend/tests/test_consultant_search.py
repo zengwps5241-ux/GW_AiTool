@@ -122,6 +122,40 @@ def test_archive_writes_and_dedups(tmp_path):
     assert path2.read_text(encoding="utf-8") == "内容A"  # 仍是 A
 
 
+def test_archive_with_project_name(tmp_path):
+    """M5.5.8：有 project_name 时归档到 {项目名}/资料/公开信息/（§6.2）。"""
+    from app.integrations.claude.search_tools import SearchToolContext, _archive_public_info
+
+    ctx = SearchToolContext(
+        workspace_root=tmp_path,
+        project_id=1,
+        user_id=1,
+        source_session_id="s",
+        project_name="信创迁移项目",
+    )
+    path, newly = _archive_public_info(ctx, "search.md", "搜索结果")
+    assert newly is True
+    # 路径应为 <workspace>/信创迁移项目/资料/公开信息/search.md
+    assert "信创迁移项目" in str(path)
+    assert "资料" in str(path)
+    assert "公开信息" in str(path)
+    assert path.read_text(encoding="utf-8") == "搜索结果"
+
+
+def test_archive_without_project_name_fallback(tmp_path):
+    """M5.5.8：无 project_name 时退回根 公开信息/（向后兼容）。"""
+    from app.integrations.claude.search_tools import SearchToolContext, _archive_public_info
+
+    ctx = SearchToolContext(
+        workspace_root=tmp_path, project_id=None, user_id=1, source_session_id="s"
+    )
+    path, newly = _archive_public_info(ctx, "q.md", "内容")
+    assert newly is True
+    # 路径应为 <workspace>/公开信息/q.md（向后兼容）
+    parts = path.relative_to(tmp_path).parts
+    assert parts[0] == "公开信息"
+
+
 def test_archive_no_workspace_returns_none():
     from app.integrations.claude.search_tools import SearchToolContext, _archive_public_info
 

@@ -21,7 +21,7 @@ from app.integrations.claude.defense import apply_output_filter, defense_plugin_
 from app.integrations.claude.search_tools import SearchToolContext, search_plugin_active
 from app.integrations.claude.tools import DraftToolContext
 from app.integrations.openai import generate_chat_completion
-from app.models import Agent, ChatSession, User
+from app.models import Agent, ChatSession, Project, User
 from app.modules.agents.workdir import get_agent_workdir
 from app.modules.projects.access import get_user_project_role
 from app.modules.consultant.router import (
@@ -523,12 +523,19 @@ async def stream_session_chat(
             # M3.3.2 consultant-search：项目 Agent 绑定搜索 Plugin 时挂载 3 个搜索工具
             # （search_web/search_company_registry/fetch_webpage），结果归档个人空间。
             # workspace_root 来自会话工作区；project/user/session 经闭包注入 handler。
+            # M5.5.8：解析 project_name 传入 SearchToolContext，归档按项目名归类（§6.2）。
             if search_plugin_active(agent):
+                _project_name: str | None = None
+                if project_id is not None:
+                    async with async_session() as _s:
+                        _proj = await _s.get(Project, project_id)
+                        _project_name = _proj.name if _proj else None
                 stream_kwargs["search_context"] = SearchToolContext(
                     workspace_root=ws,
                     project_id=project_id,
                     user_id=user.id,
                     source_session_id=session_id,
+                    project_name=_project_name,
                 )
             summary = await stream_chat(**stream_kwargs)
             await finalize_usage(summary)

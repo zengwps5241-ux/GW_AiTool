@@ -466,3 +466,10 @@
 - **选择 C — 全局端点（非团队空间作用域）+ 读写分离鉴权**：方法论库是跨项目团队共享（非某一 space 内对象），端点 `/api/team-spaces/methodology-library` 为全局，置于 `/{space_id}:int` 之前避免字面量误匹配（同 public-assets 前置）。GET（列表 + 详情）所有登录用户只读（current_user）；POST/PUT/DELETE 用 require_admin（§3.2 管理种子数据仅 admin/super）。三类 category = prompt_template / canvas_schema / methodology_rule（Literal），列表按 类别→sort_order→id 排序。
 - **选择 D — 启动播种默认条目（非破坏性，三类各一）**：seed_default_methodology 表空才插 3 条（道层根本准则 / 角色卡 Prompt 要点 / L1-L4 Schema），内容为真实方法论摘要（非臆造项目数据）；main.py lifespan 用 async_session 接线（同既有 departments sync 范式）。admin 可后续增删改，种子幂等不重复。
 - **理由**：DB 最大化复用 KnowledgeBase 范式降实现风险 + team_spaces 四层零 reload + admin 表单维护最简 + 种子立即可用。可校验性：新增 10 测试全过（空列表 / 未登录 401·403 / 非 admin 写 403 / admin 全 CRUD 链路 / 类别筛选 / 未知 404×3 / 独立 bob 删 403 / 种子幂等插 3 条）；test_team_spaces_api + test_team_workspace_api 共 16 零回归。前端 MethodologyLibraryView（自管 fetch api.me 判 admin + 三类分组 + MarkdownView 渲染 + admin CRUD 弹窗）作为跟进子任务，挂 TeamSpacesPage 第三 tab（协作空间 / 公开资产 / 方法论库）。
+
+## 决策 #57：M5.5.8 个人空间自动归档按项目名 — 上传落点 + 搜索归档加项目作用域（§6.2，最小改动）
+
+- **背景**：规格 §6.2 要求「对话中拖入/上传文件 → WF02 Skill 分类 → 自动存入个人空间/<项目名>/资料/<分类>/」。审计发现管线全部就绪——上传走 `uploadFilesToWorkspace`（支持 targetDir 参数）、WF02 Skill 已播种（7 类分类 + 用户确认 + 归档路径约定）、搜索结果归档走 `_archive_public_info`——**真实缺口仅两处参数硬编码**：① 前端上传 `targetDir: "uploads"` 不分项目；② 搜索归档固定落 `公开信息/` 无项目目录。决策#51 边界提及「自动归档=独立 P0 任务」，但实际改动量极小（远低于预估）。
+- **选择 A — 改参数不改管线**：前端上传把 `targetDir` 从 `"uploads"` 改为 `activeProjectName ? "{项目名}/资料" : "uploads"`（§6.2 路径约定 `个人空间/<项目名>/资料/<分类>/`，上传先落资料根目录，WF02 Skill 再按分类子目录移动）。搜索归档 `_archive_public_info` 把 `workspace_root/公开信息/` 改为 `workspace_root/{项目名净化}/资料/公开信息/`（有项目名时），无项目名退回根 `公开信息/`（向后兼容）。后端 uploads 服务零改动（已支持 target_dir）。
+- **选择 B — SearchToolContext 加 project_name 字段**：streaming.py 在构造 SearchToolContext 时从 `project_id→Project.name` 解析 project_name 传入（复用既有 async_session 取 Project 的范式，同 _build_draft_context 同款）。_archive_public_info 用 `safe_filename` 净化项目名（防路径穿越/Windows 非法符，同 M5.5.6 知识片段同款）。
+- **理由**：管线已全通→只补两处参数→改动量极小→风险极低。可校验性：新增 2 测试（有项目名归档路径含 {项目名}/资料/公开信息 / 无项目名退回根 公开信息/ 向后兼容），既有 6 archive 测全过 + search/uploads 38 零回归；前端 tsc -b 0 错 + vite build 过。
