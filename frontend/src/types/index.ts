@@ -110,6 +110,21 @@ export interface Session {
   updated_at: string;
 }
 
+/** 对话「标记为有价值」→ 个人空间知识片段（§2.6 line157 / Phase 4 line1334）*/
+export interface KnowledgeFragmentInput {
+  /** 标记的 assistant 回复正文 */
+  content: string;
+  /** 可选标题；缺省时后端取内容首行 */
+  title?: string | null;
+}
+
+export interface KnowledgeFragment {
+  /** 相对个人空间根路径，如「信创迁移项目/知识片段/x.md」*/
+  path: string;
+  filename: string;
+  project_name: string | null;
+}
+
 export interface Agent {
   id: number;
   name: string;

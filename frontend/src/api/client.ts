@@ -24,6 +24,8 @@ import type {
   BusinessMapDraft,
   KnowledgeBase,
   KnowledgeBaseInput,
+  KnowledgeFragment,
+  KnowledgeFragmentInput,
   LoginWhitelistConfig,
   LoginWhitelistDepartment,
   LoginWhitelistDepartmentSearchItem,
@@ -359,6 +361,12 @@ export const api = {
     }),
   sessionMessages: (id: string) =>
     request<ChatEvent[]>(`/api/sessions/${id}/messages`),
+  /** 对话「标记为有价值」→ 落盘个人空间知识片段（§2.6 line157）*/
+  markValuable: (sessionId: string, body: KnowledgeFragmentInput) =>
+    request<KnowledgeFragment>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/knowledge-fragments`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   sessionRunning: (id: string) =>
     request<RunningSessionState>(`/api/sessions/${id}/running`),
   stopSession: (id: string) =>

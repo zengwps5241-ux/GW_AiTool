@@ -2215,7 +2215,12 @@ export default function ChatWorkspace({
               }}
             >
               {turns.map((turn, i) => (
-                <TurnView key={i} turn={turn} username={me.display_name ?? me.username} />
+                <TurnView
+                  key={i}
+                  turn={turn}
+                  username={me.display_name ?? me.username}
+                  sessionId={currentId}
+                />
               ))}
               {streaming && (
                 <div
@@ -2305,7 +2310,15 @@ export default function ChatWorkspace({
 }
 
 // ============ 子组件:消息轮 ============
-function TurnView({ turn, username }: { turn: Turn; username: string }) {
+function TurnView({
+  turn,
+  username,
+  sessionId,
+}: {
+  turn: Turn;
+  username: string;
+  sessionId?: string | null;
+}) {
   const [copied, setCopied] = useState(false);
   // AI 草稿「待采纳」卡片的采纳/驳回状态（M3.1.4）。key = `${entityType}:${draftId}`
   const [draftAction, setDraftAction] = useState<
@@ -2314,6 +2327,11 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
       { status: "adopting" | "adopted" | "rejected" | "error"; message?: string }
     >
   >({});
+  // 「标记为有价值」→ 个人空间知识片段（§2.6 line157）
+  const [markState, setMarkState] = useState<{
+    status: "idle" | "saving" | "saved" | "error";
+    message?: string;
+  }>({ status: "idle" });
 
   const handleAdoptDraft = useCallback(async (part: DraftPart) => {
     setDraftAction((s) => ({ ...s, [part.id]: { status: "adopting" } }));
@@ -2348,6 +2366,26 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   }, [copyText]);
+
+  // 将本回合 assistant 正文标记为有价值，落盘个人空间知识片段（§2.6 line157）
+  const handleMarkValuable = useCallback(async () => {
+    if (!sessionId || !copyText || markState.status === "saving") return;
+    setMarkState({ status: "saving" });
+    try {
+      const res = await api.markValuable(sessionId, { content: copyText });
+      setMarkState({
+        status: "saved",
+        message: res.project_name
+          ? `已存入「${res.project_name}/知识片段」`
+          : "已存入「知识片段」",
+      });
+    } catch (e) {
+      setMarkState({
+        status: "error",
+        message: e instanceof Error ? e.message : "保存失败",
+      });
+    }
+  }, [sessionId, copyText, markState.status]);
 
   if (turn.kind === "user") {
     return (
@@ -2693,7 +2731,46 @@ function TurnView({ turn, username }: { turn: Turn; username: string }) {
             );
           return null;
         })}
-        <CopyMessageButton copied={copied} onClick={copyMessage} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <CopyMessageButton copied={copied} onClick={copyMessage} />
+          {sessionId && copyText && (
+            <button
+              type="button"
+              onClick={handleMarkValuable}
+              disabled={markState.status === "saving"}
+              title="标记为有价值，存入个人空间知识片段"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                height: 26,
+                padding: "0 8px",
+                background: "transparent",
+                border: "none",
+                borderRadius: 6,
+                cursor: markState.status === "saving" ? "wait" : "pointer",
+                color:
+                  markState.status === "saved"
+                    ? "var(--success)"
+                    : markState.status === "error"
+                      ? "var(--danger)"
+                      : "var(--ink-3)",
+                fontSize: 12,
+              }}
+            >
+              {markState.status === "saved" ? <I.Check size={14} /> : <I.Book size={14} />}
+              <span>
+                {markState.status === "saving"
+                  ? "保存中…"
+                  : markState.status === "saved"
+                    ? markState.message || "已存知识片段"
+                    : markState.status === "error"
+                      ? "保存失败，重试"
+                      : "标记为有价值"}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
