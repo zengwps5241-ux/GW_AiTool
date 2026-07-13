@@ -5,6 +5,7 @@ import type {
   BusinessMapObject,
   BusinessMapObjectInput,
   BusinessMapVersion,
+  VersionDiff,
   Category,
   ChatModelSelection,
   ChatEvent,
@@ -970,6 +971,10 @@ export const api = {
     request<BusinessMapVersion>(
       `/api/projects/${projectId}/business-map/versions/${versionId}/rollback`,
       { method: "POST" },
+    ),
+  diffBusinessMapVersion: (projectId: number, versionId: number) =>
+    request<VersionDiff>(
+      `/api/projects/${projectId}/business-map/versions/${versionId}/diff`,
     ),
 
   recomputeBusinessMapHealth: (projectId: number) =>

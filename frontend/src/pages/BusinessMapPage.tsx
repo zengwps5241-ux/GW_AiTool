@@ -18,6 +18,9 @@ import type {
   PreAnalysis,
   PreAnalysisInput,
   Project,
+  VersionDiff,
+  VersionDiffChangedItem,
+  VersionDiffItem,
 } from "@/types";
 
 // ─── 常量 ─────────────────────────────────────────────────────
@@ -547,6 +550,7 @@ function VersionView({
   const [versions, setVersions] = useState<BusinessMapVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState<BusinessMapVersion | null>(null);
+  const [diffing, setDiffing] = useState<BusinessMapVersion | null>(null);
   const [rollbackTarget, setRollbackTarget] = useState<BusinessMapVersion | null>(null);
   const [rolling, setRolling] = useState(false);
 
@@ -626,6 +630,9 @@ function VersionView({
                     </span>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => setViewing(v)} style={linkBtnStyle}>查看快照</button>
+                      <button onClick={() => setDiffing(v)} style={{ ...linkBtnStyle, color: "var(--info)" }}>
+                        对比当前
+                      </button>
                       {canRollback && (
                         <button
                           onClick={() => setRollbackTarget(v)}
@@ -663,6 +670,9 @@ function VersionView({
       </Card>
 
       {viewing && <SnapshotModal version={viewing} onClose={() => setViewing(null)} />}
+      {diffing && (
+        <DiffModal version={diffing} projectId={projectId} onClose={() => setDiffing(null)} />
+      )}
       <ConfirmDialog
         open={rollbackTarget != null}
         title="回滚版本"
@@ -726,6 +736,182 @@ function SnapshotModal({ version, onClose }: { version: BusinessMapVersion; onCl
       </div>
     </div>
   );
+}
+
+/**
+ * 版本对比弹窗（M5.3.2 前端）：拉取 GET .../versions/{vid}/diff，
+ * 渲染 added（绿）/ removed（红）/ changed（黄，显示 snapshot→current）。
+ * 对比仅看 map_type / verification_status（§7.4），payload 五维健康等派生数据不纳入噪声。
+ */
+function DiffModal({
+  version,
+  projectId,
+  onClose,
+}: {
+  version: BusinessMapVersion;
+  projectId: number;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [diff, setDiff] = useState<VersionDiff | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 挂载即拉取 diff（version.id/projectId 不变）
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    api
+      .diffBusinessMapVersion(projectId, version.id)
+      .then((d) => {
+        if (alive) setDiff(d);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : "加载对比失败";
+        setError(msg);
+        toast.showToast(msg, "error");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, version.id]);
+
+  const totalChanges = diff ? diff.added.length + diff.removed.length + diff.changed.length : 0;
+
+  return (
+    <div onClick={onClose} style={modalOverlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCardStyle, width: 560, maxHeight: "80vh", overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
+            版本 #{version.version_number} 对比当前
+            <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 400, marginLeft: 8 }}>
+              {version.created_at?.slice(0, 16).replace("T", " ")}
+            </span>
+          </div>
+          <button onClick={onClose} style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)" }}>
+            <I.X size={16} />
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 14 }}>{version.change_description}</div>
+
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13, padding: 28, justifyContent: "center" }}>
+            <Spinner size={16} /> 计算差异…
+          </div>
+        ) : error ? (
+          <div style={{ color: "var(--danger)", fontSize: 13, textAlign: "center", padding: 20 }}>加载失败：{error}</div>
+        ) : diff ? (
+          <>
+            {/* 概览统计 */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <DiffStat label="快照对象" value={diff.snapshot_count} tone="neutral" />
+              <DiffStat label="当前对象" value={diff.current_count} tone="neutral" />
+              <DiffStat label="新增" value={diff.added.length} tone="success" />
+              <DiffStat label="删除" value={diff.removed.length} tone="danger" />
+              <DiffStat label="变更" value={diff.changed.length} tone="warn" />
+            </div>
+
+            {totalChanges === 0 ? (
+              <div style={{ padding: 28, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
+                <I.CircleCheck size={28} style={{ color: "var(--success)", marginBottom: 10 }} />
+                <div>该版本快照与当前数据完全一致，无差异。</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {diff.added.length > 0 && (
+                  <DiffSection title="新增（当前有 / 快照无）" tone="success" items={diff.added} />
+                )}
+                {diff.removed.length > 0 && (
+                  <DiffSection title="删除（快照有 / 当前无）" tone="danger" items={diff.removed} />
+                )}
+                {diff.changed.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--warn)", marginBottom: 6 }}>
+                      变更（字段变化） · {diff.changed.length}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {diff.changed.map((c, i) => (
+                        <DiffChangedRow key={i} item={c} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : null}
+
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 16, paddingTop: 10, fontSize: 11, color: "var(--ink-4)" }}>
+          对比仅看 map_type / verification_status 字段（§7.4），payload 内五维健康等派生数据不纳入噪声。
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** diff 概览统计块 */
+function DiffStat({ label, value, tone }: { label: string; value: number; tone: "neutral" | "success" | "danger" | "warn" }) {
+  const color =
+    tone === "success" ? "var(--success)" : tone === "danger" ? "var(--danger)" : tone === "warn" ? "var(--warn)" : "var(--ink-2)";
+  return (
+    <div style={{ flex: 1, padding: "8px 6px", background: "var(--bg-2)", borderRadius: 8, textAlign: "center" }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 10, color: "var(--ink-3)", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+/** diff 新增/删除分组 */
+function DiffSection({ title, tone, items }: { title: string; tone: "success" | "danger"; items: VersionDiffItem[] }) {
+  const color = tone === "success" ? "var(--success)" : "var(--danger)";
+  const bg = tone === "success" ? "var(--success-soft)" : "var(--danger-soft)";
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color, marginBottom: 6 }}>{title} · {items.length}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "5px 8px", background: bg, borderRadius: 6 }}>
+            {it.level && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: LEVEL_COLOR[it.level] ?? color, minWidth: 22 }}>{it.level}</span>
+            )}
+            <span style={{ flex: 1, color: "var(--ink-2)" }}>{it.name || "未命名"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** diff 字段变更行（snapshot → current） */
+function DiffChangedRow({ item }: { item: VersionDiffChangedItem }) {
+  const fieldLabel = item.field === "map_type" ? "地图类型" : item.field === "verification_status" ? "验证状态" : item.field;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 8px", background: "var(--warn-soft)", borderRadius: 6, flexWrap: "wrap" }}>
+      {item.level && (
+        <span style={{ fontSize: 10, fontWeight: 700, color: LEVEL_COLOR[item.level] ?? "var(--warn)", minWidth: 22 }}>{item.level}</span>
+      )}
+      <span style={{ fontWeight: 500, color: "var(--ink-2)" }}>{item.name || "未命名"}</span>
+      <span style={{ fontSize: 10, color: "var(--ink-4)" }}>{fieldLabel}：</span>
+      <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: "var(--bg-3)", color: "var(--ink-3)" }}>
+        {fmtVal(item.snapshot)}
+      </span>
+      <I.ChevronRight size={11} style={{ color: "var(--ink-4)" }} />
+      <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: "var(--surface)", color: "var(--warn)", fontWeight: 600, border: "1px solid var(--warn)" }}>
+        {fmtVal(item.current)}
+      </span>
+    </div>
+  );
+}
+
+/** diff 值友好显示 */
+function fmtVal(v: unknown): string {
+  if (v == null || v === "") return "—";
+  return String(v);
 }
 
 // ─── 节点新增/编辑弹窗（M4.1.8） ──────────────────────────────

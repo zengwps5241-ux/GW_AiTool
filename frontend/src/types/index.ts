@@ -800,6 +800,35 @@ export interface BusinessMapVersion {
   created_at: string | null;
 }
 
+/** 版本对比 diff 中的节点摘要（新增 / 删除项） */
+export interface VersionDiffItem {
+  level: string | null;
+  name: string | null;
+}
+
+/** 版本对比 diff 中字段发生变化的节点（含快照值与当前值） */
+export interface VersionDiffChangedItem {
+  level: string | null;
+  name: string | null;
+  /** 变化字段：map_type | verification_status */
+  field: string;
+  snapshot: unknown;
+  current: unknown;
+}
+
+/** 版本快照 vs 当前 reviewed 数据的对比结果（M5.3.2） */
+export interface VersionDiff {
+  version_number: number;
+  snapshot_count: number;
+  current_count: number;
+  /** 当前有、快照无 */
+  added: VersionDiffItem[];
+  /** 快照有、当前无 */
+  removed: VersionDiffItem[];
+  /** 两边都有但 map_type / verification_status 变了 */
+  changed: VersionDiffChangedItem[];
+}
+
 /** 五维健康计算结果（单节点） */
 export interface FiveDimHealthOut {
   object_id: number;
