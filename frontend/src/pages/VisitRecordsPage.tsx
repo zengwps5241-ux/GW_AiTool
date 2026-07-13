@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
+import { VisibilityControls } from "@/components/VisibilityControls";
 import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
 import type {
@@ -526,6 +527,9 @@ function VisitFormModal({
   const [summary, setSummary] = useState(visit?.summary ?? "");
   const [takeaways, setTakeaways] = useState((visit?.key_takeaways ?? []).join("\n"));
   const [nextSteps, setNextSteps] = useState(visit?.next_steps ?? "");
+  // 跨项目公开（M5.5.3，§5.x / §6.3）
+  const [isPublic, setIsPublic] = useState<boolean>(visit?.is_public ?? false);
+  const [sharedWith, setSharedWith] = useState<number[]>(visit?.shared_with ?? []);
   const [saving, setSaving] = useState(false);
 
   const toggleClient = (id: number) =>
@@ -550,6 +554,8 @@ function VisitFormModal({
       key_takeaways: takeawayList.length ? takeawayList : null,
       next_steps: nextSteps.trim() || null,
       review_status: "reviewed",
+      is_public: isPublic,
+      shared_with: sharedWith,
     };
     try {
       if (visit) {
@@ -642,6 +648,16 @@ function VisitFormModal({
             <span style={miniLabelStyle}>下一步行动（支持 Markdown）</span>
             <textarea value={nextSteps} onChange={(e) => setNextSteps(e.target.value)} rows={3} style={textareaStyle} />
           </label>
+
+          {/* 跨项目公开（M5.5.3） */}
+          <VisibilityControls
+            isPublic={isPublic}
+            sharedWith={sharedWith}
+            onChange={(v) => {
+              setIsPublic(v.is_public);
+              setSharedWith(v.shared_with);
+            }}
+          />
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>

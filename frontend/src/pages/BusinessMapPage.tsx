@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Btn, Card, ConfirmDialog, Input, Spinner, Tag, TextArea, useToast } from "@/components/ui";
+import { VisibilityControls } from "@/components/VisibilityControls";
 import { I } from "@/icons";
 import type {
   BusinessMapLevel,
@@ -962,6 +963,9 @@ function NodeEditModal({
   const [confidence, setConfidence] = useState(node?.payload?.confidenceLevel ?? "");
   const [source, setSource] = useState(node?.payload?.sourceType ?? "");
   const [payloadJson, setPayloadJson] = useState("");
+  // 跨项目公开（M5.5.3，§5.x / §6.3）
+  const [isPublic, setIsPublic] = useState<boolean>(node?.is_public ?? false);
+  const [sharedWith, setSharedWith] = useState<number[]>(node?.shared_with ?? []);
   const [saving, setSaving] = useState(false);
 
   const parentLevel = PARENT_LEVEL[level];
@@ -1001,6 +1005,8 @@ function NodeEditModal({
           verification_status: verificationStatus,
           linked_hypothesis_id: mapType === "current" ? linkedHypothesisId : null,
           payload,
+          is_public: isPublic,
+          shared_with: sharedWith,
         });
         toast.showToast("节点已更新", "success");
         onSaved(node.id);
@@ -1015,6 +1021,8 @@ function NodeEditModal({
           payload,
           review_status: "reviewed", // 手动新增直接进正式库（§7.3）
           generated_by_ai: false,
+          is_public: isPublic,
+          shared_with: sharedWith,
         });
         toast.showToast("节点已新增", "success");
         onSaved(created.id);
@@ -1137,6 +1145,16 @@ function NodeEditModal({
               onChange={(e) => setPayloadJson(e.target.value)}
             />
           </div>
+
+          {/* 跨项目公开（M5.5.3） */}
+          <VisibilityControls
+            isPublic={isPublic}
+            sharedWith={sharedWith}
+            onChange={(v) => {
+              setIsPublic(v.is_public);
+              setSharedWith(v.shared_with);
+            }}
+          />
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>

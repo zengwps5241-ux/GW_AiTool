@@ -63,6 +63,8 @@ import type {
   TeamSpace,
   TeamSpaceMember,
   TeamSpaceMemberSearchItem,
+  PublicAssetsOut,
+  UserSearchItem,
   UploadedFile,
   UploadBatch,
   UploadTask,
@@ -342,6 +344,14 @@ export const api = {
     request<TeamSpace>(`/api/team-spaces/${encodeURIComponent(spaceId)}/lock`, {
       method: "DELETE",
     }),
+  // ─── 对象公开机制（M5.5.3，§2.6 / §5.x / §6.3）─────────────────
+  listPublicAssets: () => request<PublicAssetsOut>("/api/team-spaces/public-assets"),
+  listSharedWithMe: () =>
+    request<PublicAssetsOut>("/api/team-spaces/shared-with-me"),
+  searchUsers: (keyword: string) =>
+    request<UserSearchItem[]>(
+      `/api/team-spaces/users/search?keyword=${encodeURIComponent(keyword)}`,
+    ),
   updateSessionTitle: (id: string, title: string) =>
     request<Session>(`/api/sessions/${id}`, {
       method: "PATCH",

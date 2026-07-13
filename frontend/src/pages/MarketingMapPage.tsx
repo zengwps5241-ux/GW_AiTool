@@ -18,6 +18,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { api } from "@/api/client";
 import { Card, Spinner, Tag, useToast } from "@/components/ui";
+import { VisibilityControls } from "@/components/VisibilityControls";
 import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
 import type {
@@ -2369,6 +2370,9 @@ function CardEditModal({
   // 数组
   const [behaviors, setBehaviors] = useState<BehaviorEntry[]>(card?.behaviors ?? []);
   const [stanceLog, setStanceLog] = useState<StanceChangeEntry[]>(card?.stance_change_log ?? []);
+  // 跨项目公开（M5.5.3，§5.x / §6.3）
+  const [isPublic, setIsPublic] = useState<boolean>(card?.is_public ?? false);
+  const [sharedWith, setSharedWith] = useState<number[]>(card?.shared_with ?? []);
 
   const [saving, setSaving] = useState(false);
   const [openSec, setOpenSec] = useState<Record<string, boolean>>({
@@ -2377,6 +2381,7 @@ function CardEditModal({
     subjective: false,
     behaviors: false,
     stance: false,
+    visibility: false,
   });
   const toggle = (k: string) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
@@ -2416,6 +2421,8 @@ function CardEditModal({
       subjective_layer: Object.keys(subjectiveLayer).length ? subjectiveLayer : undefined,
       behaviors: behaviors.length ? behaviors : null,
       stance_change_log: stanceLog.length ? stanceLog : null,
+      is_public: isPublic,
+      shared_with: sharedWith,
     };
     if (!isEdit) payload.review_status = "reviewed";
     return payload;
@@ -2565,6 +2572,22 @@ function CardEditModal({
             </div>
           ))}
           <button onClick={() => setStanceLog((arr) => [...arr, {}])} style={addRowBtnStyle}>+ 添加态度变化</button>
+        </EditSection>
+
+        {/* 跨项目公开（M5.5.3） */}
+        <EditSection
+          title={`跨项目公开${isPublic ? " · 完全公开" : sharedWith.length ? ` · 共享 ${sharedWith.length} 人` : ""}`}
+          open={openSec.visibility}
+          onToggle={() => toggle("visibility")}
+        >
+          <VisibilityControls
+            isPublic={isPublic}
+            sharedWith={sharedWith}
+            onChange={(v) => {
+              setIsPublic(v.is_public);
+              setSharedWith(v.shared_with);
+            }}
+          />
         </EditSection>
 
         {/* 底部操作 */}

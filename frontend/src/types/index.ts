@@ -59,6 +59,36 @@ export interface TeamSpaceMemberSearchItem {
   is_member: boolean;
 }
 
+// ─── 对象公开机制（M5.5.3，§2.6 / §5.x / §6.3）─────────────────
+
+/** 用户搜索条目（「共享给」picker 数据源，对齐 UserSearchOut） */
+export interface UserSearchItem {
+  user_id: number;
+  username: string;
+  display_name: string | null;
+}
+
+/** 公开资产条目：跨项目聚合三类领域对象的最小展示信息（对齐 PublicAssetItem） */
+export interface PublicAssetItem {
+  object_type: "card" | "business_object" | "visit";
+  object_id: number;
+  project_id: number;
+  project_name: string;
+  title: string;
+  subtitle: string | null;
+  review_status: string;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
+
+/** 公开资产聚合结果（按类型分组，对齐 PublicAssetsOut） */
+export interface PublicAssetsOut {
+  cards: PublicAssetItem[];
+  business_objects: PublicAssetItem[];
+  visits: PublicAssetItem[];
+}
+
 export interface Session {
   id: string;
   title: string;
@@ -1221,6 +1251,10 @@ export interface VisitRecordInput {
   key_takeaways?: string[] | null;
   related_card_ids?: number[] | null;
   review_status?: string;
+  // 跨项目公开（§3.5 / M5.5.3）
+  is_public?: boolean;
+  shared_with?: number[] | null;
+  sensitivity_level?: string;
 }
 
 /** 证据创建/编辑入参（对齐 EvidenceSourceCreate；角色态度信号可带 §7.6 立场变化） */
