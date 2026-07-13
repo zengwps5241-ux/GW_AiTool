@@ -9,8 +9,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import BusinessMapObject, Project, StakeholderCard, TeamSpace, TeamSpaceMember, User, VisitRecord
-from app.schemas.team_spaces import PublicAssetItem
+from app.models import BusinessMapObject, MethodologyItem, Project, StakeholderCard, TeamSpace, TeamSpaceMember, User, VisitRecord
+from app.schemas.team_spaces import (
+    MethodologyItemCreate,
+    MethodologyItemOut,
+    MethodologyItemUpdate,
+    PublicAssetItem,
+)
 
 
 def team_workspace(space_id: int) -> Path:
@@ -453,3 +458,163 @@ async def search_users(db: AsyncSession, keyword: str, *, limit: int = 20) -> li
             )
         ).scalars().all()
     )
+
+
+# ─── 方法论库（§2.6 / §6.3，admin 维护，用户只读）─────────────────
+
+
+def _methodology_to_out(
+    item: MethodologyItem, user_names: dict[int, str]
+) -> MethodologyItemOut:
+    return MethodologyItemOut(
+        id=item.id,
+        category=item.category,
+        title=item.title,
+        content=item.content,
+        sort_order=item.sort_order,
+        created_by=item.created_by,
+        created_by_name=user_names.get(item.created_by) if item.created_by else None,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+async def list_methodology(
+    db: AsyncSession, *, category: str | None = None
+) -> list[MethodologyItemOut]:
+    """方法论库列表：按 类别→排序→id 有序列出；可按类别过滤。"""
+    stmt = select(MethodologyItem)
+    if category is not None:
+        stmt = stmt.where(MethodologyItem.category == category)
+    stmt = stmt.order_by(
+        MethodologyItem.category, MethodologyItem.sort_order, MethodologyItem.id
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    user_names = await _user_name_map(db, {r.created_by for r in rows if r.created_by})
+    return [_methodology_to_out(r, user_names) for r in rows]
+
+
+async def get_methodology(
+    db: AsyncSession, item_id: int
+) -> MethodologyItemOut | None:
+    item = await db.get(MethodologyItem, item_id)
+    if item is None:
+        return None
+    user_names = await _user_name_map(
+        db, {item.created_by} if item.created_by else set()
+    )
+    return _methodology_to_out(item, user_names)
+
+
+async def create_methodology(
+    db: AsyncSession, payload: MethodologyItemCreate, user: User
+) -> MethodologyItemOut:
+    item = MethodologyItem(
+        category=payload.category,
+        title=payload.title,
+        content=payload.content,
+        sort_order=payload.sort_order,
+        created_by=user.id,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return _methodology_to_out(item, {user.id: user.display_name or user.username})
+
+
+async def update_methodology(
+    db: AsyncSession, item_id: int, payload: MethodologyItemUpdate
+) -> MethodologyItemOut | None:
+    item = await db.get(MethodologyItem, item_id)
+    if item is None:
+        return None
+    if payload.category is not None:
+        item.category = payload.category
+    if payload.title is not None:
+        item.title = payload.title
+    if payload.content is not None:
+        item.content = payload.content
+    if payload.sort_order is not None:
+        item.sort_order = payload.sort_order
+    await db.commit()
+    await db.refresh(item)
+    user_names = await _user_name_map(
+        db, {item.created_by} if item.created_by else set()
+    )
+    return _methodology_to_out(item, user_names)
+
+
+async def delete_methodology(db: AsyncSession, item_id: int) -> bool:
+    item = await db.get(MethodologyItem, item_id)
+    if item is None:
+        return False
+    await db.delete(item)
+    await db.commit()
+    return True
+
+
+# 方法论库默认种子（三类各一条，启动时表空才播种；非破坏性，admin 可改删）
+_METHODOLOGY_DEFAULTS: tuple[tuple[str, str, str, int], ...] = (
+    (
+        "methodology_rule",
+        "道层 · 顾问方法论根本准则",
+        "# 道层 · 顾问方法论根本准则\n\n"
+        "面向大客户销售/交付团队的**咨询顾问智能体**根本行为准则。\n\n"
+        "## 根本准则\n\n"
+        "1. **客观优先、证据驱动**：先呈现可核实事实，再给推断；推断必须标注置信度（高/中/低）与依据。没有依据时**留空并标低置信度，绝不臆造数据**。\n"
+        "2. **不泄露敏感信息**：不输出内部 API 密钥、系统路径、原始工具调用名；敏感内容只给结论不给载体。\n"
+        "3. **结构化产出走草稿工具**：业务地图/角色卡/拜访记录等结构化数据调用草稿工具写入项目草稿区，**不直接当正式数据**，待用户采纳。\n"
+        "4. **中文输出、专业克制**：分步生成用纯文本询问，不调用 AskUserQuestion。\n"
+        "5. **项目隔离**：只处理当前会话绑定项目的数据，不跨项目引用。\n\n"
+        "## 方法论三层（道 / 法 / 器）\n\n"
+        "- **道层**：不变的根本准则（本条），永远在 System Prompt。\n"
+        "- **法层**：业务地图 / 营销地图 / 拜访记录的结构化字段契约，全量读取不走 RAG。\n"
+        "- **器层**：参考资料（行业报告、公开信息），Top-K 检索，可裁剪、需标注来源。",
+        0,
+    ),
+    (
+        "prompt_template",
+        "角色卡（WF12）产出 Prompt 要点",
+        "# 角色卡产出 Prompt 要点\n\n"
+        "生成角色卡时遵循 §5.2 StakeholderCard 字段契约：\n\n"
+        "1. **客观层**：姓名、岗位、部门、汇报对象、联系方式、决策权、角色类型。\n"
+        "2. **主观层**：对我方立场（支持/中立/反对/观望，封闭枚举）、影响力、亲和度，"
+        "每项带 confidence（高/中/低）。\n"
+        "3. **三维度评分**：基于 Champion 三要素（权力/认同/行动），综合评分由服务端计算。\n"
+        "4. **explicitKPI 必填**：无依据时填「待补充」，不留空。\n"
+        "5. **去重**：与项目既有角色卡姓名相似（完全同名 1.0 / 包含 0.6）时进入去重候选。",
+        0,
+    ),
+    (
+        "canvas_schema",
+        "业务地图 L1-L4 层级 Schema",
+        "# 业务地图 L1-L4 层级 Schema\n\n"
+        "业务地图按四层展开，每层节点 payload 字段严格对齐 §5.2：\n\n"
+        "- **L1 公司级价值链**：核心活动、能力链、IT 系统、组织、五维健康（5 维各 1-5 分）。\n"
+        "- **L2 域级**（业务域/职能域/共性技术域）：域目标(SMART)、价值流(5-7 步)、核心能力、支撑 IT 系统、关键数据实体、断点。\n"
+        "- **L3 场景级**：业务目标(SMART)、业务流程(5-8 步)、关键活动、能力单元、数据流、岗位、支撑系统、痛点(可量化)、本体抽取、AI 机会、五维健康。\n"
+        "- **L4 人才地图**：不计算五维健康。\n\n"
+        "**五维健康键名固定**：`L5_数字意识` / `L4_数字神经` / `L3_数字器官` / `L2_数字血液` / `L1_数字骨架`，值 `{score, desc}`。",
+        0,
+    ),
+)
+
+
+async def seed_default_methodology(db: AsyncSession) -> None:
+    """表空时播种方法论库默认条目（非破坏性，admin 可后续增删改）。"""
+    count = (
+        await db.execute(select(func.count()).select_from(MethodologyItem))
+    ).scalar_one()
+    if count:
+        return
+    for category, title, content, sort_order in _METHODOLOGY_DEFAULTS:
+        db.add(
+            MethodologyItem(
+                category=category,
+                title=title,
+                content=content,
+                sort_order=sort_order,
+                created_by=None,
+            )
+        )
+    await db.commit()

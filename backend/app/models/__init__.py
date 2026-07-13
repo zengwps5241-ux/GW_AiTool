@@ -24,7 +24,7 @@ from app.models.marketing_map import (
 from app.models.organization import Organization, UserOrganization
 from app.models.project import Project, ProjectDepartmentAccess, ProjectMember
 from app.models.session import ChatSession
-from app.models.team_space import TeamSpace, TeamSpaceMember
+from app.models.team_space import MethodologyItem, TeamSpace, TeamSpaceMember
 from app.models.upload_task import UploadTask
 from app.models.usage import UsageEvent, UsageResourceEvent
 from app.models.user import User
@@ -61,6 +61,7 @@ __all__ = [
     "SkillBinding",
     "TeamSpace",
     "TeamSpaceMember",
+    "MethodologyItem",
     "UploadTask",
     "UsageEvent",
     "UsageResourceEvent",

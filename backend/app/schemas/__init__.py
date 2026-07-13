@@ -78,6 +78,10 @@ from app.schemas.projects import (
     ProjectUpdate,
 )
 from app.schemas.team_spaces import (
+    MethodologyCategory,
+    MethodologyItemCreate,
+    MethodologyItemOut,
+    MethodologyItemUpdate,
     PublicAssetItem,
     PublicAssetsOut,
     TeamSpaceCreateIn,
@@ -162,6 +166,10 @@ __all__ = [
     "PublicAssetItem",
     "PublicAssetsOut",
     "UserSearchOut",
+    "MethodologyCategory",
+    "MethodologyItemCreate",
+    "MethodologyItemOut",
+    "MethodologyItemUpdate",
     "ModelSettingsOut",
     "ThinkingLevelOut",
     "PluginOut",

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import current_user
+from app.api.deps import current_user, require_admin
 from app.core import redis as redis_core
 from app.core.config import get_settings
 from app.db.session import get_db
@@ -68,6 +68,10 @@ from app.schemas import (
     WorkspaceTextSaveIn,
 )
 from app.schemas.team_spaces import (
+    MethodologyCategory,
+    MethodologyItemCreate,
+    MethodologyItemOut,
+    MethodologyItemUpdate,
     PublicAssetsOut,
     TeamSpaceCreateIn,
     TeamSpaceLockIn,
@@ -233,6 +237,75 @@ async def search_users(
         UserSearchOut(user_id=u.id, username=u.username, display_name=u.display_name)
         for u in users
     ]
+
+
+# ─── 方法论库（§2.6 / §6.3，admin 维护，用户只读）──────────────────
+# 全局端点（非团队空间作用域），置于 /{space_id}:int 之前，避免字面量
+# methodology-library 被 int 转换器之外的路径误匹配（同 public-assets 前置）。
+# 所有登录用户只读；写操作 require_admin（§3.2 管理种子数据）。
+
+@router.get("/methodology-library", response_model=list[MethodologyItemOut])
+async def list_methodology_library(
+    category: MethodologyCategory | None = Query(None),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[MethodologyItemOut]:
+    """方法论库列表（按 类别→排序→id），可按类别过滤。"""
+    return await service.list_methodology(db, category=category)
+
+
+@router.get("/methodology-library/{item_id}", response_model=MethodologyItemOut)
+async def get_methodology_library_item(
+    item_id: int,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MethodologyItemOut:
+    item = await service.get_methodology(db, item_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="条目不存在")
+    return item
+
+
+@router.post(
+    "/methodology-library",
+    response_model=MethodologyItemOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_methodology_library_item(
+    payload: MethodologyItemCreate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> MethodologyItemOut:
+    """新增方法论库条目（仅 admin/super）。"""
+    return await service.create_methodology(db, payload, user)
+
+
+@router.put("/methodology-library/{item_id}", response_model=MethodologyItemOut)
+async def update_methodology_library_item(
+    item_id: int,
+    payload: MethodologyItemUpdate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> MethodologyItemOut:
+    """更新方法论库条目（仅 admin/super）。"""
+    item = await service.update_methodology(db, item_id, payload)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="条目不存在")
+    return item
+
+
+@router.delete(
+    "/methodology-library/{item_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_methodology_library_item(
+    item_id: int,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """删除方法论库条目（仅 admin/super）。"""
+    ok = await service.delete_methodology(db, item_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="条目不存在")
 
 
 @router.get("/{space_id}", response_model=TeamSpaceOut)

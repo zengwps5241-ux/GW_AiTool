@@ -115,3 +115,35 @@ class UserSearchOut(BaseModel):
     user_id: int
     username: str
     display_name: str | None
+
+
+# ─── 方法论库（§2.6 / §6.3，admin 维护，用户只读）─────────────────
+
+# 三类内容：Prompt 模板 / 画布 Schema / 方法论规则
+MethodologyCategory = Literal["prompt_template", "canvas_schema", "methodology_rule"]
+
+
+class MethodologyItemCreate(BaseModel):
+    category: MethodologyCategory
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1)
+    sort_order: int = 0
+
+
+class MethodologyItemUpdate(BaseModel):
+    category: MethodologyCategory | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content: str | None = Field(default=None, min_length=1)
+    sort_order: int | None = None
+
+
+class MethodologyItemOut(BaseModel):
+    id: int
+    category: MethodologyCategory
+    title: str
+    content: str
+    sort_order: int
+    created_by: int | None
+    created_by_name: str | None
+    created_at: datetime
+    updated_at: datetime

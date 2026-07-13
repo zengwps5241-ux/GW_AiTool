@@ -25,6 +25,11 @@ async def _lifespan(_: FastAPI):
     # 为 DB 中所有 Agent 兜底初始化工作目录(缺则补)
     from app.modules.agents.workdir import ensure_all_agent_workdirs
     await ensure_all_agent_workdirs()
+    # M5.5.7：方法论库默认种子（表空才播种，非破坏性，admin 可后续维护）
+    from app.db.session import async_session
+    from app.modules.team_spaces.service import seed_default_methodology
+    async with async_session() as db:
+        await seed_default_methodology(db)
     # DEPRECATED: 企微部门同步已停用，切换为自建组织架构
     # from app.db.session import async_session
     # from app.modules.auth.departments import sync_departments
