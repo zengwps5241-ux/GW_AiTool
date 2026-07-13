@@ -314,3 +314,169 @@ async def test_business_map_admin_bypass(admin_client, other_logged_in_client):
     ).json()["id"]
     res = await admin_client.get(f"{_bm(pid)}/objects")
     assert res.status_code == 200
+
+
+# ─── 五维健康自动派生（M5.5.5）─────────────────────────────────
+# 三条写入路径（create / adopt / update）自动派生 payload.fiveDimHealth。
+
+
+def _score(obj, dim="L5_数字意识"):
+    return obj["payload"]["fiveDimHealth"][dim]["score"]
+
+
+async def test_create_object_auto_health(logged_in_client):
+    """新建 L1 全字段 → payload.fiveDimHealth 自动派生（source=auto，4/4→5 分）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={
+            "level": "L1",
+            "name": "全字段L1",
+            "payload": {
+                "coreActivities": ["a"],
+                "capabilityChain": "a→b",
+                "itSystems": "xxx",
+                "organization": "yyy",
+            },
+        },
+    )
+    assert res.status_code == 201
+    obj = res.json()
+    assert "fiveDimHealth" in obj["payload"]
+    assert obj["payload"]["_healthSource"] == "auto"
+    assert _score(obj) == 5  # 4/4 关键字段完整
+
+
+async def test_create_object_auto_health_partial(logged_in_client):
+    """新建 L1 仅 2/4 字段 → score 3（验证按完整度映射，非恒满分）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={
+            "level": "L1",
+            "name": "部分L1",
+            "payload": {"coreActivities": ["a"], "capabilityChain": "a→b"},
+        },
+    )
+    assert res.status_code == 201
+    assert _score(res.json()) == 3  # 2/4 = 0.5 → 3
+
+
+async def test_create_object_l4_no_auto_health(logged_in_client):
+    """新建 L4 → 不派生 fiveDimHealth（L4 无健康维度）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={"level": "L4", "name": "能力单元", "payload": {"capabilityUnitName": "x"}},
+    )
+    assert res.status_code == 201
+    assert "fiveDimHealth" not in (res.json()["payload"] or {})
+
+
+async def test_adopt_draft_auto_health(logged_in_client):
+    """采纳草稿 → 产出的 L1/L2 对象自带 fiveDimHealth，且随版本快照落库。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.put(
+        f"{base}/drafts",
+        json={
+            "draft_data": {
+                "objects": [
+                    {
+                        "level": "L1",
+                        "name": "草稿L1",
+                        "payload": {
+                            "coreActivities": ["x"],
+                            "capabilityChain": "y",
+                            "itSystems": "z",
+                            "organization": "w",
+                        },
+                    },
+                    {"level": "L2", "name": "草稿L2"},
+                ]
+            }
+        },
+    )
+    draft_id = res.json()["id"]
+    res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 200
+
+    objs = {o["name"]: o for o in (await logged_in_client.get(f"{base}/objects")).json()}
+    # L1 全字段 → 有自动健康 + 满分
+    assert objs["草稿L1"]["payload"]["_healthSource"] == "auto"
+    assert _score(objs["草稿L1"]) == 5
+    # L2 无 payload → 仍派生健康（0 完整度 → 1 分）
+    assert "fiveDimHealth" in objs["草稿L2"]["payload"]
+
+    # 版本快照携带健康
+    ver = (await logged_in_client.get(f"{base}/versions")).json()[0]
+    l1_snap = next(s for s in ver["snapshot_data"]["objects"] if s["name"] == "草稿L1")
+    assert "fiveDimHealth" in (l1_snap.get("payload") or {})
+
+
+async def test_update_payload_recomputes_auto(logged_in_client):
+    """payload 变更（auto 态）→ 基于新 payload 重算健康分。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    # 初始 2/4 → score 3
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={
+            "level": "L1",
+            "name": "upd",
+            "payload": {"coreActivities": ["a"], "capabilityChain": "b"},
+        },
+    )
+    oid = res.json()["id"]
+    assert _score(res.json()) == 3
+
+    # 更新为全字段 → score 5
+    res = await logged_in_client.put(
+        f"{base}/objects/{oid}",
+        json={
+            "payload": {
+                "coreActivities": ["a"],
+                "capabilityChain": "b",
+                "itSystems": "c",
+                "organization": "d",
+            }
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["payload"]["_healthSource"] == "auto"
+    assert _score(res.json()) == 5
+
+
+async def test_update_payload_preserves_manual_override(logged_in_client):
+    """manual 覆盖后更新 payload → 保留人工评分（不重算覆盖）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.post(
+        f"{base}/objects",
+        json={"level": "L1", "name": "m", "payload": {"coreActivities": ["a"]}},
+    )
+    oid = res.json()["id"]
+
+    # 手动覆盖为满分
+    manual = {"L5_数字意识": {"score": 5, "desc": "人工"}}
+    res = await logged_in_client.put(f"{base}/objects/{oid}/health", json=manual)
+    assert res.json()["source"] == "manual"
+
+    # 更新 payload（补全字段，按 auto 规则仍是 5，但应保留 manual 标记）
+    res = await logged_in_client.put(
+        f"{base}/objects/{oid}",
+        json={
+            "payload": {
+                "coreActivities": ["a"],
+                "capabilityChain": "b",
+                "itSystems": "c",
+                "organization": "d",
+            }
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["payload"]["_healthSource"] == "manual"
+    assert _score(res.json()) == 5

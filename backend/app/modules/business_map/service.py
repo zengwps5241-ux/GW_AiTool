@@ -145,7 +145,8 @@ async def create_object(
         map_type=payload.map_type,
         verification_status=payload.verification_status,
         linked_hypothesis_id=payload.linked_hypothesis_id,
-        payload=payload.payload,
+        # M5.5.5：新建对象自动派生 payload.fiveDimHealth（L1/L2/L3）
+        payload=_payload_with_auto_health(payload.payload, payload.level),
         review_status=payload.review_status,
         generated_by_ai=1 if payload.generated_by_ai else 0,
         created_by=user.id,
@@ -178,7 +179,8 @@ async def update_object(
     if payload.linked_hypothesis_id is not None:
         obj.linked_hypothesis_id = payload.linked_hypothesis_id
     if payload.payload is not None:
-        obj.payload = payload.payload
+        # M5.5.5：payload 变更时重算 auto 健康；_healthSource==='manual' 则保留人工评分
+        obj.payload = _merge_updated_payload(obj.payload, payload.payload, obj.level)
     if payload.review_status is not None:
         obj.review_status = payload.review_status
         obj.reviewed_at = datetime.now(timezone.utc) if payload.review_status == "reviewed" else obj.reviewed_at
@@ -436,15 +438,17 @@ async def adopt_draft(
     specs = _extract_object_specs(draft.draft_data)
     created_count = 0
     for spec in specs:
+        level = spec.get("level", "L1")
         obj = BusinessMapObject(
             project_id=project_id,
-            level=spec.get("level", "L1"),
+            level=level,
             name=spec.get("name", "未命名"),
             parent_id=spec.get("parent_id"),
             map_type=spec.get("map_type", "hypothesis"),
             verification_status=spec.get("verification_status", "未验证"),
             linked_hypothesis_id=spec.get("linked_hypothesis_id"),
-            payload=spec.get("payload"),
+            # M5.5.5：采纳时对 L1/L2/L3 自动派生 payload.fiveDimHealth（随版本快照落库）
+            payload=_payload_with_auto_health(spec.get("payload"), level),
             review_status=target_review_status,
             generated_by_ai=1 if spec.get("generated_by_ai") else 0,
             created_by=user.id,
@@ -637,3 +641,32 @@ async def set_node_health(
     await db.commit()
     await db.refresh(obj)
     return FiveDimHealthOut(object_id=obj.id, five_dim_health=health, source="manual")
+
+
+def _payload_with_auto_health(payload: dict | None, level: str) -> dict | None:
+    """对 payload 自动计算五维健康并合并写入（M5.5.5）。
+
+    L4 等无健康维度的层级原样返回 payload。供 create_object / adopt_draft
+    新建对象时派生 payload.fiveDimHealth（source=auto）。
+    """
+    health = compute_five_dim_health(payload, level)
+    if not health:
+        return payload
+    return merge_health_into_payload(payload, health, source="auto")
+
+
+def _merge_updated_payload(prev_payload: dict | None, new_payload: dict | None, level: str) -> dict | None:
+    """更新对象 payload 时的五维健康处理（M5.5.5）。
+
+    - 上一版 _healthSource==='manual'：保留人工评分，携带到新 payload（不覆盖人工判断）。
+    - 否则（auto / 首次）：基于新 payload 重算 auto 健康评分。
+    """
+    if new_payload is None:
+        return prev_payload
+    prev_source = (prev_payload or {}).get("_healthSource")
+    if prev_source == "manual":
+        prev_health = (prev_payload or {}).get("fiveDimHealth")
+        if prev_health:
+            return merge_health_into_payload(new_payload, prev_health, source="manual")
+        return new_payload
+    return _payload_with_auto_health(new_payload, level)
