@@ -2,7 +2,32 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "@/api/client";
 import type { TeamSpace } from "@/types";
 import { Btn, Input, useToast } from "@/components/ui";
+import { PublicAssetsView } from "@/components/PublicAssetsView";
 import { I } from "@/icons";
+
+type SpaceTab = "spaces" | "public";
+
+function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "8px 14px",
+        fontSize: 13,
+        fontWeight: active ? 500 : 400,
+        color: active ? "var(--accent)" : "var(--ink-2)",
+        background: "transparent",
+        border: "none",
+        borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+        marginBottom: -1,
+        cursor: "pointer",
+        transition: "color 120ms, border-color 120ms",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 interface Props {
   onOpenChat: (space: TeamSpace) => void;
@@ -11,6 +36,7 @@ interface Props {
 
 export default function TeamSpacesPage({ onOpenChat, onOpenDetail }: Props) {
   const { showToast } = useToast();
+  const [tab, setTab] = useState<SpaceTab>("spaces");
   const [spaces, setSpaces] = useState<TeamSpace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,12 +126,30 @@ export default function TeamSpacesPage({ onOpenChat, onOpenDetail }: Props) {
             variant="primary"
             icon={<I.Plus size={14} />}
             onClick={() => setDialogOpen(true)}
+            style={tab === "public" ? { display: "none" } : undefined}
           >
             创建团队空间
           </Btn>
         </div>
       </div>
 
+      {/* 子页签：协作空间（文件工作区）/ 公开资产（M5.5.3 跨项目对象公开） */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: "1px solid var(--line)",
+          marginBottom: 16,
+        }}
+      >
+        <TabButton active={tab === "spaces"} label="协作空间" onClick={() => setTab("spaces")} />
+        <TabButton active={tab === "public"} label="公开资产" onClick={() => setTab("public")} />
+      </div>
+
+      {tab === "public" ? (
+        <PublicAssetsView />
+      ) : (
+      <>
       {error && (
         <div
           style={{
@@ -229,6 +273,8 @@ export default function TeamSpacesPage({ onOpenChat, onOpenDetail }: Props) {
 
       {!loading && !error && spaces.length === 0 && (
         <div style={{ color: "var(--ink-3)", fontSize: 13 }}>暂无团队空间</div>
+      )}
+      </>
       )}
 
       {dialogOpen && (
