@@ -39,7 +39,9 @@ async def app_env(monkeypatch, tmp_path):
     # Layer 2: models, schemas (reload submodules so they re-import fresh Base)
     from app import models, schemas
     from app.models import agent as model_agent, business_map as model_business_map, category as model_category, consultant as model_consultant, conversion_task as model_conversion_task, customer as model_customer, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, marketing_map as model_marketing_map, organization as model_organization, project as model_project, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user, visit as model_visit
+    from app.models import role as model_role, menu as model_menu
     from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, reviews as schema_reviews, workspace_tasks as schema_workspace_tasks
+    from app.schemas import roles as schema_roles
     reload(model_agent)
     reload(model_business_map)
     reload(model_marketing_map)
@@ -58,6 +60,8 @@ async def app_env(monkeypatch, tmp_path):
     reload(model_upload_task)
     reload(model_usage)
     reload(model_user)
+    reload(model_role)
+    reload(model_menu)
     reload(models)
     reload(schema_auth)
     reload(schema_agents)
@@ -75,6 +79,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(schema_login_whitelist)
     reload(schema_upload_tasks)
     reload(schema_workspace_tasks)
+    reload(schema_roles)
     reload(schemas)
 
     # Layer 3: integrations
@@ -102,6 +107,8 @@ async def app_env(monkeypatch, tmp_path):
     from app.modules.sessions import service as sessions_service, streaming
     from app.modules.team_spaces import service as team_spaces_service
     from app.modules.organizations import service as organizations_service
+    from app.modules.roles import service as roles_service
+    from app.modules.menus import service as menus_service
     from app.modules.customers import service as customers_service
     from app.modules.projects import service as projects_service, access as projects_access
     from app.modules.business_map import service as business_map_service, health as business_map_health
@@ -130,6 +137,8 @@ async def app_env(monkeypatch, tmp_path):
     reload(sessions_service)
     reload(streaming)
     reload(organizations_service)
+    reload(roles_service)
+    reload(menus_service)
     reload(customers_service)
     reload(projects_access)
     reload(projects_service)
@@ -171,6 +180,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.api.routes import marketing_map as marketing_map_routes
     from app.api.routes import visit as visit_routes
     from app.api.routes import reviews as reviews_routes
+    from app.api.routes import roles as roles_routes
     reload(deps)
     reload(project_deps)
     reload(auth_routes)
@@ -195,6 +205,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(marketing_map_routes)
     reload(visit_routes)
     reload(reviews_routes)
+    reload(roles_routes)
     reload(router)
 
     # Layer 6: main, scripts
@@ -208,6 +219,17 @@ async def app_env(monkeypatch, tmp_path):
         await conn.execute(text("DROP SCHEMA public CASCADE"))
         await conn.execute(text("CREATE SCHEMA public"))
     await db_migrations.init_db()
+    # M6.1：种子内置角色 + 菜单 + 角色菜单关联（与生产 lifespan 一致，
+    # ASGITransport 不触发 lifespan，故在此显式播种基础参考数据）
+    from app.modules.roles.service import (
+        seed_default_role_menus,
+        seed_default_roles,
+    )
+    from app.modules.menus.service import seed_default_menus
+    async with db_session.async_session() as db:
+        await seed_default_roles(db)
+        await seed_default_menus(db)
+        await seed_default_role_menus(db)
     yield
     await db_session.engine.dispose()
 

@@ -30,6 +30,16 @@ async def _lifespan(_: FastAPI):
     from app.modules.team_spaces.service import seed_default_methodology
     async with async_session() as db:
         await seed_default_methodology(db)
+    # M6.1：角色 + 菜单 + 角色菜单关联种子（表空才播种，非破坏性；按依赖顺序：roles→menus→role_menus）
+    from app.modules.roles.service import (
+        seed_default_role_menus,
+        seed_default_roles,
+    )
+    from app.modules.menus.service import seed_default_menus
+    async with async_session() as db:
+        await seed_default_roles(db)
+        await seed_default_menus(db)
+        await seed_default_role_menus(db)
     # DEPRECATED: 企微部门同步已停用，切换为自建组织架构
     # from app.db.session import async_session
     # from app.modules.auth.departments import sync_departments

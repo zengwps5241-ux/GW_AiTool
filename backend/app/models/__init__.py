@@ -21,7 +21,9 @@ from app.models.marketing_map import (
     StakeholderRelation,
     TalkScript,
 )
+from app.models.menu import Menu
 from app.models.organization import Organization, UserOrganization
+from app.models.role import Role, RoleMenu
 from app.models.project import Project, ProjectDepartmentAccess, ProjectMember
 from app.models.session import ChatSession
 from app.models.team_space import MethodologyItem, TeamSpace, TeamSpaceMember
@@ -47,6 +49,7 @@ __all__ = [
     "KnowledgeBase",
     "LoginWhitelistDepartment",
     "LoginWhitelistUser",
+    "Menu",
     "Organization",
     "PluginBinding",
     "PreAnalysis",
@@ -55,6 +58,8 @@ __all__ = [
     "Project",
     "ProjectDepartmentAccess",
     "ProjectMember",
+    "Role",
+    "RoleMenu",
     "StakeholderCard",
     "StakeholderRelation",
     "TalkScript",

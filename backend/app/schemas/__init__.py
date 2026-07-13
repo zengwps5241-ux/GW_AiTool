@@ -138,6 +138,13 @@ from app.schemas.reviews import (
     PendingReviewItem,
     RejectRequest,
 )
+from app.schemas.roles import (
+    RoleCreate,
+    RoleMenusUpdate,
+    RoleOut,
+    RoleUpdate,
+    UserRoleAssignment,
+)
 
 __all__ = [
     "UserOut",
@@ -260,4 +267,9 @@ __all__ = [
     "AdoptRequest",
     "PendingReviewItem",
     "RejectRequest",
+    "RoleCreate",
+    "RoleUpdate",
+    "RoleOut",
+    "RoleMenusUpdate",
+    "UserRoleAssignment",
 ]
