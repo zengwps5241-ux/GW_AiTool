@@ -1,6 +1,7 @@
 // 共享空间文件管理器:文件树 + 预览/编辑 + 任务列表
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { WorkspaceNode, WorkspaceTask } from "@/types";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Project, WorkspaceNode, WorkspaceTask } from "@/types";
+import { api as fetchApi } from "@/api/client";
 import WorkspaceTree from "@/components/workspace/WorkspaceTree";
 import WorkspacePreview from "@/components/workspace/WorkspacePreview";
 import WorkspaceTaskDrawer from "@/components/workspace/WorkspaceTaskDrawer";
@@ -145,6 +146,11 @@ export default function WorkspaceFileManager({
   tasksRef.current = tasks;
   fileLockRef.current = fileLock;
 
+  // 个人空间项目筛选（M5.5.4）：仅 personal 启用，按项目名过滤顶层目录
+  const isPersonal = api.kind === "personal";
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null); // null = 全部项目
+
   const ensureWritable = useCallback(() => {
     if (!readonly) return true;
     showToast(readonlyReason || "当前空间只读，不能编辑文件", "info");
@@ -217,6 +223,23 @@ export default function WorkspaceFileManager({
     loadTree();
     loadTasks("init");
   }, [loadTree, loadTasks]);
+
+  // 个人空间：拉取用户可访问项目列表，供顶部筛选下拉框使用（失败静默不阻塞文件管理）
+  useEffect(() => {
+    if (!isPersonal) return;
+    let alive = true;
+    fetchApi
+      .listProjects()
+      .then((list) => {
+        if (alive) setProjects(list);
+      })
+      .catch(() => {
+        /* 项目列表加载失败不影响文件树本身 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isPersonal]);
 
   const selectNode = useCallback((node: WorkspaceNode) => {
     setSelected(node);
@@ -444,6 +467,15 @@ export default function WorkspaceFileManager({
       preview.resolvedPath !== selected.path,
   );
 
+  // 项目筛选生效时仅展示匹配项目名的顶层目录（§2.6），其余情况展示完整树
+  const visibleNodes = useMemo(
+    () =>
+      isPersonal && projectFilter
+        ? nodes.filter((n) => n.type === "dir" && n.name === projectFilter)
+        : nodes,
+    [nodes, projectFilter, isPersonal],
+  );
+
   // 未保存离开提示
   useEffect(() => {
     if (!dirty) return;
@@ -622,6 +654,35 @@ export default function WorkspaceFileManager({
         <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700 }}>
           {title}
         </div>
+        {isPersonal && projects.length > 0 && (
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-3)" }}
+            title="按项目筛选文件树（仅显示该项目名下的顶层目录）"
+          >
+            <I.Filter size={14} />
+            <select
+              value={projectFilter ?? ""}
+              onChange={(e) => setProjectFilter(e.target.value || null)}
+              style={{
+                height: 30,
+                fontSize: 12,
+                padding: "0 8px",
+                borderRadius: 8,
+                border: "1px solid var(--line)",
+                background: "var(--bg)",
+                color: "var(--ink)",
+                maxWidth: 180,
+              }}
+            >
+              <option value="">全部项目</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {readonly && (
           <span
             style={{
@@ -717,7 +778,7 @@ export default function WorkspaceFileManager({
           }}
         />
         <WorkspaceTree
-          nodes={nodes}
+          nodes={visibleNodes}
           selectedPath={selected?.path ?? null}
           readonly={readonly}
           onSelect={openNode}
