@@ -996,6 +996,38 @@ export interface StakeholderRelationInput {
   description?: string | null;
 }
 
+/** 角色去重候选：既有卡比对项（M5.5.1，对齐 DisambiguationCandidateCard） */
+export interface DisambiguationCandidateCard {
+  id: number;
+  name: string;
+  position: string | null;
+  department: string | null;
+  role_type: StakeholderRoleType | null;
+  score: number;
+  reasons: string[];
+}
+
+/** 角色去重候选（M5.5.1，对齐 DisambiguationCandidateOut） */
+export interface DisambiguationCandidate {
+  id: number;
+  project_id: number;
+  draft_card_id: number | null;
+  new_draft_snapshot: Record<string, unknown>;
+  candidates: DisambiguationCandidateCard[];
+  status: "pending" | "resolved";
+  decision: "new" | "merge" | null;
+  merge_into_card_id: number | null;
+  resolved_by: number | null;
+  created_at: string | null;
+  resolved_at: string | null;
+}
+
+/** 角色去重确认决策（M5.5.1，对齐 DisambiguationResolveIn） */
+export interface DisambiguationResolveInput {
+  decision: "new" | "merge";
+  merge_into_card_id?: number | null;
+}
+
 /** 关系网络图（节点+边） */
 export interface StakeholderGraphNode {
   id: number;

@@ -48,6 +48,8 @@ import type {
   Session,
   Skill,
   StanceChangeResult,
+  DisambiguationCandidate,
+  DisambiguationResolveInput,
   VisitRecord,
   VisitRecordInput,
   StakeholderCard,
@@ -1118,6 +1120,25 @@ export const api = {
   getStakeholderGraph: (projectId: number) =>
     request<StakeholderGraph>(
       `/api/projects/${projectId}/stakeholder-relations/graph`,
+    ),
+
+  // ─── 角色去重候选（M5.5.1 person_disambiguation）──────────────
+  listDisambiguationCandidates: (projectId: number, status?: string) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set("status", status);
+    const query = qs.toString();
+    return request<DisambiguationCandidate[]>(
+      `/api/projects/${projectId}/disambiguation-candidates${query ? "?" + query : ""}`,
+    );
+  },
+  resolveDisambiguationCandidate: (
+    projectId: number,
+    candidateId: number,
+    data: DisambiguationResolveInput,
+  ) =>
+    request<DisambiguationCandidate>(
+      `/api/projects/${projectId}/disambiguation-candidates/${candidateId}/resolve`,
+      { method: "POST", body: JSON.stringify(data) },
     ),
 
   listTalkScripts: (

@@ -22,6 +22,7 @@ import MarkdownView from "@/components/workspace/MarkdownView";
 import { I } from "@/icons";
 import type {
   BehaviorEntry,
+  DisambiguationCandidate,
   KnowledgeBase,
   KnowledgeCategory,
   Project,
@@ -267,6 +268,9 @@ export default function MarketingMapPage({ project, focusCardId, onFocusConsumed
 
       {/* 主内容 */}
       <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
+        {/* M5.5.1 角色去重候选确认（pending 为空时 Banner 自返回 null） */}
+        <DisambiguationBanner projectId={project.id} onChanged={refresh} />
+
         {loading && cards.length === 0 ? (
           <Card style={{ padding: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13 }}>
@@ -335,6 +339,221 @@ export default function MarketingMapPage({ project, focusCardId, onFocusConsumed
     </div>
   );
 }
+
+// ─── 角色去重候选确认 Banner（M5.5.1 person_disambiguation，§7.1）──────────
+// AI 在对话中新建角色卡草稿若与既有卡疑似同人，后端生成去重候选；
+// 本 Banner 自管拉取/处置状态，pending 为空时 return null（DOM 不留痕）。
+// 处置后本地移除该项并 onChanged 刷新角色卡（new→新卡 reviewed / merge→既有卡填充+草稿删除）。
+
+function DisambiguationBanner({
+  projectId,
+  onChanged,
+}: {
+  projectId: number;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [items, setItems] = useState<DisambiguationCandidate[]>([]);
+  const [expanded, setExpanded] = useState(true);
+  const [acting, setActing] = useState<number | null>(null); // 正在处置的候选 id
+
+  const refresh = useCallback(async () => {
+    try {
+      setItems(await api.listDisambiguationCandidates(projectId, "pending"));
+    } catch {
+      setItems([]); // 静默——辅助提醒不阻塞主流程
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  if (items.length === 0) return null;
+
+  const resolve = async (
+    candidate: DisambiguationCandidate,
+    decision: "new" | "merge",
+    mergeIntoId?: number,
+  ) => {
+    setActing(candidate.id);
+    try {
+      await api.resolveDisambiguationCandidate(projectId, candidate.id, {
+        decision,
+        merge_into_card_id: mergeIntoId ?? null,
+      });
+      setItems((prev) => prev.filter((c) => c.id !== candidate.id));
+      onChanged(); // 刷新角色卡列表
+      toast.showToast(
+        decision === "new" ? "已确认为新人，草稿已发布" : "已合并到既有角色卡",
+        "success",
+      );
+    } catch (e) {
+      toast.showToast(e instanceof Error ? e.message : "处置失败", "error");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const roleName = (rt: string | null) =>
+    rt && (ROLE_TYPE_LABELS as Record<string, string>)[rt]
+      ? (ROLE_TYPE_LABELS as Record<string, string>)[rt]
+      : rt;
+
+  return (
+    <div style={disambiguationBannerStyle}>
+      {/* 标题行（可折叠） */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        <I.AlertTriangle size={15} style={{ color: "var(--warn)", flexShrink: 0 }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--warn)" }}>
+          {items.length} 项疑似重复角色待确认
+        </span>
+        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+          — AI 新建草稿与既有角色疑似同人，请确认「独立建卡」或「合并到既有卡」
+        </span>
+        <span style={{ flex: 1 }} />
+        <I.ChevronDown
+          size={14}
+          style={{
+            color: "var(--ink-3)",
+            transition: "transform 120ms",
+            transform: expanded ? "rotate(180deg)" : "none",
+          }}
+        />
+      </button>
+
+      {/* 候选列表 */}
+      {expanded && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((c) => {
+            const draft = c.new_draft_snapshot as Record<string, unknown>;
+            const draftName = (draft.name as string) ?? "(未命名)";
+            return (
+              <div key={c.id} style={disambiguationRowStyle}>
+                {/* 新草稿信息 */}
+                <div style={{ minWidth: 180, flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>
+                    {draftName}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>
+                    {[
+                      draft.position as string | null,
+                      draft.department as string | null,
+                      roleName(draft.role_type as string | null),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "AI 新建草稿"}
+                  </div>
+                </div>
+
+                {/* 候选既有卡（每个一个合并按钮）+ 新建按钮 */}
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: "var(--ink-3)" }}>疑似同人：</span>
+                  {c.candidates.map((cc) => (
+                    <button
+                      key={cc.id}
+                      disabled={acting === c.id}
+                      onClick={() => resolve(c, "merge", cc.id)}
+                      style={mergeBtnStyle}
+                      title={`合并到「${cc.name}」（${cc.reasons.join("、")}，相似度 ${(
+                        cc.score * 100
+                      ).toFixed(0)}%）`}
+                    >
+                      <I.Copy size={12} />
+                      合并到「{cc.name}」
+                      <span style={{ opacity: 0.7 }}>
+                        {(cc.score * 100).toFixed(0)}%
+                      </span>
+                    </button>
+                  ))}
+                  <span
+                    style={{
+                      width: 1,
+                      height: 18,
+                      background: "var(--border)",
+                      margin: "0 4px",
+                    }}
+                  />
+                  <button
+                    disabled={acting === c.id}
+                    onClick={() => resolve(c, "new")}
+                    style={newBtnStyle}
+                    title="确认为新人，草稿独立发布为正式角色卡"
+                  >
+                    <I.UserCheck size={12} />
+                    确认为新人
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const disambiguationBannerStyle: React.CSSProperties = {
+  background: "var(--warn-soft)",
+  border: "1px solid var(--warn)",
+  borderRadius: 8,
+  padding: "10px 14px",
+  marginBottom: 12,
+};
+const disambiguationRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  background: "var(--bg-1)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "8px 12px",
+};
+const mergeBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  padding: "4px 10px",
+  fontSize: 12,
+  fontFamily: "inherit",
+  cursor: "pointer",
+  background: "var(--accent-soft)",
+  color: "var(--accent-2)",
+  border: "1px solid var(--accent)",
+  borderRadius: 6,
+};
+const newBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  padding: "4px 10px",
+  fontSize: 12,
+  fontFamily: "inherit",
+  cursor: "pointer",
+  background: "var(--success-soft)",
+  color: "var(--success)",
+  border: "1px solid var(--success)",
+  borderRadius: 6,
+};
 
 // ─── 角色卡视图（M4.2.6：左侧角色列表 + 中间 5 子 Tab 详情卡 + 右侧关联面板） ──
 // 5 子 Tab：客观信息 / 主观分析 / 行为分析 / 态度历史 / 话术。
