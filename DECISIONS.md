@@ -404,3 +404,12 @@
 - **选择 B — 只比结构性字段 map_type / verification_status，不比 payload**：payload 含五维健康派生数据（M5.5.5 后自动变化）+ 大量业务字段，diff payload 噪声大且语义模糊。仅比 map_type（假设↔现状切换）+ verification_status（未验证→成立/推翻等，最有价值的演进信号）。三类结果：added（当前有快照无）/ removed（快照有当前无）/ changed（结构性字段变）。
 - **选择 C — 后端 diff 端点 + 前端渲染留跟进**：`GET /api/projects/{id}/business-map/versions/{vid}/diff` 返回 VersionDiffOut（version_number/snapshot_count/current_count + added[]/removed[]/changed[]），require_project_member 只读。复用 `_snapshot_reviewed_objects` 取当前数据。前端 VersionView 增「对比当前」按钮渲染 diff 是自然跟进（端点是可测核心，先落）。
 - **理由**：(level,name) 键规避无 id 限制；只比结构性字段避开 payload 噪声聚焦演进信号；后端端点可测先行。可校验性：新增 3 测试（added+changed 命中 / removed 命中 / 404）全过；test_business_map_api 22 零回归。纯增量（新 schema+service 函数+端点），不改既有逻辑，无法扩大 fail 集。纯后端改动。
+
+## 决策 #50：M5.3.2 版本对比前端渲染 — VersionView 对比当前弹窗（§7.4，前端跟进 #49）
+
+- **背景**：决策 #49 已落 diff 后端端点（3c1c318），前端 VersionView 仅「查看快照」「回滚」，缺「对比当前」入口。补齐 M5.3.2 全闭环。契约已定（VersionDiffOut 后端 schema），前端只需镜像类型 + 渲染。
+- **选择 A — 弹窗（DiffModal）而非内联展开**：与既有 SnapshotModal 一致（版本行→点按钮→浮层），用户心智模型统一，且 diff 内容较多（统计+三分组）适合弹窗承载。复用 modalOverlayStyle/modalCardStyle。
+- **选择 B — DiffModal 挂载即拉取（自含 async），非 VersionView 预拉全量**：版本可能很多，预拉每个版本的 diff 浪费请求；按需在点「对比当前」时拉对应版本一个 diff 最省。DiffModal 内 useEffect[projectId, version.id] 调 diffBusinessMapVersion，含 loading/error/空差异三态。与 NodeEvidenceSection 同款「挂载即拉 + alive 防竞态」模式。
+- **选择 C — 渲染分三色组 + 概览统计**：顶部 5 计数块（快照数/当前数/新增/删除/变更）；added 绿分组（success-soft）/ removed 红分组（danger-soft）/ changed 黄行（warn-soft，snapshot→current 用 ChevronRight 过渡，字段中文标签 map_type→地图类型 / verification_status→验证状态）；空差异显示 CircleCheck；底部口径说明（仅看 map_type/verification_status，口径同 #49）。changed 的 snapshot 值灰底、current 值黄框高亮，视觉对比清晰。
+- **理由**：弹窗对齐 SnapshotModal 心智；按需拉取省请求；三色分组让 added/removed/changed 一眼可辨，snapshot→current 过渡直观体现演进方向。可校验性：tsc -b 0 错 + vite build 过（纯前端，无后端改动，未跑 pytest——后端端点 #49 已测）。types 镜像后端 Pydantic schema（VersionDiff/Item/ChangedItem），api client 仿 listBusinessMapVersions 加 diffBusinessMapVersion。纯增量，不改既有渲染逻辑。
+
