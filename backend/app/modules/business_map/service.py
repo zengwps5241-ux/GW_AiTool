@@ -432,6 +432,11 @@ async def adopt_draft(
     draft = await db.get(BusinessMapDraft, draft_id)
     if draft is None or draft.project_id != project_id:
         raise ValueError("草稿不存在")
+    # 过期校验（§7.1.6）：adopt 是写路径，须主动把已过期的 active 草稿标记 expired，
+    # 不能依赖 get/upsert 时的懒标记——否则一个 expires_at 已过但未被访问过的草稿
+    # 仍 status=active，会被错误采纳。标记后 refresh 复验状态。
+    await _mark_expired_drafts(db, project_id)
+    await db.refresh(draft)
     if draft.status != "active":
         raise ValueError(f"草稿当前状态为 {draft.status}，不能采纳")
 

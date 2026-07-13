@@ -480,3 +480,50 @@ async def test_update_payload_preserves_manual_override(logged_in_client):
     assert res.status_code == 200
     assert res.json()["payload"]["_healthSource"] == "manual"
     assert _score(res.json()) == 5
+
+
+# ─── 草稿过期（M5.1.3，§7.1.6）──────────────────────────────────
+
+
+async def test_adopt_rejects_expired_draft(logged_in_client, db_session):
+    """超过 7 天的 active 草稿 → adopt 主动标记 expired 并拒绝（§7.1.6）。"""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models import BusinessMapDraft
+
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    # 建草稿（默认 expires_at = now + 7d，未过期，status=active）
+    res = await logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "X"}]}}
+    )
+    draft_id = res.json()["id"]
+    assert res.json()["status"] == "active"
+
+    # 模拟过期：把 expires_at 置于过去（status 仍 active，未被懒标记）
+    draft = await db_session.get(BusinessMapDraft, draft_id)
+    draft.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+    await db_session.commit()
+
+    # adopt 须拒绝：adopt 内 _mark_expired_drafts 标记 expired 后复验 status≠active → 400
+    res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 400
+
+    # 该草稿已被 adopt 内部标记为 expired
+    await db_session.refresh(draft)
+    assert draft.status == "expired"
+
+
+async def test_adopt_accepts_fresh_draft(logged_in_client):
+    """新鲜草稿（expires_at 在未来）→ 正常采纳（回归保护，不被过期校验误伤）。"""
+    pid = await _project(logged_in_client)
+    base = _bm(pid)
+    res = await logged_in_client.put(
+        f"{base}/drafts", json={"draft_data": {"objects": [{"level": "L1", "name": "Y"}]}}
+    )
+    draft_id = res.json()["id"]
+    # 默认 expires_at 约 7 天后，adopt 应成功
+    assert res.json()["expires_at"] is not None
+    res = await logged_in_client.post(f"{base}/drafts/{draft_id}/adopt")
+    assert res.status_code == 200
+    assert res.json()["success"] is True
