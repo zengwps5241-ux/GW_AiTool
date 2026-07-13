@@ -3,9 +3,10 @@ import { api } from "@/api/client";
 import type { TeamSpace } from "@/types";
 import { Btn, Input, useToast } from "@/components/ui";
 import { PublicAssetsView } from "@/components/PublicAssetsView";
+import { MethodologyLibraryView } from "@/components/MethodologyLibraryView";
 import { I } from "@/icons";
 
-type SpaceTab = "spaces" | "public";
+type SpaceTab = "spaces" | "public" | "methodology";
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
@@ -126,7 +127,7 @@ export default function TeamSpacesPage({ onOpenChat, onOpenDetail }: Props) {
             variant="primary"
             icon={<I.Plus size={14} />}
             onClick={() => setDialogOpen(true)}
-            style={tab === "public" ? { display: "none" } : undefined}
+            style={tab !== "spaces" ? { display: "none" } : undefined}
           >
             创建团队空间
           </Btn>
@@ -144,10 +145,13 @@ export default function TeamSpacesPage({ onOpenChat, onOpenDetail }: Props) {
       >
         <TabButton active={tab === "spaces"} label="协作空间" onClick={() => setTab("spaces")} />
         <TabButton active={tab === "public"} label="公开资产" onClick={() => setTab("public")} />
+        <TabButton active={tab === "methodology"} label="方法论库" onClick={() => setTab("methodology")} />
       </div>
 
       {tab === "public" ? (
         <PublicAssetsView />
+      ) : tab === "methodology" ? (
+        <MethodologyLibraryView />
       ) : (
       <>
       {error && (

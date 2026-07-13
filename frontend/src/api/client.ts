@@ -24,6 +24,9 @@ import type {
   BusinessMapDraft,
   KnowledgeBase,
   KnowledgeBaseInput,
+  MethodologyCategory,
+  MethodologyItem,
+  MethodologyItemInput,
   KnowledgeFragment,
   KnowledgeFragmentInput,
   LoginWhitelistConfig,
@@ -354,6 +357,25 @@ export const api = {
     request<UserSearchItem[]>(
       `/api/team-spaces/users/search?keyword=${encodeURIComponent(keyword)}`,
     ),
+  // ─── 方法论库（§2.6 / §6.3，admin 维护，用户只读）─────────────
+  listMethodology: (category?: MethodologyCategory) =>
+    request<MethodologyItem[]>(
+      `/api/team-spaces/methodology-library${category ? `?category=${category}` : ""}`,
+    ),
+  createMethodology: (payload: MethodologyItemInput) =>
+    request<MethodologyItem>("/api/team-spaces/methodology-library", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMethodology: (id: number, payload: Partial<MethodologyItemInput>) =>
+    request<MethodologyItem>(`/api/team-spaces/methodology-library/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteMethodology: (id: number) =>
+    request<void>(`/api/team-spaces/methodology-library/${id}`, {
+      method: "DELETE",
+    }),
   updateSessionTitle: (id: string, title: string) =>
     request<Session>(`/api/sessions/${id}`, {
       method: "PATCH",

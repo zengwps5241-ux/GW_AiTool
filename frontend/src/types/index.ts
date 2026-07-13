@@ -1135,6 +1135,28 @@ export interface KnowledgeBaseInput {
   content?: string;
 }
 
+// ─── 团队空间「方法论库」（M5.5.7，§2.6 / §6.3，admin 维护，用户只读）──
+export type MethodologyCategory = "prompt_template" | "canvas_schema" | "methodology_rule";
+
+export interface MethodologyItem {
+  id: number;
+  category: MethodologyCategory;
+  title: string;
+  content: string;
+  sort_order: number;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MethodologyItemInput {
+  category: MethodologyCategory;
+  title: string;
+  content: string;
+  sort_order?: number;
+}
+
 // ─── 采购流程时间线（M4.2.5 / §5.2）──────────────────────────
 
 /** 采购阶段状态（四态） */
