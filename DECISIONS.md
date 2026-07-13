@@ -413,3 +413,12 @@
 - **选择 C — 渲染分三色组 + 概览统计**：顶部 5 计数块（快照数/当前数/新增/删除/变更）；added 绿分组（success-soft）/ removed 红分组（danger-soft）/ changed 黄行（warn-soft，snapshot→current 用 ChevronRight 过渡，字段中文标签 map_type→地图类型 / verification_status→验证状态）；空差异显示 CircleCheck；底部口径说明（仅看 map_type/verification_status，口径同 #49）。changed 的 snapshot 值灰底、current 值黄框高亮，视觉对比清晰。
 - **理由**：弹窗对齐 SnapshotModal 心智；按需拉取省请求；三色分组让 added/removed/changed 一眼可辨，snapshot→current 过渡直观体现演进方向。可校验性：tsc -b 0 错 + vite build 过（纯前端，无后端改动，未跑 pytest——后端端点 #49 已测）。types 镜像后端 Pydantic schema（VersionDiff/Item/ChangedItem），api client 仿 listBusinessMapVersions 加 diffBusinessMapVersion。纯增量，不改既有渲染逻辑。
 
+## 决策 #51：M5.5.4 个人空间项目筛选 — 客户端顶层目录过滤（§2.6，纯前端）
+
+- **背景**：M5.5.4「个人空间项目筛选 | 顶部项目筛选框 + 按项目过滤文件」。规格 §2.6：个人空间按项目自动归档（`个人空间/项目名/资料/...`），顶部下拉框选"全部项目"或指定项目过滤文件树。现状：WorkspaceFileManager（personal/team 共用）头部只有标题，无筛选；个人空间 tree 顶层 = 工作区根目录下的目录/文件。抉择：① 筛选项来源；② 过滤在前端还是后端；③ 共用组件如何隔离。
+- **选择 A — 筛选项 = 用户可访问项目（api.listProjects），非 tree 顶层目录枚举**：规格明示"项目"筛选，项目列表是权威来源（同 Topbar ProjectSelector 数据源）。tree 顶层目录名是自由文本，未必与项目对齐；用项目名去匹配顶层目录更符合"按项目筛选"语义。项目列表加载失败静默（不阻塞文件管理），无项目时隐藏下拉框。
+- **选择 B — 客户端过滤（useMemo 过滤 nodes），非后端按路径取子树**：tree 已整树返回（api.workspaceTree 无子路径参数），客户端 filter 顶层 `dir.name===projectFilter` 最简，零后端改动、零新端点。后端按项目归档（自动归档，独立 P0 任务）落地后筛选自然生效，本任务只做视图层。
+- **选择 C — 筛选逻辑放进共用 WorkspaceFileManager，isPersonal 门控**：WorkspaceFileManager 拥有 nodes 状态与头部，过滤须在 nodes 所在地做；团队空间（api.kind==='team'）不应有项目筛选，故用 `api.kind==='personal'` 门控状态/effect/UI 三处。visibleNodes 仅传给 WorkspaceTree（视图），选中/上传/CRUD 等路径操作仍用原 nodes 不受筛选影响——筛选是纯视图层，不改变工作区真实结构。
+- **理由**：客户端过滤零后端成本、随自动归档落地即可用；isPersonal 门控保证团队空间零影响；visibleNodes 仅切视图不切操作语义，路径正确性不受损。可校验性：tsc -b 0 错 + vite build 过（纯前端）。已知边界：当前 consultant-search 归档到 `公开信息/`（非项目作用域，search_tools.py 既有），故筛选某项目时 `公开信息/` 不显示——符合预期（它本就不属于任何项目），随独立自动归档任务把文件按项目名归类后筛选更具实用性。
+
+
