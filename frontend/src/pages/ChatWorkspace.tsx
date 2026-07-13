@@ -1335,8 +1335,12 @@ export default function ChatWorkspace({
           }
           setAttached((prev) => [...prev, ...uploaded]);
         } else {
+          // M5.5.8：项目级会话按 §6.2 归档到 {项目名}/资料/；非项目落 uploads/
+          const uploadTargetDir = activeProjectName
+            ? `${activeProjectName}/资料`
+            : "uploads";
           const batch = await api.uploadFilesToWorkspace(list, {
-            targetDir: "uploads",
+            targetDir: uploadTargetDir,
             relativePaths: list.map((f) => f.name),
           });
           const failedMessage = uploadFailureMessage(batch);
