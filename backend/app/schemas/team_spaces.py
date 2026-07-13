@@ -74,3 +74,44 @@ class TeamSpaceMemberSearchOut(BaseModel):
     username: str
     display_name: str | None
     is_member: bool
+
+
+# ─── 公开资产 / 对象公开机制（M5.5.3，§2.6 / §5.x / §6.3）─────────
+
+
+class PublicAssetItem(BaseModel):
+    """公开资产条目：跨项目聚合三类领域对象的最小展示信息。
+
+    角色卡 / 业务地图片段 / 拜访记录统一成此结构，
+    供团队空间「公开资产区」按类型分组渲染（§6.3）。
+    """
+
+    # card / business_object / visit
+    object_type: str
+    object_id: int
+    project_id: int
+    project_name: str
+    # 角色卡名 / 业务地图节点名 / 拜访摘要
+    title: str
+    # 副标题：职位·部门 / 层级·地图类型 / 拜访类型·日期
+    subtitle: str | None = None
+    review_status: str
+    created_by: int
+    created_by_name: str
+    created_at: datetime
+
+
+class PublicAssetsOut(BaseModel):
+    """公开资产聚合结果（按类型分组）。"""
+
+    cards: list[PublicAssetItem]
+    business_objects: list[PublicAssetItem]
+    visits: list[PublicAssetItem]
+
+
+class UserSearchOut(BaseModel):
+    """用户搜索条目（「共享给」picker 数据源）。"""
+
+    user_id: int
+    username: str
+    display_name: str | None

@@ -71,6 +71,8 @@ from app.schemas.projects import (
     ProjectUpdate,
 )
 from app.schemas.team_spaces import (
+    PublicAssetItem,
+    PublicAssetsOut,
     TeamSpaceCreateIn,
     TeamSpaceLockIn,
     TeamSpaceMemberAddIn,
@@ -79,6 +81,7 @@ from app.schemas.team_spaces import (
     TeamSpaceOut,
     TeamSpaceTransferOwnerIn,
     TeamSpaceUpdateIn,
+    UserSearchOut,
 )
 from app.schemas.model_settings import ModelSettingsOut, ThinkingLevelOut
 from app.schemas.plugins import PluginOut
@@ -147,6 +150,9 @@ __all__ = [
     "TeamSpaceLockIn",
     "TeamSpaceOut",
     "TeamSpaceMemberOut",
+    "PublicAssetItem",
+    "PublicAssetsOut",
+    "UserSearchOut",
     "ModelSettingsOut",
     "ThinkingLevelOut",
     "PluginOut",

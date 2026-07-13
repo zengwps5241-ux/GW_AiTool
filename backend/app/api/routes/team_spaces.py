@@ -68,6 +68,7 @@ from app.schemas import (
     WorkspaceTextSaveIn,
 )
 from app.schemas.team_spaces import (
+    PublicAssetsOut,
     TeamSpaceCreateIn,
     TeamSpaceLockIn,
     TeamSpaceMemberAddIn,
@@ -76,6 +77,7 @@ from app.schemas.team_spaces import (
     TeamSpaceMemberUpdateIn,
     TeamSpaceOut,
     TeamSpaceTransferOwnerIn,
+    UserSearchOut,
 )
 
 router = APIRouter(prefix="/api/team-spaces")
@@ -186,6 +188,51 @@ async def create_team_space(
     space = await service.create_space(db, user, payload.name, payload.description)
     _space, member = await service.require_member(db, user, space.id)
     return await _space_out(db, space, member, member_count=1)
+
+
+# ─── 对象公开机制（M5.5.3，§2.6 / §5.x / §6.3）────────────────────
+# 这两个端点放在 /{space_id} 之前，避免路径字面量 public-assets / shared-with-me
+# 被 /{space_id}:int 误匹配（int 转换失败本就会跳过，前置仅为稳妥）。
+# 公开资产对所有登录用户可见（无需团队空间成员身份），仅 current_user 鉴权。
+
+
+@router.get("/public-assets", response_model=PublicAssetsOut)
+async def list_public_assets(
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PublicAssetsOut:
+    """团队空间公开资产区：跨项目聚合 is_public=1 的 reviewed 对象（§6.3）。
+
+    对象类型=角色卡 / 业务地图片段 / 拜访记录（含 is_public 字段的三类）。
+    """
+    return PublicAssetsOut.model_validate(
+        (await service.list_public_assets(db)),
+    )
+
+
+@router.get("/shared-with-me", response_model=PublicAssetsOut)
+async def list_shared_with_me(
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PublicAssetsOut:
+    """共享给我的对象：跨项目聚合 shared_with ∋ 当前用户 的 reviewed 对象（§5.x）。"""
+    return PublicAssetsOut.model_validate(
+        (await service.list_shared_with_me(db, user.id)),
+    )
+
+
+@router.get("/users/search", response_model=list[UserSearchOut])
+async def search_users(
+    keyword: str = Query(min_length=1, max_length=80),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserSearchOut]:
+    """按姓名/用户名搜索 active 用户（「共享给」picker 数据源）。"""
+    users = await service.search_users(db, keyword)
+    return [
+        UserSearchOut(user_id=u.id, username=u.username, display_name=u.display_name)
+        for u in users
+    ]
 
 
 @router.get("/{space_id}", response_model=TeamSpaceOut)

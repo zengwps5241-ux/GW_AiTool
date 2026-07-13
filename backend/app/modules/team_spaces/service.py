@@ -4,11 +4,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import TeamSpace, TeamSpaceMember, User
+from app.models import BusinessMapObject, Project, StakeholderCard, TeamSpace, TeamSpaceMember, User, VisitRecord
+from app.schemas.team_spaces import PublicAssetItem
 
 
 def team_workspace(space_id: int) -> Path:
@@ -249,3 +251,205 @@ async def unlock_space(db: AsyncSession, user: User, space_id: int) -> TeamSpace
     await db.commit()
     await db.refresh(space)
     return space
+
+
+# ─── 对象公开机制（M5.5.3，§2.6 / §5.x / §6.3）────────────────────
+#
+# 字段 is_public / shared_with 已存在于 StakeholderCard / BusinessMapObject /
+# VisitRecord 三模型（§3.5），create/update 早已写入。本节补「跨项目可见性聚合」：
+# - list_public_assets：is_public=1 的 reviewed 对象 → 团队空间公开资产区（§6.3）
+# - list_shared_with_me：shared_with ∋ 当前用户 的 reviewed 对象（§5.x 指定用户可见）
+# 仅聚合最小展示信息，不放行单对象深链（项目级访问控制 require_project_member 不变）。
+
+
+async def _project_name_map(db: AsyncSession, project_ids: set[int]) -> dict[int, str]:
+    """批量取项目名（公开资产跨项目，需展示来源项目）。"""
+    if not project_ids:
+        return {}
+    rows = (
+        await db.execute(select(Project.id, Project.name).where(Project.id.in_(project_ids)))
+    ).all()
+    return {pid: name for pid, name in rows}
+
+
+async def _user_name_map(db: AsyncSession, user_ids: set[int]) -> dict[int, str]:
+    """批量取用户展示名（created_by 归属展示）。"""
+    if not user_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(User.id, User.display_name, User.username).where(User.id.in_(user_ids))
+        )
+    ).all()
+    return {uid: (display_name or username) for uid, display_name, username in rows}
+
+
+def _card_item(card: StakeholderCard, project_names: dict[int, str], user_names: dict[int, str]) -> PublicAssetItem:
+    return PublicAssetItem(
+        object_type="card",
+        object_id=card.id,
+        project_id=card.project_id,
+        project_name=project_names.get(card.project_id, ""),
+        title=card.name,
+        subtitle=" · ".join(filter(None, [card.position, card.department])) or None,
+        review_status=card.review_status,
+        created_by=card.created_by,
+        created_by_name=user_names.get(card.created_by, ""),
+        created_at=card.created_at,
+    )
+
+
+def _bmo_item(obj: BusinessMapObject, project_names: dict[int, str], user_names: dict[int, str]) -> PublicAssetItem:
+    return PublicAssetItem(
+        object_type="business_object",
+        object_id=obj.id,
+        project_id=obj.project_id,
+        project_name=project_names.get(obj.project_id, ""),
+        title=obj.name,
+        subtitle=" · ".join(filter(None, [obj.level, obj.map_type])) or None,
+        review_status=obj.review_status,
+        created_by=obj.created_by,
+        created_by_name=user_names.get(obj.created_by, ""),
+        created_at=obj.created_at,
+    )
+
+
+def _visit_item(visit: VisitRecord, project_names: dict[int, str], user_names: dict[int, str]) -> PublicAssetItem:
+    subtitle_parts: list[str] = [visit.visit_type] if visit.visit_type else []
+    if visit.visit_date:
+        subtitle_parts.append(visit.visit_date.isoformat())
+    return PublicAssetItem(
+        object_type="visit",
+        object_id=visit.id,
+        project_id=visit.project_id,
+        project_name=project_names.get(visit.project_id, ""),
+        title=(visit.summary or "").strip()[:80] or "（无摘要）",
+        subtitle=" · ".join(subtitle_parts) or None,
+        review_status=visit.review_status,
+        created_by=visit.created_by,
+        created_by_name=user_names.get(visit.created_by, ""),
+        created_at=visit.created_at,
+    )
+
+
+def _aggregate(
+    cards: list[StakeholderCard],
+    bmos: list[BusinessMapObject],
+    visits: list[VisitRecord],
+    project_names: dict[int, str],
+    user_names: dict[int, str],
+) -> dict:
+    return {
+        "cards": [_card_item(c, project_names, user_names) for c in cards],
+        "business_objects": [_bmo_item(o, project_names, user_names) for o in bmos],
+        "visits": [_visit_item(v, project_names, user_names) for v in visits],
+    }
+
+
+async def list_public_assets(db: AsyncSession) -> dict:
+    """跨项目聚合 is_public=1 的 reviewed 对象（§6.3 公开资产归档）。
+
+    语义：对象标记「完全公开」后，原项目内正常可见 + 团队空间公开资产区可见。
+    仅含 review_status=reviewed（草稿/待审/驳回不公开，§7.3）。
+    """
+    cards = (
+        await db.execute(
+            select(StakeholderCard)
+            .where(StakeholderCard.is_public == 1, StakeholderCard.review_status == "reviewed")
+            .order_by(StakeholderCard.id)
+        )
+    ).scalars().all()
+    bmos = (
+        await db.execute(
+            select(BusinessMapObject)
+            .where(BusinessMapObject.is_public == 1, BusinessMapObject.review_status == "reviewed")
+            .order_by(BusinessMapObject.id)
+        )
+    ).scalars().all()
+    visits = (
+        await db.execute(
+            select(VisitRecord)
+            .where(VisitRecord.is_public == 1, VisitRecord.review_status == "reviewed")
+            .order_by(VisitRecord.id)
+        )
+    ).scalars().all()
+
+    project_ids = {c.project_id for c in cards} | {o.project_id for o in bmos} | {v.project_id for v in visits}
+    user_ids = {c.created_by for c in cards} | {o.created_by for o in bmos} | {v.created_by for v in visits}
+    project_names = await _project_name_map(db, project_ids)
+    user_names = await _user_name_map(db, user_ids)
+    return _aggregate(cards, bmos, visits, project_names, user_names)
+
+
+async def list_shared_with_me(db: AsyncSession, user_id: int) -> dict:
+    """跨项目聚合 shared_with ∋ 当前用户 的 reviewed 对象（§5.x 指定用户可见）。
+
+    用 JSONB @> 数组包含查询（cast([uid], JSONB) 避免 asyncpg 类型陷阱，
+    与 visits/service.py:200 同款）；shared_with 为 NULL 不匹配。
+    """
+    cond = cast([user_id], JSONB)
+    cards = (
+        await db.execute(
+            select(StakeholderCard)
+            .where(
+                StakeholderCard.shared_with.op("@>")(cond),
+                StakeholderCard.review_status == "reviewed",
+            )
+            .order_by(StakeholderCard.id)
+        )
+    ).scalars().all()
+    bmos = (
+        await db.execute(
+            select(BusinessMapObject)
+            .where(
+                BusinessMapObject.shared_with.op("@>")(cond),
+                BusinessMapObject.review_status == "reviewed",
+            )
+            .order_by(BusinessMapObject.id)
+        )
+    ).scalars().all()
+    visits = (
+        await db.execute(
+            select(VisitRecord)
+            .where(
+                VisitRecord.shared_with.op("@>")(cond),
+                VisitRecord.review_status == "reviewed",
+            )
+            .order_by(VisitRecord.id)
+        )
+    ).scalars().all()
+
+    project_ids = {c.project_id for c in cards} | {o.project_id for o in bmos} | {v.project_id for v in visits}
+    user_ids = {c.created_by for c in cards} | {o.created_by for o in bmos} | {v.created_by for v in visits}
+    project_names = await _project_name_map(db, project_ids)
+    user_names = await _user_name_map(db, user_ids)
+    return _aggregate(cards, bmos, visits, project_names, user_names)
+
+
+async def search_users(db: AsyncSession, keyword: str, *, limit: int = 20) -> list[User]:
+    """按姓名/用户名模糊搜索 active 用户（「共享给」picker 数据源）。
+
+    与 search_member_candidates 同款 ilike，但不限团队空间成员范围；
+    「共享给」是跨项目对象级共享，候选=全平台 active 用户。
+    """
+    keyword = keyword.strip()
+    if not keyword:
+        return []
+    pattern = f"%{keyword}%"
+    return list(
+        (
+            await db.execute(
+                select(User)
+                .where(
+                    User.status == "active",
+                    or_(User.display_name.ilike(pattern), User.username.ilike(pattern)),
+                )
+                .order_by(
+                    User.display_name.asc().nullslast(),
+                    User.username.asc(),
+                    User.id.asc(),
+                )
+                .limit(limit)
+            )
+        ).scalars().all()
+    )
