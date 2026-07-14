@@ -18,6 +18,7 @@ import MarketingMapPage from "@/pages/MarketingMapPage";
 import VisitRecordsPage from "@/pages/VisitRecordsPage";
 import UserApprovalPage from "@/pages/UserApprovalPage";
 import OrganizationPage from "@/pages/OrganizationPage";
+import SystemSettingsPage from "@/pages/SystemSettingsPage";
 import SidebarVariantA from "@/components/SidebarVariantA";
 import Topbar, { type BreadcrumbItem } from "@/components/Topbar";
 import FeedbackDialog from "@/components/FeedbackDialog";
@@ -367,24 +368,7 @@ export default function App() {
     if (view === "skills" && auth.me.role !== "user") return <SkillsPage />;
     if (view === "loginWhitelist" && auth.me.role === "super") return <LoginWhitelistPage />;
     if (view === "usage" && auth.me.role !== "user") return <UsageAnalyticsPage />;
-    if (view === "systemSettings") {
-      // M6.5.4 配套：后端种子已为 admin/super 投放「系统设置」菜单项（systemSettings），
-      // 路由守卫已保证仅可见角色到达此处。M6.6 将替换为 SystemSettingsPage（4-tab）。
-      return (
-        <div
-          style={{
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--ink-3)",
-            fontSize: 14,
-          }}
-        >
-          系统设置页面（M6.6 开发中）
-        </div>
-      );
-    }
+    if (view === "systemSettings") return <SystemSettingsPage />;
 
     return (
       <TeamSpacesPage
