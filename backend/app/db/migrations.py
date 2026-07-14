@@ -155,6 +155,16 @@ async def init_db() -> None:
                     f"ALTER TABLE users ADD COLUMN {col} {col_type}"
                 ))
 
+        # last_login 字段（M6.4 用户管理，记录最后登录时间）
+        result = await conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.columns "
+            "WHERE table_name='users' AND column_name='last_login'"
+        ))
+        if result.scalar() == 0:
+            await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN last_login TIMESTAMP WITH TIME ZONE NULL"
+            ))
+
         # departments 表
         result = await conn.execute(text(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='departments'"

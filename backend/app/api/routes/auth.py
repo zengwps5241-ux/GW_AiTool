@@ -137,6 +137,11 @@ async def login(
     request.session["user_id"] = user.id
     user_workspace(user.username)
 
+    # 更新最后登录时间（M6.4 用户管理，随下方审计日志一并 commit）
+    from datetime import datetime, timezone
+
+    user.last_login = datetime.now(timezone.utc)
+
     logger.info("用户登录: username=%s", user.username)
     # 审计埋点（决策 #64）
     from app.modules.audit.service import log_audit

@@ -155,6 +155,13 @@ from app.schemas.menus import (
     MenuUpdate,
 )
 from app.schemas.audit import AuditLogOut
+from app.schemas.users import (
+    AdminUserCreate,
+    AdminUserOut,
+    ResetPasswordRequest,
+    UserOrgBrief,
+    UserStatusUpdate,
+)
 
 __all__ = [
     "UserOut",
@@ -290,4 +297,9 @@ __all__ = [
     "MenuSortItem",
     "MenuSortRequest",
     "AuditLogOut",
+    "AdminUserOut",
+    "AdminUserCreate",
+    "UserStatusUpdate",
+    "ResetPasswordRequest",
+    "UserOrgBrief",
 ]

@@ -44,6 +44,11 @@ class User(Base):
     )
     role: Mapped[str] = mapped_column(String, nullable=False, default="user")
 
+    # 最后登录时间（M6.4 用户管理，登录时更新）
+    last_login: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
     )

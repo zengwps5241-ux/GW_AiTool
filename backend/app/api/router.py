@@ -24,6 +24,7 @@ from app.api.routes import (
     team_spaces,
     upload_tasks,
     uploads,
+    users,
     visit,
     workspace,
     workspace_tasks,
@@ -58,3 +59,4 @@ router.include_router(reviews.router)
 router.include_router(roles.router)
 router.include_router(menus.router)
 router.include_router(audit.router)
+router.include_router(users.router)
