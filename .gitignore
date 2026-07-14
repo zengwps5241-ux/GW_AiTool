@@ -25,3 +25,13 @@ backend/.env
 /backend/logs
 /.codegraph/
 /.mcp.json
+
+# 一次性换皮原型与备份（NOTES 明示 throwaway，不并入生产代码）
+frontend/prototype/
+frontend/.restyle-backup/
+
+# 本地回归测试产物（pytest 临时输出，勿入库）
+backend/*-run.log
+per-file-results.txt
+test-results.xml
+test-run.log
