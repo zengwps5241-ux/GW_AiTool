@@ -108,7 +108,7 @@ async def get_organization(db: AsyncSession, org_id: int) -> OrganizationOut | N
 
 
 async def create_organization(
-    db: AsyncSession, payload
+    db: AsyncSession, payload, actor_id: int | None = None
 ) -> OrganizationOut:
     """创建组织节点。"""
     # 校验父级存在
@@ -142,16 +142,29 @@ async def create_organization(
     await db.commit()
     await db.refresh(org)
     head_name = await _user_display_name(db, org.head_user_id)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "create", "organization", str(org.id),
+            detail={"after": {"name": org.name, "type": org.type,
+                              "parent_id": org.parent_id}},
+        )
     return _org_to_out(org, head_name)
 
 
 async def update_organization(
-    db: AsyncSession, org_id: int, payload
+    db: AsyncSession, org_id: int, payload, actor_id: int | None = None
 ) -> OrganizationOut:
     """更新组织节点。"""
     org = await db.get(Organization, org_id)
     if org is None:
         raise ValueError("组织不存在")
+
+    # 审计快照：变更前
+    before = {"name": org.name, "type": org.type, "parent_id": org.parent_id,
+              "head_user_id": org.head_user_id, "sort_order": org.sort_order}
 
     # 名称变更时校验同父级唯一
     if payload.name is not None and payload.name != org.name:
@@ -190,10 +203,21 @@ async def update_organization(
     await db.commit()
     await db.refresh(org)
     head_name = await _user_display_name(db, org.head_user_id)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "update", "organization", str(org.id),
+            detail={"before": before,
+                    "after": {"name": org.name, "type": org.type,
+                              "parent_id": org.parent_id, "head_user_id": org.head_user_id,
+                              "sort_order": org.sort_order}},
+        )
     return _org_to_out(org, head_name)
 
 
-async def delete_organization(db: AsyncSession, org_id: int) -> None:
+async def delete_organization(db: AsyncSession, org_id: int, actor_id: int | None = None) -> None:
     """删除组织节点（有子节点或成员时拒绝）。"""
     org = await db.get(Organization, org_id)
     if org is None:
@@ -213,8 +237,19 @@ async def delete_organization(db: AsyncSession, org_id: int) -> None:
     if members.scalars().first() is not None:
         raise ValueError("组织下仍有成员，不能删除")
 
+    # 审计快照：删除前
+    before = {"name": org.name, "type": org.type, "parent_id": org.parent_id}
+
     await db.delete(org)
     await db.commit()
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "delete", "organization", str(org_id),
+            detail={"before": before},
+        )
 
 
 # ─── 树形查询 ────────────────────────────────────────────────

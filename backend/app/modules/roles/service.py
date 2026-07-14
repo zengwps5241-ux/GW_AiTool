@@ -79,7 +79,7 @@ async def _get_role_orm(db: AsyncSession, role_id: int) -> Role | None:
     return await db.get(Role, role_id)
 
 
-async def create_role(db: AsyncSession, payload: RoleCreate):
+async def create_role(db: AsyncSession, payload: RoleCreate, actor_id: int | None = None):
     """创建自定义角色（is_system 强制为 False）。"""
     # code 唯一性校验
     existing = await db.execute(select(Role).where(Role.code == payload.code))
@@ -96,14 +96,27 @@ async def create_role(db: AsyncSession, payload: RoleCreate):
     db.add(role)
     await db.commit()
     await db.refresh(role)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "create", "role", str(role.id),
+            detail={"after": {"code": role.code, "name": role.name,
+                              "is_system": role.is_system}},
+        )
     return _role_to_out(role)
 
 
-async def update_role(db: AsyncSession, role_id: int, payload: RoleUpdate):
+async def update_role(db: AsyncSession, role_id: int, payload: RoleUpdate, actor_id: int | None = None):
     """更新角色（仅 name/description/sort_order；code 与 is_system 不可改）。"""
     role = await _get_role_orm(db, role_id)
     if role is None:
         raise ValueError("角色不存在")
+
+    # 审计快照：变更前
+    before = {"name": role.name, "description": role.description,
+              "sort_order": role.sort_order}
 
     if payload.name is not None:
         role.name = payload.name
@@ -114,10 +127,20 @@ async def update_role(db: AsyncSession, role_id: int, payload: RoleUpdate):
 
     await db.commit()
     await db.refresh(role)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "update", "role", str(role.id),
+            detail={"before": before,
+                    "after": {"name": role.name, "description": role.description,
+                              "sort_order": role.sort_order}},
+        )
     return _role_to_out(role)
 
 
-async def delete_role(db: AsyncSession, role_id: int) -> None:
+async def delete_role(db: AsyncSession, role_id: int, actor_id: int | None = None) -> None:
     """删除角色（系统角色 is_system=True 不可删除）。"""
     role = await _get_role_orm(db, role_id)
     if role is None:
@@ -125,9 +148,20 @@ async def delete_role(db: AsyncSession, role_id: int) -> None:
     if role.is_system:
         raise ValueError("系统内置角色不可删除")
 
+    # 审计快照：删除前
+    before = {"code": role.code, "name": role.name, "is_system": role.is_system}
+
     # 关联的 role_menus 由 ON DELETE CASCADE 自动清理
     await db.delete(role)
     await db.commit()
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "delete", "role", str(role_id),
+            detail={"before": before},
+        )
 
 
 # ─── 角色-菜单关联 ───────────────────────────────────────────

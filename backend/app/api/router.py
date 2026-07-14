@@ -7,6 +7,7 @@ from app.api.routes import (
     admin_skills,
     admin_usage,
     agents,
+    audit,
     auth,
     business_map,
     conversion_tasks,
@@ -56,3 +57,4 @@ router.include_router(visit.router)
 router.include_router(reviews.router)
 router.include_router(roles.router)
 router.include_router(menus.router)
+router.include_router(audit.router)

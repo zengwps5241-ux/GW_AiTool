@@ -61,7 +61,7 @@ async def create_organization(
 ) -> OrganizationOut:
     """创建组织节点。"""
     try:
-        return await org_service.create_organization(db, payload)
+        return await org_service.create_organization(db, payload, actor_id=_admin.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -88,7 +88,7 @@ async def update_organization(
 ) -> OrganizationOut:
     """更新组织节点。"""
     try:
-        return await org_service.update_organization(db, org_id, payload)
+        return await org_service.update_organization(db, org_id, payload, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         # 不存在 → 404，其余校验错误 → 400
@@ -105,7 +105,7 @@ async def delete_organization(
 ) -> None:
     """删除组织节点（有子节点/成员时拒绝）。"""
     try:
-        await org_service.delete_organization(db, org_id)
+        await org_service.delete_organization(db, org_id, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "组织不存在":

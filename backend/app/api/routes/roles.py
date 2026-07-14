@@ -53,7 +53,7 @@ async def create_role(
 ) -> RoleOut:
     """创建自定义角色（is_system 恒为 False）。"""
     try:
-        return await role_service.create_role(db, payload)
+        return await role_service.create_role(db, payload, actor_id=_admin.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -80,7 +80,7 @@ async def update_role(
 ) -> RoleOut:
     """更新角色（仅 name/description/sort_order）。"""
     try:
-        return await role_service.update_role(db, role_id, payload)
+        return await role_service.update_role(db, role_id, payload, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "角色不存在":
@@ -96,7 +96,7 @@ async def delete_role(
 ) -> None:
     """删除角色（系统内置角色 is_system=True 不可删除）。"""
     try:
-        await role_service.delete_role(db, role_id)
+        await role_service.delete_role(db, role_id, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "角色不存在":

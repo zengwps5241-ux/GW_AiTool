@@ -138,6 +138,18 @@ async def login(
     user_workspace(user.username)
 
     logger.info("用户登录: username=%s", user.username)
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db,
+        user.id,
+        "login",
+        "user",
+        str(user.id),
+        detail={"username": user.username},
+        ip_address=request.client.host if request.client else None,
+    )
     return {"success": True}
 
 
@@ -233,6 +245,19 @@ async def approve_user(
         logger.info("管理员 %s 驳回用户 %s", admin.username, user.username)
 
     await db.commit()
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    action = "approve" if payload.action == "approve" else "reject"
+    await log_audit(
+        db,
+        admin.id,
+        action,
+        "user",
+        str(user.id),
+        detail={"before": {"status": "pending_approval"},
+                "after": {"status": user.status}},
+    )
     return {
         "success": True,
         "user_id": user.id,

@@ -482,6 +482,16 @@ async def adopt_draft(
 
     draft.status = "adopted"
     await db.commit()
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, user.id, "adopt", "business_map", str(project_id),
+        detail={"before": {"draft_id": draft_id, "draft_status": "active"},
+                "after": {"draft_status": "adopted", "version": version_no,
+                          "object_count": created_count,
+                          "review_status": target_review_status}},
+    )
 
     return AdoptResult(
         success=True,
@@ -584,6 +594,13 @@ async def rollback_to_version(
         )
 
     await db.commit()
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, user.id, "rollback", "business_map", str(project_id),
+        detail={"after": {"rolled_back_to_version": target.version_number}},
+    )
     # 返回审计快照版本信息
     audit = (
         await db.execute(

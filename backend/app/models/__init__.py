@@ -1,5 +1,6 @@
 from app.db.base import Base
 from app.models.agent import Agent
+from app.models.audit import AuditLog
 from app.models.business_map import (
     BusinessMapDraft,
     BusinessMapObject,
@@ -35,6 +36,7 @@ from app.models.visit import EvidenceSource, VisitRecord
 __all__ = [
     "Base",
     "Agent",
+    "AuditLog",
     "BusinessMapDraft",
     "BusinessMapObject",
     "BusinessMapVersion",

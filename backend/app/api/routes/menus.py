@@ -74,7 +74,7 @@ async def create_menu(
 ) -> MenuOut:
     """创建自定义菜单（is_system 恒为 False）。"""
     try:
-        return await menu_service.create_menu(db, payload)
+        return await menu_service.create_menu(db, payload, actor_id=_admin.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -101,7 +101,7 @@ async def update_menu(
 ) -> MenuOut:
     """更新菜单展示字段（code 与 is_system 不可改）。"""
     try:
-        return await menu_service.update_menu(db, menu_id, payload)
+        return await menu_service.update_menu(db, menu_id, payload, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "菜单不存在":
@@ -117,7 +117,7 @@ async def delete_menu(
 ) -> None:
     """删除菜单（系统菜单 is_system=True 不可删除；有子菜单需先删子）。"""
     try:
-        await menu_service.delete_menu(db, menu_id)
+        await menu_service.delete_menu(db, menu_id, actor_id=_admin.id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "菜单不存在":

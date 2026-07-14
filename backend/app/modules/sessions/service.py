@@ -120,6 +120,14 @@ async def create_session(
     db.add(cs)
     await db.commit()
     await db.refresh(cs)
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, user.id, "create", "session", cs.id,
+        detail={"after": {"title": cs.title, "project_id": cs.project_id,
+                          "workspace_kind": cs.workspace_kind}},
+    )
     return cs
 
 
@@ -131,8 +139,19 @@ async def rename_session(db: AsyncSession, cs: ChatSession, title: str) -> ChatS
 
 
 async def delete_session(db: AsyncSession, cs: ChatSession) -> None:
+    # 审计快照：删除前（commit 后 cs 对象 expired，先捕获 id/title）
+    session_id = cs.id
+    actor_id = cs.user_id
+    before = {"title": cs.title, "project_id": cs.project_id}
     await db.delete(cs)
     await db.commit()
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, actor_id, "delete", "session", session_id,
+        detail={"before": before},
+    )
 
 
 async def save_knowledge_fragment(

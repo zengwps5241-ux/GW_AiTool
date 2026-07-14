@@ -240,7 +240,7 @@ async def get_menu(db: AsyncSession, menu_id: int):
     return _menu_to_out(menu) if menu else None
 
 
-async def create_menu(db: AsyncSession, payload) :
+async def create_menu(db: AsyncSession, payload, actor_id: int | None = None):
     """创建自定义菜单（is_system 强制为 False）。
 
     - code 唯一性校验
@@ -270,10 +270,19 @@ async def create_menu(db: AsyncSession, payload) :
     db.add(menu)
     await db.commit()
     await db.refresh(menu)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "create", "menu", str(menu.id),
+            detail={"after": {"code": menu.code, "name": menu.name,
+                              "is_system": menu.is_system}},
+        )
     return _menu_to_out(menu)
 
 
-async def update_menu(db: AsyncSession, menu_id: int, payload):
+async def update_menu(db: AsyncSession, menu_id: int, payload, actor_id: int | None = None):
     """更新菜单（仅展示字段；code 与 is_system 不可改）。
 
     - parent_id 存在性校验、自引用检测、循环引用检测
@@ -281,6 +290,11 @@ async def update_menu(db: AsyncSession, menu_id: int, payload):
     menu = await _get_menu_orm(db, menu_id)
     if menu is None:
         raise ValueError("菜单不存在")
+
+    # 审计快照：变更前
+    before = {"name": menu.name, "parent_id": menu.parent_id, "icon": menu.icon,
+              "view_name": menu.view_name, "sort_order": menu.sort_order,
+              "is_visible": menu.is_visible}
 
     if payload.parent_id is not None:
         # 自引用检测
@@ -308,10 +322,21 @@ async def update_menu(db: AsyncSession, menu_id: int, payload):
 
     await db.commit()
     await db.refresh(menu)
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "update", "menu", str(menu.id),
+            detail={"before": before,
+                    "after": {"name": menu.name, "parent_id": menu.parent_id,
+                              "icon": menu.icon, "view_name": menu.view_name,
+                              "sort_order": menu.sort_order, "is_visible": menu.is_visible}},
+        )
     return _menu_to_out(menu)
 
 
-async def delete_menu(db: AsyncSession, menu_id: int) -> None:
+async def delete_menu(db: AsyncSession, menu_id: int, actor_id: int | None = None) -> None:
     """删除菜单。
 
     - 系统菜单 is_system=True 不可删除
@@ -331,8 +356,19 @@ async def delete_menu(db: AsyncSession, menu_id: int) -> None:
     if child is not None:
         raise ValueError("存在子菜单，请先删除子菜单")
 
+    # 审计快照：删除前
+    before = {"code": menu.code, "name": menu.name, "is_system": menu.is_system}
+
     await db.delete(menu)
     await db.commit()
+    # 审计埋点（决策 #64）
+    if actor_id is not None:
+        from app.modules.audit.service import log_audit
+
+        await log_audit(
+            db, actor_id, "delete", "menu", str(menu_id),
+            detail={"before": before},
+        )
 
 
 # ─── 菜单树 ──────────────────────────────────────────────────

@@ -154,6 +154,7 @@ from app.schemas.menus import (
     MenuTreeOut,
     MenuUpdate,
 )
+from app.schemas.audit import AuditLogOut
 
 __all__ = [
     "UserOut",
@@ -288,4 +289,5 @@ __all__ = [
     "MenuNode",
     "MenuSortItem",
     "MenuSortRequest",
+    "AuditLogOut",
 ]

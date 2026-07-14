@@ -39,10 +39,10 @@ async def app_env(monkeypatch, tmp_path):
     # Layer 2: models, schemas (reload submodules so they re-import fresh Base)
     from app import models, schemas
     from app.models import agent as model_agent, business_map as model_business_map, category as model_category, consultant as model_consultant, conversion_task as model_conversion_task, customer as model_customer, department as model_department, feedback as model_feedback, login_whitelist as model_login_whitelist, marketing_map as model_marketing_map, organization as model_organization, project as model_project, session as model_session, team_space as model_team_space, upload_task as model_upload_task, usage as model_usage, user as model_user, visit as model_visit
-    from app.models import role as model_role, menu as model_menu
+    from app.models import role as model_role, menu as model_menu, audit as model_audit
     from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, reviews as schema_reviews, workspace_tasks as schema_workspace_tasks
     from app.schemas import roles as schema_roles
-    from app.schemas import menus as schema_menus
+    from app.schemas import menus as schema_menus, audit as schema_audit
     reload(model_agent)
     reload(model_business_map)
     reload(model_marketing_map)
@@ -63,6 +63,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(model_user)
     reload(model_role)
     reload(model_menu)
+    reload(model_audit)
     reload(models)
     reload(schema_auth)
     reload(schema_agents)
@@ -82,6 +83,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(schema_workspace_tasks)
     reload(schema_roles)
     reload(schema_menus)
+    reload(schema_audit)
     reload(schemas)
 
     # Layer 3: integrations
@@ -111,6 +113,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.modules.organizations import service as organizations_service
     from app.modules.roles import service as roles_service
     from app.modules.menus import service as menus_service
+    from app.modules.audit import service as audit_service
     from app.modules.customers import service as customers_service
     from app.modules.projects import service as projects_service, access as projects_access
     from app.modules.business_map import service as business_map_service, health as business_map_health
@@ -141,6 +144,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(organizations_service)
     reload(roles_service)
     reload(menus_service)
+    reload(audit_service)
     reload(customers_service)
     reload(projects_access)
     reload(projects_service)
@@ -184,6 +188,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.api.routes import reviews as reviews_routes
     from app.api.routes import roles as roles_routes
     from app.api.routes import menus as menus_routes
+    from app.api.routes import audit as audit_routes
     reload(deps)
     reload(project_deps)
     reload(auth_routes)
@@ -210,6 +215,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(reviews_routes)
     reload(roles_routes)
     reload(menus_routes)
+    reload(audit_routes)
     reload(router)
 
     # Layer 6: main, scripts

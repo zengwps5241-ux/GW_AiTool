@@ -166,7 +166,16 @@ async def approve_review(
     obj.reviewed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(obj)
-    return await _build_item(db, adapter, obj)
+    item = await _build_item(db, adapter, obj)
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, user.id, "approve", entity_type, str(entity_id),
+        detail={"before": {"review_status": "pending_review"},
+                "after": {"review_status": "reviewed"}},
+    )
+    return item
 
 
 async def reject_review(
@@ -188,7 +197,16 @@ async def reject_review(
     obj.reviewed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(obj)
-    return await _build_item(db, adapter, obj)
+    item = await _build_item(db, adapter, obj)
+    # 审计埋点（决策 #64）
+    from app.modules.audit.service import log_audit
+
+    await log_audit(
+        db, user.id, "reject", entity_type, str(entity_id),
+        detail={"before": {"review_status": "pending_review"},
+                "after": {"review_status": "rejected"}},
+    )
+    return item
 
 
 # ─── 统一采纳派发 ─────────────────────────────────────────────
