@@ -42,6 +42,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.models import role as model_role, menu as model_menu
     from app.schemas import auth as schema_auth, agents as schema_agents, business_map as schema_business_map, categories as schema_categories, customers as schema_customers, marketing_map as schema_marketing_map, organizations as schema_organizations, projects as schema_projects, sessions as schema_sessions, team_spaces as schema_team_spaces, model_settings as schema_model_settings, login_whitelist as schema_login_whitelist, upload_tasks as schema_upload_tasks, visit as schema_visit, reviews as schema_reviews, workspace_tasks as schema_workspace_tasks
     from app.schemas import roles as schema_roles
+    from app.schemas import menus as schema_menus
     reload(model_agent)
     reload(model_business_map)
     reload(model_marketing_map)
@@ -80,6 +81,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(schema_upload_tasks)
     reload(schema_workspace_tasks)
     reload(schema_roles)
+    reload(schema_menus)
     reload(schemas)
 
     # Layer 3: integrations
@@ -181,6 +183,7 @@ async def app_env(monkeypatch, tmp_path):
     from app.api.routes import visit as visit_routes
     from app.api.routes import reviews as reviews_routes
     from app.api.routes import roles as roles_routes
+    from app.api.routes import menus as menus_routes
     reload(deps)
     reload(project_deps)
     reload(auth_routes)
@@ -206,6 +209,7 @@ async def app_env(monkeypatch, tmp_path):
     reload(visit_routes)
     reload(reviews_routes)
     reload(roles_routes)
+    reload(menus_routes)
     reload(router)
 
     # Layer 6: main, scripts

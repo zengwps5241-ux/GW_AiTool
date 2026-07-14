@@ -145,6 +145,15 @@ from app.schemas.roles import (
     RoleUpdate,
     UserRoleAssignment,
 )
+from app.schemas.menus import (
+    MenuCreate,
+    MenuNode,
+    MenuOut,
+    MenuSortItem,
+    MenuSortRequest,
+    MenuTreeOut,
+    MenuUpdate,
+)
 
 __all__ = [
     "UserOut",
@@ -272,4 +281,11 @@ __all__ = [
     "RoleOut",
     "RoleMenusUpdate",
     "UserRoleAssignment",
+    "MenuCreate",
+    "MenuUpdate",
+    "MenuOut",
+    "MenuTreeOut",
+    "MenuNode",
+    "MenuSortItem",
+    "MenuSortRequest",
 ]

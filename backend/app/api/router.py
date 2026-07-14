@@ -14,6 +14,7 @@ from app.api.routes import (
     feedback,
     marketing_map,
     model_settings,
+    menus,
     organizations,
     projects,
     reviews,
@@ -54,3 +55,4 @@ router.include_router(marketing_map.router)
 router.include_router(visit.router)
 router.include_router(reviews.router)
 router.include_router(roles.router)
+router.include_router(menus.router)
