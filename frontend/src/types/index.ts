@@ -307,13 +307,13 @@ export type ViewName =
   | "businessMap"
   | "marketingMap"
   | "visitRecords"
-  | "organization"
-  | "userApproval"
+  // "organization" | "userApproval" 已合并到 "systemSettings" tab（M6.7）
   | "systemSettings";
 
 // ─── 菜单（M6.5 / 决策 #67 登录后一次性加载）──────────────────────
 // 对齐后端 backend.app.schemas.menus.MenuNode：当前用户可见菜单树（渲染用精简字段）。
 // 顶层节点 = 分组（view_name=null、children 非空）；叶子节点 = 可点击菜单项（view_name 非空）。
+// 注：「组织架构」「用户审批/用户管理」独立菜单已合并为单个「系统设置」菜单（M6.7）。
 export interface MenuNode {
   id: number;
   parent_id: number | null;

@@ -16,8 +16,8 @@ import LoginWhitelistPage from "@/pages/LoginWhitelistPage";
 import BusinessMapPage from "@/pages/BusinessMapPage";
 import MarketingMapPage from "@/pages/MarketingMapPage";
 import VisitRecordsPage from "@/pages/VisitRecordsPage";
-import UserApprovalPage from "@/pages/UserApprovalPage";
-import OrganizationPage from "@/pages/OrganizationPage";
+// OrganizationPage / UserApprovalPage 已合并到系统设置 tab（M6.7），
+// 文件保留备复用但不再从路由渲染
 import SystemSettingsPage from "@/pages/SystemSettingsPage";
 import SidebarVariantA from "@/components/SidebarVariantA";
 import Topbar, { type BreadcrumbItem } from "@/components/Topbar";
@@ -241,10 +241,6 @@ export default function App() {
       ? ["营销地图"]
       : view === "visitRecords"
       ? ["拜访记录"]
-      : view === "userApproval"
-      ? ["设置", "用户管理"]
-      : view === "organization"
-      ? ["设置", "组织架构"]
       : view === "personalSpace"
       ? ["个人空间", "文件管理"]
       : view === "personalSpaceDetail" || view === "workspace"
@@ -303,11 +299,7 @@ export default function App() {
         />
       );
 
-    // 用户审批页面（管理员）
-    if (view === "userApproval" && auth.me.role !== "user") return <UserApprovalPage />;
-
-    // 组织架构管理页（管理员）
-    if (view === "organization" && auth.me.role !== "user") return <OrganizationPage />;
+    // 用户审批/组织架构：已合并到系统设置 tab（M6.7），独立入口移除
 
     if (view === "new" || view === "chat") {
       return (
