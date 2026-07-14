@@ -1341,3 +1341,142 @@ export interface PendingReviewItem {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
 }
+
+// ─── 系统设置（M6.6：用户/角色/菜单/日志管理，admin 域）──────────
+// 对齐后端 schemas/roles.py · users.py · menus.py · audit.py（M6.1-M6.4 后端已就绪）。
+
+/** 角色（对齐 RoleOut） */
+export interface Role {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 角色创建入参（对齐 RoleCreate） */
+export interface RoleInput {
+  code: string;
+  name: string;
+  description?: string | null;
+  sort_order?: number;
+}
+
+/** 角色更新入参（对齐 RoleUpdate；code 与 is_system 不可改） */
+export interface RoleUpdateInput {
+  name?: string;
+  description?: string | null;
+  sort_order?: number;
+}
+
+/** 用户-组织简要（AdminUserOut.organizations 元素） */
+export interface UserOrgBrief {
+  id: number;
+  name: string;
+}
+
+/** 管理端用户列表项（对齐 AdminUserOut） */
+export interface AdminUser {
+  id: number;
+  username: string;
+  phone: string | null;
+  role: string;
+  status: string;
+  display_name: string | null;
+  department: string | null;
+  registration_source: string | null;
+  organizations: UserOrgBrief[];
+  created_at: string | null;
+  last_login: string | null;
+}
+
+/** 管理员创建用户入参（对齐 AdminUserCreate） */
+export interface AdminUserCreateInput {
+  username: string;
+  phone?: string | null;
+  password: string;
+  display_name?: string | null;
+  role?: string;
+}
+
+/** 管理端用户列表筛选参数（GET /api/admin/users query） */
+export interface AdminUserFilter {
+  role?: string;
+  status?: string;
+  organization_id?: number;
+  search?: string;
+}
+
+/** 菜单管理端完整字段（对齐 MenuOut，区别于 M6.5 MenuNode 精简字段：含 is_visible/is_system/时间戳） */
+export interface MenuAdmin {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  code: string;
+  icon: string | null;
+  view_name: string | null;
+  sort_order: number;
+  is_visible: boolean;
+  is_system: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 菜单管理端树节点（对齐 MenuTreeOut，含 children） */
+export interface MenuAdminTree extends MenuAdmin {
+  children: MenuAdminTree[];
+}
+
+/** 菜单创建入参（对齐 MenuCreate） */
+export interface MenuInput {
+  code: string;
+  name: string;
+  parent_id?: number | null;
+  icon?: string | null;
+  view_name?: string | null;
+  sort_order?: number;
+  is_visible?: boolean;
+}
+
+/** 菜单更新入参（对齐 MenuUpdate；code 与 is_system 不可改） */
+export interface MenuUpdateInput {
+  name?: string;
+  parent_id?: number | null;
+  icon?: string | null;
+  view_name?: string | null;
+  sort_order?: number;
+  is_visible?: boolean;
+}
+
+/** 菜单批量排序单项（对齐 MenuSortItem） */
+export interface MenuSortItem {
+  id: number;
+  sort_order: number;
+}
+
+/** 审计日志（对齐 AuditLogOut，detail 为 {before,after} 变更快照） */
+export interface AuditLog {
+  id: number;
+  user_id: number | null;
+  username: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  ip_address: string | null;
+  created_at: string | null;
+}
+
+/** 审计日志筛选参数（GET /api/admin/audit-logs query） */
+export interface AuditLogFilter {
+  user_id?: number;
+  action?: string;
+  target_type?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}

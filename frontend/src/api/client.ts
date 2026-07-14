@@ -28,6 +28,19 @@ import type {
   MethodologyItem,
   MethodologyItemInput,
   MenuNode,
+  MenuAdmin,
+  MenuAdminTree,
+  MenuInput,
+  MenuUpdateInput,
+  MenuSortItem,
+  Role,
+  RoleInput,
+  RoleUpdateInput,
+  AdminUser,
+  AdminUserCreateInput,
+  AdminUserFilter,
+  AuditLog,
+  AuditLogFilter,
   KnowledgeFragment,
   KnowledgeFragmentInput,
   LoginWhitelistConfig,
@@ -1309,6 +1322,89 @@ export const api = {
       `/api/projects/${projectId}/visit-records/${visitId}`,
       { method: "DELETE" },
     ),
+
+  // ─── 系统设置 · 用户管理（M6.4 后端，require_admin）──────────────
+  /** 全量用户列表 + 筛选（role/status/organization_id/search） */
+  listAdminUsers: (filter?: AdminUserFilter) => {
+    const qs = new URLSearchParams();
+    if (filter?.role) qs.set("role", filter.role);
+    if (filter?.status) qs.set("status", filter.status);
+    if (filter?.organization_id != null)
+      qs.set("organization_id", String(filter.organization_id));
+    if (filter?.search) qs.set("search", filter.search);
+    const query = qs.toString();
+    return request<AdminUser[]>(`/api/admin/users${query ? "?" + query : ""}`);
+  },
+  /** 管理员创建用户（跳过审批 status=active） */
+  createAdminUser: (data: AdminUserCreateInput) =>
+    request<AdminUser>("/api/admin/users", { method: "POST", body: JSON.stringify(data) }),
+  /** 启用/禁用用户（不可禁自己） */
+  updateUserStatus: (userId: number, status: "active" | "disabled") =>
+    request<{ success: boolean; user_id: number; status: string }>(
+      `/api/admin/users/${userId}/status`,
+      { method: "PUT", body: JSON.stringify({ status }) },
+    ),
+  /** 管理员重置用户密码 */
+  resetUserPassword: (userId: number, newPassword: string) =>
+    request<{ success: boolean; user_id: number }>(
+      `/api/admin/users/${userId}/reset-password`,
+      { method: "POST", body: JSON.stringify({ new_password: newPassword }) },
+    ),
+  /** 修改用户角色（更新 User.role 为目标 Role.code） */
+  assignUserRole: (userId: number, roleCode: string) =>
+    request<{ user_id: number; role: string }>(
+      `/api/admin/users/${userId}/role`,
+      { method: "PUT", body: JSON.stringify({ role_code: roleCode }) },
+    ),
+
+  // ─── 系统设置 · 角色管理（M6.1 后端，require_admin）──────────────
+  listRoles: () => request<Role[]>("/api/admin/roles"),
+  createRole: (data: RoleInput) =>
+    request<Role>("/api/admin/roles", { method: "POST", body: JSON.stringify(data) }),
+  updateRole: (id: number, data: RoleUpdateInput) =>
+    request<Role>(`/api/admin/roles/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteRole: (id: number) =>
+    request<void>(`/api/admin/roles/${id}`, { method: "DELETE" }),
+  /** 角色关联的菜单 ID 列表（super 始终全部） */
+  getRoleMenus: (roleId: number) =>
+    request<number[]>(`/api/admin/roles/${roleId}/menus`),
+  /** 批量设置角色菜单（全量替换；super 不可改 → 403） */
+  updateRoleMenus: (roleId: number, menuIds: number[]) =>
+    request<number[]>(`/api/admin/roles/${roleId}/menus`, {
+      method: "PUT",
+      body: JSON.stringify({ menu_ids: menuIds }),
+    }),
+
+  // ─── 系统设置 · 菜单管理（M6.2 后端，require_admin）──────────────
+  /** 完整菜单树（含 is_visible/is_system，供菜单管理 tab） */
+  listMenusTree: () => request<MenuAdminTree[]>("/api/admin/menus/tree"),
+  createMenu: (data: MenuInput) =>
+    request<MenuAdmin>("/api/admin/menus", { method: "POST", body: JSON.stringify(data) }),
+  updateMenu: (id: number, data: MenuUpdateInput) =>
+    request<MenuAdmin>(`/api/admin/menus/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteMenu: (id: number) =>
+    request<void>(`/api/admin/menus/${id}`, { method: "DELETE" }),
+  /** 批量更新菜单排序 */
+  updateMenuSort: (items: MenuSortItem[]) =>
+    request<number[]>("/api/admin/menus/sort", {
+      method: "PUT",
+      body: JSON.stringify({ items }),
+    }),
+
+  // ─── 系统设置 · 审计日志（M6.3 后端，require_admin）──────────────
+  /** 查询审计日志（默认最近 7 天倒序分页） */
+  listAuditLogs: (filter?: AuditLogFilter) => {
+    const qs = new URLSearchParams();
+    if (filter?.user_id != null) qs.set("user_id", String(filter.user_id));
+    if (filter?.action) qs.set("action", filter.action);
+    if (filter?.target_type) qs.set("target_type", filter.target_type);
+    if (filter?.start_date) qs.set("start_date", filter.start_date);
+    if (filter?.end_date) qs.set("end_date", filter.end_date);
+    if (filter?.limit != null) qs.set("limit", String(filter.limit));
+    if (filter?.offset != null) qs.set("offset", String(filter.offset));
+    const query = qs.toString();
+    return request<AuditLog[]>(`/api/admin/audit-logs${query ? "?" + query : ""}`);
+  },
 };
 
 /**
