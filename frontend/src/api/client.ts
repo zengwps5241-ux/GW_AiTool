@@ -27,6 +27,7 @@ import type {
   MethodologyCategory,
   MethodologyItem,
   MethodologyItemInput,
+  MenuNode,
   KnowledgeFragment,
   KnowledgeFragmentInput,
   LoginWhitelistConfig,
@@ -176,6 +177,9 @@ export const api = {
   me: () => request<UserMe>("/api/me"),
   logout: () =>
     request<void>("/api/auth/logout", { method: "POST" }),
+
+  // 菜单：当前用户可见菜单树（GET /api/menus，决策 #67 登录后一次性加载）
+  getMenus: () => request<MenuNode[]>("/api/menus"),
 
   // 自建认证 API
   register: (data: { username?: string; phone?: string; password: string; display_name?: string }) =>

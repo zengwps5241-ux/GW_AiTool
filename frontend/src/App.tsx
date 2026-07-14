@@ -1,8 +1,8 @@
 // 应用根组件：鉴权门 + 主题切换 + 视图路由
 // 导航锁定 SidebarVariantA（分组侧边栏）；业务页面：对话/业务地图/营销地图/拜访记录
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "@/api/client";
-import type { Project, TeamSpace, ThemeMode, UserMe, ViewName } from "@/types";
+import type { MenuNode, Project, TeamSpace, ThemeMode, UserMe, ViewName } from "@/types";
 import LoginPage from "@/pages/LoginPage";
 import ChatWorkspace from "@/pages/ChatWorkspace";
 import WorkspacePage from "@/pages/WorkspacePage";
@@ -32,8 +32,20 @@ type AuthState =
 const THEME_KEY = "goktech.theme";
 const SIDEBAR_KEY = "goktech.sidebar_collapsed";
 
+/** 非菜单项的合法 view（子页面 / 内部导航状态），路由守卫不拦截（M6.5.4）。
+ * 这些 view 不对应侧边栏菜单，是菜单项进入后的二级页面或会话状态。 */
+const NON_MENU_VIEWS = new Set<ViewName>([
+  "new",
+  "workspace",
+  "personalSpaceDetail",
+  "teamSpaceChat",
+  "teamSpaceDetail",
+]);
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
+  // 当前用户可见菜单树（M6.5 决策 #67：登录后一次性加载，与 auth.me 同级）
+  const [menuTree, setMenuTree] = useState<MenuNode[]>([]);
   const [view, setView] = useState<ViewName>("chat");
   const [selectedTeamSpaceId, setSelectedTeamSpaceId] = useState<number | null>(null);
   const [selectedTeamSpaceName, setSelectedTeamSpaceName] = useState<string | null>(null);
@@ -74,12 +86,22 @@ export default function App() {
   }, [collapsed]);
 
   // 真实鉴权逻辑：拉取当前用户，未登录则显示登录页
+  // 登录成功后顺带加载可见菜单树（决策 #67 一次性加载；LoginPage 登录成功走 reload，此处覆盖登录后/刷新后两种场景）
   useEffect(() => {
     let alive = true;
     api
       .me()
       .then((me) => {
-        if (alive) setAuth({ status: "logged_in", me });
+        if (!alive) return;
+        setAuth({ status: "logged_in", me });
+        api
+          .getMenus()
+          .then((tree) => {
+            if (alive) setMenuTree(tree);
+          })
+          .catch(() => {
+            // 菜单加载失败不阻塞主流程：侧边栏空树降级，路由守卫不拦截
+          });
       })
       .catch(() => {
         if (alive) setAuth({ status: "anonymous" });
@@ -95,6 +117,7 @@ export default function App() {
     } catch {
       // 忽略
     }
+    setMenuTree([]);
     setAuth({ status: "anonymous" });
   }, []);
 
@@ -156,6 +179,26 @@ export default function App() {
     setView(nextView);
   }, []);
 
+  // M6.5.4 路由守卫：菜单级 view 不在当前用户可见菜单树 → 回退默认视图（chat）。
+  // 子页面 view（NON_MENU_VIEWS）非菜单项不拦截；菜单未加载完不守卫（避免初次闪回退）。
+  const visibleMenuViews = useMemo(() => {
+    const set = new Set<string>();
+    menuTree.forEach((g) =>
+      (g.children ?? []).forEach((leaf) => {
+        if (leaf.view_name) set.add(leaf.view_name);
+      }),
+    );
+    return set;
+  }, [menuTree]);
+
+  useEffect(() => {
+    if (menuTree.length === 0) return;
+    if (NON_MENU_VIEWS.has(view)) return;
+    if (!visibleMenuViews.has(view)) {
+      setView("chat"); // 无权限菜单 → 回退默认（chat 对所有角色可见）
+    }
+  }, [view, menuTree, visibleMenuViews]);
+
   if (auth.status === "loading") {
     return (
       <div
@@ -186,6 +229,7 @@ export default function App() {
     collapsed,
     onToggle: () => setCollapsed((c) => !c),
     user: auth.me,
+    menuTree,
     onLogout: handleLogout,
   };
 
@@ -224,6 +268,8 @@ export default function App() {
       ? ["管理", "用户白名单"]
       : view === "usage"
       ? ["管理", "使用统计"]
+      : view === "systemSettings"
+      ? ["设置", "系统设置"]
       : view === "chat"
       ? chatBreadcrumb
       : ["对话"];
@@ -321,6 +367,24 @@ export default function App() {
     if (view === "skills" && auth.me.role !== "user") return <SkillsPage />;
     if (view === "loginWhitelist" && auth.me.role === "super") return <LoginWhitelistPage />;
     if (view === "usage" && auth.me.role !== "user") return <UsageAnalyticsPage />;
+    if (view === "systemSettings") {
+      // M6.5.4 配套：后端种子已为 admin/super 投放「系统设置」菜单项（systemSettings），
+      // 路由守卫已保证仅可见角色到达此处。M6.6 将替换为 SystemSettingsPage（4-tab）。
+      return (
+        <div
+          style={{
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--ink-3)",
+            fontSize: 14,
+          }}
+        >
+          系统设置页面（M6.6 开发中）
+        </div>
+      );
+    }
 
     return (
       <TeamSpacesPage

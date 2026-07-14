@@ -1,45 +1,63 @@
 // 🧪 PROTOTYPE Variant A — "Elegant Sidebar"
-// 所有页面在一个侧边栏中，用清晰的分组标签区分："作战台" / "文件" / "管理"
+// 所有页面在一个侧边栏中，用清晰的分组标签区分："作战台" / "文件" / "管理" / "设置"
 // 每个分组之间有分隔线，业务页面有微妙的视觉区分
+//
+// M6.5 数据驱动渲染（决策 #67）：菜单树由 App 登录后调 GET /api/menus 一次性加载并传入。
+// 顶层节点 = 分组（view_name=null、children 非空），叶子节点 = 可点击菜单项（view_name 非空）。
+// 不再硬编码 getNavItems，角色可见性完全由后端 role_menus 决定。
 import { useMemo } from "react";
-import type { UserMe, ViewName } from "@/types";
+import type { MenuNode, UserMe, ViewName } from "@/types";
 import { I } from "@/icons";
 import { Avatar } from "./ui";
 
-interface NavItem {
-  id: ViewName;
+/** 图标名 → I 组件映射（后端菜单 icon 字段存 Lucide 图标名，决策 #59 种子迁移自原硬编码）。
+ * 自定义菜单若用了未映射的图标名，回退到 CircleDot。 */
+const ICON_MAP: Record<string, (p: { size?: number }) => JSX.Element> = {
+  MessageSquare: I.MessageSquare,
+  Map: I.Map,
+  Target: I.Target,
+  ClipboardList: I.ClipboardList,
+  Folder: I.Folder,
+  Folders: I.Folders,
+  Brain: I.Brain,
+  Puzzle: I.Puzzle,
+  LayoutDashboard: I.LayoutDashboard,
+  Users: I.Users,
+  Settings: I.Settings,
+};
+
+/** 未知图标兜底（自定义菜单用了未映射的图标名时） */
+const FallbackIcon = I.CircleDot;
+
+/** 叶子菜单项（可点击） */
+interface NavLeaf {
+  view: ViewName;
   label: string;
-  icon: (p: { size?: number }) => JSX.Element;
-  group: string;
+  Icon: (p: { size?: number }) => JSX.Element;
 }
 
-function getNavItems(user: UserMe): NavItem[] {
-  const items: NavItem[] = [
-    // 作战台 — 核心业务页面
-    { id: "chat", label: "对话", icon: I.MessageSquare, group: "作战台" },
-    { id: "businessMap", label: "业务地图", icon: I.Map, group: "作战台" },
-    { id: "marketingMap", label: "营销地图", icon: I.Target, group: "作战台" },
-    { id: "visitRecords", label: "拜访记录", icon: I.ClipboardList, group: "作战台" },
-    // 文件
-    { id: "personalSpace", label: "个人空间", icon: I.Folder, group: "文件" },
-    { id: "teamSpaces", label: "团队空间", icon: I.Folders, group: "文件" },
-    // 管理
-    { id: "agents", label: "智能体管理", icon: I.Brain, group: "管理" },
-  ];
-  if (user.role !== "user") {
-    items.push({ id: "skills", label: "技能管理", icon: I.Puzzle, group: "管理" });
-    items.push({ id: "usage", label: "使用统计", icon: I.LayoutDashboard, group: "管理" });
-    items.push({ id: "feedback", label: "反馈管理", icon: I.MessageSquare, group: "管理" });
-  }
-  if (user.role === "super") {
-    items.push({ id: "loginWhitelist", label: "用户白名单", icon: I.Users, group: "管理" });
-  }
-  // 设置（admin 可见，§2.1：组织架构 / 用户管理 等）
-  if (user.role !== "user") {
-    items.push({ id: "organization", label: "组织架构", icon: I.Building, group: "设置" });
-    items.push({ id: "userApproval", label: "用户管理", icon: I.UserCheck, group: "设置" });
-  }
-  return items;
+/** 分组（顶层菜单节点） */
+interface NavGroup {
+  code: string;
+  label: string;
+  leaves: NavLeaf[];
+}
+
+/** 由菜单树构建可渲染的分组列表（顶层节点=分组，children=叶子）。
+ * 后端已按 sort_order 返回，此处保持后端顺序不再排序。 */
+function buildGroups(menuTree: MenuNode[]): NavGroup[] {
+  return menuTree
+    .map((node) => {
+      const leaves: NavLeaf[] = (node.children ?? [])
+        .filter((leaf) => leaf.view_name) // 仅渲染有 view_name 的叶子
+        .map((leaf) => ({
+          view: leaf.view_name as ViewName,
+          label: leaf.name,
+          Icon: ICON_MAP[leaf.icon ?? ""] ?? FallbackIcon,
+        }));
+      return { code: node.code, label: node.name, leaves };
+    })
+    .filter((g) => g.leaves.length > 0); // 空分组不显示
 }
 
 interface Props {
@@ -48,6 +66,8 @@ interface Props {
   collapsed: boolean;
   onToggle: () => void;
   user: UserMe;
+  /** 当前用户可见菜单树（M6.5 数据驱动，App 登录后加载传入） */
+  menuTree: MenuNode[];
   onLogout: () => void;
 }
 
@@ -57,17 +77,10 @@ export default function SidebarVariantA({
   collapsed,
   onToggle,
   user,
+  menuTree,
   onLogout,
 }: Props) {
-  const groups = useMemo(() => {
-    const out: Record<string, NavItem[]> = {};
-    getNavItems(user).forEach((it) => {
-      (out[it.group] ||= []).push(it);
-    });
-    return out;
-  }, [user]);
-
-  const groupOrder = ["作战台", "文件", "管理", "设置"];
+  const groups = useMemo(() => buildGroups(menuTree), [menuTree]);
 
   return (
     <aside
@@ -114,13 +127,13 @@ export default function SidebarVariantA({
         )}
       </div>
 
-      {/* 导航分组 */}
+      {/* 导航分组（数据驱动，按后端 sort_order 顺序渲染） */}
       <div style={{ flex: 1, overflow: "auto", padding: "8px 8px" }}>
-        {groupOrder.map((group) => {
-          const items = groups[group];
-          if (!items || items.length === 0) return null;
+        {groups.map((group) => {
+          // 作战台分组用稍有不同的视觉（accent 色块 + accent 标签色）
+          const isWarRoom = group.code === "group_zhanzuo";
           return (
-            <div key={group} style={{ marginBottom: group === "作战台" ? 16 : 8 }}>
+            <div key={group.code} style={{ marginBottom: isWarRoom ? 16 : 8 }}>
               {/* 分组标签 + 分隔线 */}
               {!collapsed && (
                 <div
@@ -132,7 +145,7 @@ export default function SidebarVariantA({
                   }}
                 >
                   {/* 作战台分组有一个小的 accent 色块 */}
-                  {group === "作战台" && (
+                  {isWarRoom && (
                     <span
                       style={{
                         width: 3,
@@ -147,17 +160,17 @@ export default function SidebarVariantA({
                     style={{
                       fontSize: 10.5,
                       fontWeight: 700,
-                      color: group === "作战台" ? "var(--accent)" : "var(--ink-3)",
+                      color: isWarRoom ? "var(--accent)" : "var(--ink-3)",
                       textTransform: "uppercase",
                       letterSpacing: 0.8,
                     }}
                   >
-                    {group}
+                    {group.label}
                   </span>
                 </div>
               )}
               {/* 分组间细分割线（折叠时也显示） */}
-              {group !== "作战台" && (
+              {!isWarRoom && (
                 <div
                   style={{
                     height: 1,
@@ -167,19 +180,17 @@ export default function SidebarVariantA({
                 />
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                {items.map((it) => {
-                  const Ic = it.icon;
+                {group.leaves.map((it) => {
+                  const Ic = it.Icon;
                   const active =
-                    current === it.id ||
-                    (it.id === "personalSpace" && current === "personalSpaceDetail") ||
-                    (it.id === "teamSpaces" &&
+                    current === it.view ||
+                    (it.view === "personalSpace" && current === "personalSpaceDetail") ||
+                    (it.view === "teamSpaces" &&
                       (current === "teamSpaceChat" || current === "teamSpaceDetail"));
-                  // 作战台项目用稍有不同的 active 样式
-                  const isWarRoom = group === "作战台";
                   return (
                     <button
-                      key={it.id}
-                      onClick={() => onNav(it.id)}
+                      key={`${group.code}-${it.view}`}
+                      onClick={() => onNav(it.view)}
                       title={collapsed ? it.label : undefined}
                       style={{
                         display: "flex",

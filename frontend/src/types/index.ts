@@ -308,7 +308,24 @@ export type ViewName =
   | "marketingMap"
   | "visitRecords"
   | "organization"
-  | "userApproval";
+  | "userApproval"
+  | "systemSettings";
+
+// ─── 菜单（M6.5 / 决策 #67 登录后一次性加载）──────────────────────
+// 对齐后端 backend.app.schemas.menus.MenuNode：当前用户可见菜单树（渲染用精简字段）。
+// 顶层节点 = 分组（view_name=null、children 非空）；叶子节点 = 可点击菜单项（view_name 非空）。
+export interface MenuNode {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  code: string;
+  /** Lucide 图标名（如 "MessageSquare"），前端经 ICON_MAP 映射到 I 组件；分组节点为 null */
+  icon: string | null;
+  /** 对应前端 ViewName；分组节点为 null */
+  view_name: string | null;
+  sort_order: number;
+  children: MenuNode[];
+}
 
 export interface UsageOverview {
   call_count: number;
