@@ -45,6 +45,7 @@ async def list_sessions(
     workspace_kind: str = "personal",
     team_space_id: int | None = None,
     agent_id: int | None = None,
+    project_id: int | None = None,
     limit: int = 10,
     offset: int = 0,
     mine_only: bool = False,
@@ -83,6 +84,12 @@ async def list_sessions(
         stmt = stmt.where(ChatSession.user_id == user.id, ChatSession.workspace_kind == "personal")
     if agent_id is not None:
         stmt = stmt.where(ChatSession.agent_id == agent_id)
+    # M7.1：项目过滤（决策 #72/#77）——传 project_id 则仅返回该项目会话（自动排除
+    # project_id 为 null 的自由对话会话）；不传则全量（含 null 自由对话会话）。
+    # 与上述 workspace_kind/mine_only 过滤 AND 叠加，个人/团队/全部三分支通用。
+    # 会话可见性仍由现有闭环兜底（personal 仅本人 / TeamSpaceMember 成员），不额外查项目权限。
+    if project_id is not None:
+        stmt = stmt.where(ChatSession.project_id == project_id)
     return (
         await db.execute(
             stmt.order_by(desc(ChatSession.updated_at), desc(ChatSession.created_at), ChatSession.id)

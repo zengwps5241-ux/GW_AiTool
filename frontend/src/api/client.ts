@@ -149,6 +149,8 @@ type SessionQuery = {
   workspace_kind?: WorkspaceKind | "all";
   team_space_id?: number | null;
   agent_id?: number | null;
+  /** M7.1：按选中项目过滤会话列表。传入则仅返回该项目会话；省略/undefined 返回全部（含自由对话会话） */
+  project_id?: number | null;
   limit?: number;
   offset?: number;
   mine_only?: boolean;
@@ -177,6 +179,11 @@ function sessionQueryString(params?: SessionQuery) {
   }
   if (params.agent_id !== undefined && params.agent_id !== null) {
     qs.set("agent_id", String(params.agent_id));
+  }
+  // M7.1：project_id 过滤（决策 #72）。undefined 不带参数→后端全量；
+  // 传入 id→仅该项目会话（排除自由对话会话）。
+  if (params.project_id !== undefined && params.project_id !== null) {
+    qs.set("project_id", String(params.project_id));
   }
   if (params.limit !== undefined) qs.set("limit", String(params.limit));
   if (params.offset !== undefined) qs.set("offset", String(params.offset));

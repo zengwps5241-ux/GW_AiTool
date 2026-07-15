@@ -32,6 +32,8 @@ type AuthState =
 
 const THEME_KEY = "goktech.theme";
 const SIDEBAR_KEY = "goktech.sidebar_collapsed";
+// M7.3（决策 #76）：持久化「当前选中项目」id，刷新后恢复，失效静默降级。
+const SELECTED_PROJECT_KEY = "goktech.selected_project_id";
 
 /** 非菜单项的合法 view（子页面 / 内部导航状态），路由守卫不拦截（M6.5.4）。
  * 这些 view 不对应侧边栏菜单，是菜单项进入后的二级页面或会话状态。 */
@@ -55,6 +57,16 @@ export default function App() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   // 全局选中项目（M1.3.9）：业务地图/营销地图/拜访记录/对话 共享
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  // M7.3（决策 #76）：刷新后从 localStorage 恢复上次选中项目 id（仅 id，对象在登录后重拉）。
+  // setSelectedProject 的统一包装：变更时同步写 localStorage，确保刷新不丢。
+  const selectProject = useCallback((project: Project | null) => {
+    setSelectedProject(project);
+    if (project?.id != null) {
+      localStorage.setItem(SELECTED_PROJECT_KEY, String(project.id));
+    } else {
+      localStorage.removeItem(SELECTED_PROJECT_KEY);
+    }
+  }, []);
   /** 待采纳徽标"跳回原对话"：要打开的会话 id（M4.4.5） */
   const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
   /**
@@ -103,6 +115,30 @@ export default function App() {
           .catch(() => {
             // 菜单加载失败不阻塞主流程：侧边栏空树降级，路由守卫不拦截
           });
+        // M7.3（决策 #76/#14 失效降级）：用 localStorage 存的 id 从可达项目里重拉完整 Project
+        // 对象（含 my_role 等动态字段，不存死对象）。失效（项目被删/被移出/权限变更）则静默清 key + 回全量。
+        const savedProjectId = localStorage.getItem(SELECTED_PROJECT_KEY);
+        if (savedProjectId) {
+          const savedId = Number(savedProjectId);
+          if (!Number.isNaN(savedId)) {
+            api
+              .listProjects()
+              .then((projects) => {
+                if (!alive) return;
+                const found = projects.find((p) => p.id === savedId) ?? null;
+                if (found) {
+                  setSelectedProject(found);
+                } else {
+                  // 失效：项目已不可达，静默降级回自由对话全量模式
+                  localStorage.removeItem(SELECTED_PROJECT_KEY);
+                  setSelectedProject(null);
+                }
+              })
+              .catch(() => {
+                // 拉取失败不阻塞，保持 null（全量模式）
+              });
+          }
+        }
       })
       .catch(() => {
         if (alive) setAuth({ status: "anonymous" });
@@ -390,7 +426,7 @@ export default function App() {
             <ProjectSelector
               compact
               value={selectedProject?.id ?? null}
-              onChange={setSelectedProject}
+              onChange={selectProject}
             />
           }
           badgeSlot={

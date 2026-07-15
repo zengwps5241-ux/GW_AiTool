@@ -817,6 +817,9 @@ export default function ChatWorkspace({
     const base = {
       limit: 10,
       agent_id: agentFilterId,
+      // M7.1（决策 #72/#77）：按当前选中项目过滤会话列表。
+      // 选中项目 → 仅该项目会话（后端排除 null 自由对话会话）；未选 → undefined，后端返回全量。
+      project_id: selectedProject?.id,
       mine_only: mode === "personal" || workspaceFilter.kind === "personal",
     };
     if (mode === "team" && teamSpaceId) {
@@ -841,7 +844,7 @@ export default function ChatWorkspace({
       return { ...base, workspace_kind: "personal" as const };
     }
     return { ...base, workspace_kind: "all" as const };
-  }, [agentFilterId, mode, teamSpaceId, workspaceFilter.id, workspaceFilter.kind]);
+  }, [agentFilterId, mode, teamSpaceId, workspaceFilter.id, workspaceFilter.kind, selectedProject?.id]);
   const canLoadSessions = mode !== "team" || Boolean(teamSpaceId);
 
   useEffect(() => {
@@ -1095,6 +1098,44 @@ export default function ChatWorkspace({
     setStreaming(false);
     abortRef.current = null;
   }, []);
+
+  // M7.2（决策 #73）：切换 Topbar 选中项目时的联动。
+  // ① 会话列表按新项目实时过滤（sessionParams 已注入 project_id，下面 loadSessions 重取）。
+  // ② 判当前打开的会话是否归属新选项目：不属（含未绑定的自由对话会话）→
+  //    先 stopSession 中断在跑的 SSE 流，再清空 events/currentId 回空状态；
+  //    属 → 保持打开，内容不丢。归属取 currentSession.project_id（自由对话会话为 null，视为不属于任何具体项目）。
+  const prevSelectedProjectIdRef = useRef<number | null | undefined>(selectedProject?.id ?? null);
+  useEffect(() => {
+    const newProjectId = selectedProject?.id ?? null;
+    if (prevSelectedProjectIdRef.current === newProjectId) return;
+    prevSelectedProjectIdRef.current = newProjectId;
+    // 判当前会话归属：自由对话会话（project_id=null）视为不属于任何具体项目
+    const currentBelongsToNew =
+      currentSession?.project_id != null && currentSession.project_id === newProjectId;
+    if (!currentBelongsToNew && currentId) {
+      // 若该会话正流式输出则先中断后端流（决策 #73），避免「列表已是新项目、后台还在为旧项目跑流」
+      if (streaming) {
+        api.stopSession(currentId).catch(() => {
+          // 忽略中断失败，仍继续清理前端态
+        });
+      }
+      clearActiveStream();
+      setCurrentId(null);
+      currentIdRef.current = null;
+      setEvents([]);
+      setChatMode("empty");
+    }
+    // 重取会话列表：按新项目过滤。loadSessions 依赖 sessionParams，sessionParams 已含 project_id。
+    loadSessions(0, false);
+  }, [
+    selectedProject?.id,
+    currentId,
+    streaming,
+    currentSession?.project_id,
+    clearActiveStream,
+    loadSessions,
+    setChatMode,
+  ]);
 
   // 删除会话
   const deleteSession = useCallback(

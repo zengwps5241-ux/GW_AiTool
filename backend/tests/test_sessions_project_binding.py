@@ -125,6 +125,154 @@ async def test_list_sessions_includes_project_fields(logged_in_client):
     assert matched and matched[0]["project_name"] == "列出项目"
 
 
+# ─── M7.1：会话列表按 project_id 过滤 ─────────────────────────
+# 决策 #72（严格过滤）/ #77（自由对话会话仅全量可见）/ #74（与工作区维度 AND 叠加）
+# / #75（不额外查项目权限，复用现有可见性闭环）
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_filters_by_project_excluding_free_sessions(logged_in_client):
+    """选项目1 → 只显示项目1会话，排除 project_id=null 的自由对话会话（决策 #72/#77）。"""
+    proj1 = await _make_project(logged_in_client, project_name="项目1")
+    proj2 = await _make_project(
+        logged_in_client, customer_name="客户2", project_name="项目2"
+    )
+
+    # 项目1 的会话
+    p1_sid = (
+        await logged_in_client.post("/api/sessions", json={"project_id": proj1["id"]})
+    ).json()["id"]
+    # 项目2 的会话
+    p2_sid = (
+        await logged_in_client.post("/api/sessions", json={"project_id": proj2["id"]})
+    ).json()["id"]
+    # 自由对话会话（project_id=null，绑定默认 agent 避免 agent_id=None 被清理）
+    agents = (await logged_in_client.get("/api/agents")).json()
+    default_agent = agents[0]
+    free_sid = (
+        await logged_in_client.post(
+            "/api/sessions", json={"agent_id": default_agent["id"]}
+        )
+    ).json()["id"]
+
+    # 选项目1：只有 p1_sid
+    p1_list = (
+        await logged_in_client.get(f"/api/sessions?project_id={proj1['id']}")
+    ).json()
+    p1_ids = [s["id"] for s in p1_list]
+    assert p1_sid in p1_ids
+    assert p2_sid not in p1_ids
+    assert free_sid not in p1_ids  # 自由对话会话被排除
+
+    # 选项目2：只有 p2_sid
+    p2_list = (
+        await logged_in_client.get(f"/api/sessions?project_id={proj2['id']}")
+    ).json()
+    p2_ids = [s["id"] for s in p2_list]
+    assert p2_sid in p2_ids
+    assert p1_sid not in p2_ids
+    assert free_sid not in p2_ids
+
+    # 不选项目：全部可见（含自由对话会话）
+    all_list = (await logged_in_client.get("/api/sessions")).json()
+    all_ids = [s["id"] for s in all_list]
+    assert p1_sid in all_ids
+    assert p2_sid in all_ids
+    assert free_sid in all_ids
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_project_filter_stacks_with_workspace_kind(logged_in_client):
+    """project_id 与 workspace_kind=mine_only AND 叠加（决策 #74）。"""
+    proj = await _make_project(logged_in_client, project_name="叠加项目")
+    pid = proj["id"]
+    # 项目会话 + 一个默认 agent 的自由对话会话
+    p_sid = (
+        await logged_in_client.post("/api/sessions", json={"project_id": pid})
+    ).json()["id"]
+    agents = (await logged_in_client.get("/api/agents")).json()
+    free_sid = (
+        await logged_in_client.post(
+            "/api/sessions", json={"agent_id": agents[0]["id"]}
+        )
+    ).json()["id"]
+
+    # mine_only + project_id 叠加：只该项目且只自己的
+    listed = (
+        await logged_in_client.get(
+            f"/api/sessions?mine_only=true&project_id={pid}"
+        )
+    ).json()
+    ids = [s["id"] for s in listed]
+    assert p_sid in ids
+    assert free_sid not in ids
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_project_filter_no_cross_user_leak(
+    logged_in_client, other_logged_in_client
+):
+    """传 project_id 不会越权泄露他人个人会话（决策 #75：复用现有可见性闭环）。"""
+    proj = await _make_project(logged_in_client, project_name="隔离项目")
+    pid = proj["id"]
+    # alice 建项目会话
+    alice_sid = (
+        await logged_in_client.post("/api/sessions", json={"project_id": pid})
+    ).json()["id"]
+
+    # bob 非项目成员，即使传 project_id 也看不到 alice 的个人项目会话
+    bob_view = (
+        await other_logged_in_client.get(f"/api/sessions?project_id={pid}")
+    ).json()
+    assert alice_sid not in [s["id"] for s in bob_view]
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_project_filter_with_team_sessions(
+    logged_in_client, other_logged_in_client
+):
+    """团队空间会话同样按 project_id 过滤（决策 #74 团队空间适用）。"""
+    proj = await _make_project(logged_in_client, project_name="团队项目")
+    pid = proj["id"]
+    # alice 建团队空间 + 共享会话并绑定项目
+    created = await logged_in_client.post("/api/team-spaces", json={"name": "团队资料"})
+    space_id = created.json()["id"]
+    other = (await other_logged_in_client.get("/api/me")).json()
+    await logged_in_client.post(
+        f"/api/team-spaces/{space_id}/members",
+        json={"user_id": other["id"], "role": "editor"},
+    )
+    team_session = await logged_in_client.post(
+        "/api/sessions",
+        json={
+            "workspace_kind": "team",
+            "team_space_id": space_id,
+            "is_shared": True,
+            "project_id": pid,
+        },
+    )
+    assert team_session.status_code == 200, team_session.text
+    team_sid = team_session.json()["id"]
+
+    # bob 是空间成员，在 workspace_kind=all 下选项目，能看到该共享团队会话
+    bob_list = (
+        await other_logged_in_client.get(
+            f"/api/sessions?workspace_kind=all&project_id={pid}"
+        )
+    ).json()
+    assert team_sid in [s["id"] for s in bob_list]
+    # 选别的项目则看不到
+    other_proj = await _make_project(
+        logged_in_client, customer_name="客户X", project_name="其他项目"
+    )
+    bob_other = (
+        await other_logged_in_client.get(
+            f"/api/sessions?workspace_kind=all&project_id={other_proj['id']}"
+        )
+    ).json()
+    assert team_sid not in [s["id"] for s in bob_other]
+
+
 # ─── _build_draft_context 单元 ───────────────────────────────
 
 
