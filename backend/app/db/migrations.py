@@ -408,7 +408,7 @@ async def init_db() -> None:
         if result.scalar() == 0:
             await conn.execute(text(
                 "INSERT INTO agents (name, code, system_prompt, skills, plugins, category_id, is_default) "
-                f"VALUES ('国科智能助手', 'default-agent', NULL, '', '', {default_category_id or 'NULL'}, true)"
+                f"VALUES ('咨询顾问智能助手', 'default-agent', NULL, '', '', {default_category_id or 'NULL'}, true)"
             ))
 
         await conn.execute(text(

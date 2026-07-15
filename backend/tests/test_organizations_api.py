@@ -41,11 +41,11 @@ async def test_create_organization(admin_client):
     """创建公司根节点。"""
     res = await admin_client.post(
         "/api/admin/organizations",
-        json={"name": "国科集团", "type": "company"},
+        json={"name": "示例集团", "type": "company"},
     )
     assert res.status_code == 201
     data = res.json()
-    assert data["name"] == "国科集团"
+    assert data["name"] == "示例集团"
     assert data["type"] == "company"
     assert data["parent_id"] is None
     assert data["id"] > 0
@@ -272,10 +272,10 @@ async def test_delete_organization_with_members_rejected(admin_client):
 async def test_import_json(admin_client):
     """JSON 批量导入：公司→部门→小组三级。"""
     rows = [
-        {"name": "国科集团", "type": "company"},
-        {"name": "研发部", "type": "department", "parent_name": "国科集团"},
+        {"name": "示例集团", "type": "company"},
+        {"name": "研发部", "type": "department", "parent_name": "示例集团"},
         {"name": "平台组", "type": "group", "parent_name": "研发部"},
-        {"name": "市场部", "type": "department", "parent_name": "国科集团"},
+        {"name": "市场部", "type": "department", "parent_name": "示例集团"},
     ]
     res = await admin_client.post("/api/admin/organizations/import", json=rows)
     assert res.status_code == 200
@@ -289,7 +289,7 @@ async def test_import_json(admin_client):
     # 校验树结构
     tree = (await admin_client.get("/api/admin/organizations/tree")).json()
     assert len(tree) == 1
-    assert tree[0]["name"] == "国科集团"
+    assert tree[0]["name"] == "示例集团"
     dept_names = {c["name"] for c in tree[0]["children"]}
     assert dept_names == {"研发部", "市场部"}
 

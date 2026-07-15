@@ -39,7 +39,7 @@
 
 ### 1.2 建设目标
 
-在现有国科智能体平台（`agent-platform-main`）基础上，扩展建设面向轻咨询业务场景的 AI 协作平台，实现：
+在现有智能体平台底座（`agent-platform-main`）基础上，扩展建设面向轻咨询业务场景的 AI 协作平台，实现：
 
 - **全流程闭环**：假设地图 → 拜访方案 → 现场验证 → 现状地图 → 营销地图 → 知识沉淀
 - **AI 驱动**：基于 Claude Agent SDK 的 7 个 Skill 覆盖核心工作流，LLM 负责推理、生成、结构化输出
@@ -146,7 +146,7 @@
 | **ORM** | SQLAlchemy 2.0 | 2.0+ | 异步 session + DeclarativeBase |
 | **数据库** | PostgreSQL | 16+ | 主数据存储 |
 | **缓存/队列** | Redis | 7+ | Session 缓存、Run 状态缓存 |
-| **AI SDK** | claude-agent-sdk | — | 国科内部封装的 Claude Code 能力 SDK |
+| **AI SDK** | claude-agent-sdk | — | 内部封装的 Claude Code 能力 SDK |
 | **LLM** | DeepSeek V4 Pro / Flash | — | 双档路由：Pro 处理复杂任务，Flash 处理简单意图分类 |
 | **文档转换** | MinerU API | — | Office/PDF → Markdown |
 | **前端框架** | React 18 + TypeScript | 18.x | SPA 单页应用 |

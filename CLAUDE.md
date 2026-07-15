@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目简介
 
-国科智能体平台 — 基于 `claude-agent-sdk` 的多智能体对话与文件管理平台。
+咨询顾问作战台 — 基于 `claude-agent-sdk` 的多智能体对话与文件管理平台。
 
 - **Backend**: Python 3.13 + FastAPI + SQLAlchemy 2.0(async) + PostgreSQL
 - **Frontend**: React 18 + TypeScript + Vite

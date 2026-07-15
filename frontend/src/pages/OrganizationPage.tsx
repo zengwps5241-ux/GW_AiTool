@@ -526,8 +526,8 @@ export default function OrganizationPage() {
           onChange={(e) => setImportText(e.target.value)}
           placeholder={
             importFormat === "csv"
-              ? "name,type,parent_name,head_user_username,position_title,is_primary,sort_order\n国科集团,company,,, ,0\n研发部,department,国科集团,,,0"
-              : '[\n  {"name":"国科集团","type":"company"},\n  {"name":"研发部","type":"department","parent_name":"国科集团"}\n]'
+              ? "name,type,parent_name,head_user_username,position_title,is_primary,sort_order\n示例集团,company,,, ,0\n研发部,department,示例集团,,,0"
+              : '[\n  {"name":"示例集团","type":"company"},\n  {"name":"研发部","type":"department","parent_name":"示例集团"}\n]'
           }
           style={{
             width: "100%",

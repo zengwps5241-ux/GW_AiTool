@@ -93,7 +93,7 @@ export default function Sidebar({
                 letterSpacing: -0.01,
               }}
             >
-              国科智能体
+              咨询顾问作战台
             </span>
             <span style={{ fontSize: 11, color: "var(--ink-3)" }}>智能体协作平台</span>
           </div>
