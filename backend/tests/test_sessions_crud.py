@@ -31,57 +31,20 @@ async def test_create_list_rename_delete(logged_in_client):
     assert res.json() == []
 
 
-async def test_session_isolation_between_users(client, monkeypatch, app_env):
-    """两个企微用户之间的会话隔离。"""
-    from unittest.mock import patch, AsyncMock
-    from app.modules.auth import wechat_work
-
-    monkeypatch.setenv("WECHAT_WORK_CORP_ID", "test_corp")
-    monkeypatch.setenv("WECHAT_WORK_AGENT_ID", "test_agent")
-    monkeypatch.setenv("WECHAT_WORK_SECRET", "test_secret")
-    monkeypatch.setenv("WECHAT_WORK_LOGIN_MODE", "sso")
-
-    from importlib import reload
-    from app.core import config as core_config
-    from app.api.routes import auth as auth_routes
-    reload(core_config)
-    reload(auth_routes)
-
-    # alice 企微登录
-    with patch("app.api.routes.auth.secrets.token_urlsafe", return_value="alice_state"):
-        await client.get("/api/auth/wechat-work/authorize", follow_redirects=False)
-    with patch.object(wechat_work, "get_access_token", new=AsyncMock(return_value="token")), \
-         patch.object(wechat_work, "get_user_id_by_code", new=AsyncMock(return_value="alice")), \
-         patch.object(wechat_work, "get_user_detail", new=AsyncMock(return_value={
-             "userid": "alice", "name": "Alice", "department": [], "position": None,
-             "mobile": None, "email": None, "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_department_list", new=AsyncMock(return_value=[])):
-        await client.get("/api/auth/wechat-work/callback?code=c1&state=alice_state", follow_redirects=False)
+async def test_session_isolation_between_users(logged_in_client, other_logged_in_client):
+    """两个自建登录用户之间的会话隔离（V2.2 认证重构后改用自建注册登录）。"""
+    alice = logged_in_client
+    bob = other_logged_in_client
 
     # alice 创建会话
-    sid = (await client.post("/api/sessions", json={})).json()["id"]
-
-    # 切换到 bob
-    await client.post("/api/auth/logout")
-
-    # bob 企微登录
-    with patch("app.api.routes.auth.secrets.token_urlsafe", return_value="bob_state"):
-        await client.get("/api/auth/wechat-work/authorize", follow_redirects=False)
-    with patch.object(wechat_work, "get_access_token", new=AsyncMock(return_value="token")), \
-         patch.object(wechat_work, "get_user_id_by_code", new=AsyncMock(return_value="bob")), \
-         patch.object(wechat_work, "get_user_detail", new=AsyncMock(return_value={
-             "userid": "bob", "name": "Bob", "department": [], "position": None,
-             "mobile": None, "email": None, "avatar": None,
-         })), \
-         patch.object(wechat_work, "get_department_list", new=AsyncMock(return_value=[])):
-        await client.get("/api/auth/wechat-work/callback?code=c2&state=bob_state", follow_redirects=False)
+    sid = (await alice.post("/api/sessions", json={})).json()["id"]
+    assert [s["id"] for s in (await alice.get("/api/sessions")).json()] == [sid]
 
     # bob 看不到 alice 的会话
-    assert (await client.get("/api/sessions")).json() == []
-    # 也不能改/删
-    assert (await client.patch(f"/api/sessions/{sid}", json={"title": "x"})).status_code == 404
-    assert (await client.delete(f"/api/sessions/{sid}")).status_code == 404
+    assert (await bob.get("/api/sessions")).json() == []
+    # 也不能改/删（归属校验返回 404）
+    assert (await bob.patch(f"/api/sessions/{sid}", json={"title": "x"})).status_code == 404
+    assert (await bob.delete(f"/api/sessions/{sid}")).status_code == 404
 
 
 async def test_delete_triggers_remove_session(logged_in_client, monkeypatch):
@@ -107,7 +70,8 @@ async def test_delete_triggers_remove_session(logged_in_client, monkeypatch):
     res = await c.delete(f"/api/sessions/{sid}")
     assert res.status_code == 204
     assert calls and calls[0][0] == "fake-sid"
-    assert calls[0][1].endswith("user_workspaces/alice")
+    # 路径分隔符跨平台统一为 POSIX 再断言后缀（Windows 为反斜杠）。
+    assert calls[0][1].replace("\\", "/").endswith("user_workspaces/alice")
 
 
 async def test_unauthenticated_blocked(client):

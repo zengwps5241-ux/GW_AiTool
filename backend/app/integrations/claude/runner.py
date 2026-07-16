@@ -45,6 +45,9 @@ from app.modules.catalog.plugins import resolve_plugin_path  # noqa: F401 — �
 
 _ZHIPU_WEB_SEARCH_MCP_NAME = "zhipu-web-search-sse"
 
+# 历史消息回放窗口：仅取最近 HISTORY_WINDOW 条，避免长会话一次性加载过多事件。
+HISTORY_WINDOW = 200
+
 
 @dataclass(frozen=True)
 class ChatRunSummary:
@@ -76,7 +79,7 @@ async def load_history(
     """
     def _do() -> list[dict]:
         all_msgs = get_session_messages(claude_session_id, directory=str(user_workspace))
-        msgs = all_msgs[-200:]
+        msgs = all_msgs[-HISTORY_WINDOW:]
         events: list[dict] = []
         for m in msgs:
             events.extend(serialize_block(m, streaming=False))

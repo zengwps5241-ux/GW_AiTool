@@ -1004,6 +1004,14 @@ async def test_chat_runner_continues_when_sse_consumer_is_cancelled(monkeypatch,
     monkeypatch.setattr(streaming_mod, "persist_usage_event", fake_persist_usage_event)
     monkeypatch.setattr(streaming_mod, "user_workspace", lambda username: tmp_path)
 
+    # 首条消息会触发语义标题生成；mock 掉 generate_chat_completion，避免读取真实
+    # .env 中的 DeepSeek token 而发起联网调用，导致 runner 在 finalize 阶段被阻塞、
+    # 1s 轮询窗口内来不及收尾至 COMPLETED（参见测试报告 DEFECT-01 复盘）。
+    async def fake_generate_chat_completion(**kwargs):
+        return "语义标题"
+
+    monkeypatch.setattr(streaming_mod, "generate_chat_completion", fake_generate_chat_completion)
+
     response = await streaming_mod.stream_session_chat(
         SimpleNamespace(id="sid-cancelled-consumer", claude_session_id=None),
         SimpleNamespace(username="cancel-user"),

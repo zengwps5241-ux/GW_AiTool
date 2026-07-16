@@ -404,9 +404,17 @@ async def test_create_upload_tasks_rejects_negative_size(logged_in_client):
 
 async def test_create_upload_tasks_rejects_symlink_escape(logged_in_client, tmp_path):
     workspace = tmp_path / "user_workspaces" / "alice"
+    workspace.mkdir(parents=True, exist_ok=True)
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir()
-    (workspace / "linked").symlink_to(outside_dir, target_is_directory=True)
+    try:
+        (workspace / "linked").symlink_to(outside_dir, target_is_directory=True)
+    except OSError as exc:
+        # Windows 非开发者模式 / 无 SeCreateSymbolicLink 特权时无法创建符号链接
+        # （WinError 1314），该用例无法构造前置条件，跳过而非报失败。
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("当前 Windows 环境无符号链接权限（WinError 1314）")
+        raise
     payload = {
         "target_dir": "",
         "items": [

@@ -2,15 +2,89 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
+# 测试库连接串：本地 PostgreSQL 口令为 dev（与 backend/.env 一致）。
+# 集中定义一处，供 autouse 夹具与各测试自建引擎复用，避免口令多处硬编码而失配。
+TEST_DATABASE_URL = "postgresql+asyncpg://postgres:dev@localhost:5432/gokagent_test"
+
+# 旧单组 ANTHROPIC_* 配置在本机 shell 全局环境中常被设置（如为 glm 设的
+# ANTHROPIC_MODEL=glm-5.2），会渗入 pytest 并污染以「默认值为空」为前提的配置
+# 断言。统一在每条测试前剥离、恢复文档默认；测试体仍可按需 monkeypatch.setenv 覆盖。
+_ANTHROPIC_LEGACY_ENV = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL")
+
 
 @pytest.fixture(autouse=True)
 def _default_database_url(monkeypatch):
     """为所有测试提供默认的数据库连接地址。"""
-    # 本地 PostgreSQL 口令为 dev（与 backend/.env 一致）
-    monkeypatch.setenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://postgres:dev@localhost:5432/gokagent_test",
-    )
+    monkeypatch.setenv("DATABASE_URL", TEST_DATABASE_URL)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_anthropic_env(monkeypatch):
+    """剥离可能从 shell 泄漏的旧 ANTHROPIC_* 配置，避免污染配置默认值断言。"""
+    for key in _ANTHROPIC_LEGACY_ENV:
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture
+def test_database_url():
+    """暴露统一测试库连接串，供需要自建引擎的测试复用（避免再次硬编码口令）。"""
+    return TEST_DATABASE_URL
+
+
+# 需要重载的全部模型子模块；与 app_env 的模型层一致，确保刷新后的 Base.metadata
+# 包含所有表（ChatSession.project_id 等外键目标表必须已注册，否则 create_all 报
+# NoReferencedTableError）。
+_ALL_MODEL_MODULES = (
+    "agent", "audit", "business_map", "category", "consultant", "conversion_task",
+    "customer", "department", "feedback", "login_whitelist", "marketing_map", "menu",
+    "organization", "project", "role", "session", "team_space", "upload_task",
+    "usage", "user", "visit",
+)
+
+
+def _reload_all_models() -> None:
+    """重载全部模型子模块 + models 包，使其注册到刷新后的 Base.metadata。"""
+    import importlib
+    from importlib import reload
+
+    for name in _ALL_MODEL_MODULES:
+        reload(importlib.import_module(f"app.models.{name}"))
+    from app import models
+    reload(models)
+
+
+@pytest_asyncio.fixture
+async def isolated_db_module(monkeypatch, tmp_path):
+    """重载完整配置/DB/全量模型层并初始化干净 schema，返回 db_session 模块。
+
+    供仅做模型层断言、不走完整 FastAPI app 的测试（test_db / test_create_user_cli）
+    复用：确保 Base.metadata 包含全部表，避免 create_all 因外键目标表缺失而失败。
+    """
+    monkeypatch.setenv("APP_SECRET", "s")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "t")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://example.com")
+    monkeypatch.setenv("DATABASE_URL", TEST_DATABASE_URL)
+    monkeypatch.chdir(tmp_path)
+
+    from importlib import reload
+
+    from app.core import config as core_config
+    reload(core_config)
+    from app.db import base as db_base, session as db_session, migrations as db_migrations
+    reload(db_base)
+    reload(db_session)
+    reload(db_migrations)
+    _reload_all_models()
+    from app.scripts import create_user
+    reload(create_user)
+
+    async with db_session.engine.begin() as conn:
+        from sqlalchemy import text
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+    await db_migrations.init_db()
+    yield db_session
+    await db_session.engine.dispose()
 
 
 @pytest_asyncio.fixture

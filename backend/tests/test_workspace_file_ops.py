@@ -10,7 +10,8 @@ async def test_read_and_save_text_file(logged_in_client):
 
     res = await logged_in_client.get("/api/workspace/preview", params={"path": "notes.md"})
     assert res.status_code == 200
-    assert res.text == "# Old\n"
+    # Windows 下文本写入会引入 CRLF，断言前归一化换行符以兼容跨平台。
+    assert res.text.replace("\r", "") == "# Old\n"
 
     res = await logged_in_client.put(
         "/api/workspace/content",

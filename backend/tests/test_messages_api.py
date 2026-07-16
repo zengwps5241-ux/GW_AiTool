@@ -34,4 +34,5 @@ async def test_messages_calls_load_history(logged_in_client, monkeypatch):
     assert res.status_code == 200
     assert res.json() == [{"type": "assistant_text", "text": "hi"}]
     assert captured["sid"] == "fake-sid"
-    assert captured["ws"].endswith("user_workspaces/alice")
+    # 路径分隔符跨平台统一为 POSIX 再断言后缀（Windows 为反斜杠）。
+    assert captured["ws"].replace("\\", "/").endswith("user_workspaces/alice")

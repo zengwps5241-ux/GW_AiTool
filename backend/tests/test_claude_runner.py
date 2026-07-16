@@ -29,7 +29,8 @@ async def test_load_history_passes_directory(monkeypatch, tmp_path):
     assert captured["directory"] == str(tmp_path / "ws")
 
 
-async def test_load_history_returns_latest_ten_messages(monkeypatch, tmp_path):
+async def test_load_history_returns_latest_window(monkeypatch, tmp_path):
+    """load_history 仅回放最近 HISTORY_WINDOW 条历史消息（超出窗口的旧消息被截断）。"""
     monkeypatch.setenv("APP_SECRET", "s")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "t")
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://x")
@@ -39,23 +40,27 @@ async def test_load_history_returns_latest_ten_messages(monkeypatch, tmp_path):
     from app.core import config as core_config
     reload(core_config)
 
+    from app.integrations.claude import runner as claude_runner
+
+    # 构造超出窗口的消息总量，验证只保留最后 HISTORY_WINDOW 条。
+    window = claude_runner.HISTORY_WINDOW
+    total = window + 50
     captured = {}
 
     def fake_get_session_messages(session_id, directory=None, **kw):
         captured["kwargs"] = kw
-        return list(range(15))
+        return list(range(total))
 
     def fake_serialize_block(msg, streaming=False):
         return [{"type": "msg", "value": msg, "streaming": streaming}]
 
-    from app.integrations.claude import runner as claude_runner
     monkeypatch.setattr("app.integrations.claude.runner.get_session_messages", fake_get_session_messages)
     monkeypatch.setattr("app.integrations.claude.runner.serialize_block", fake_serialize_block)
 
     out = await claude_runner.load_history("abc", tmp_path / "ws")
 
     assert captured["kwargs"] == {}
-    assert [item["value"] for item in out] == list(range(5, 15))
+    assert [item["value"] for item in out] == list(range(total - window, total))
     assert all(item["streaming"] is False for item in out)
 
 
