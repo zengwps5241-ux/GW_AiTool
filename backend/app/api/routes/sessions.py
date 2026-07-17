@@ -87,6 +87,9 @@ async def _session_out(
             "workspace_readonly_reason": scope.readonly_reason,
             "project_id": project_id,
             "project_name": project_name,
+            "workflow_type": getattr(cs, "workflow_type", None),
+            "workflow_status": getattr(cs, "workflow_status", None),
+            "workflow_stage": getattr(cs, "workflow_stage", None),
             "created_at": cs.created_at,
             "updated_at": cs.updated_at,
         }
@@ -274,14 +277,18 @@ async def chat(
     agent = None
     if cs.agent_id:
         agent = await db.get(Agent, cs.agent_id)
-    return await stream_session_chat(
-        cs,
-        user,
-        payload.prompt,
-        agent=agent,
-        model=payload.model,
-        thinking_level=payload.thinking_level,
-    )
+    try:
+        return await stream_session_chat(
+            cs,
+            user,
+            payload.prompt,
+            agent=agent,
+            model=payload.model,
+            thinking_level=payload.thinking_level,
+            workflow_type=payload.workflow_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/{session_id}/stop")

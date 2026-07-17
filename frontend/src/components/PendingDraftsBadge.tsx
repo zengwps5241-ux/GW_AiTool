@@ -44,7 +44,8 @@ export default function PendingDraftsBadge({ project, onJumpToChat }: Props) {
         api.listVisitRecords(projectId, { review_status: "draft", include_drafts: true }),
       ]);
       const next: PendingItem[] = [];
-      if (bmDraft) {
+      const bmReady = bmDraft?.draft_data?.ready_for_adoption !== false;
+      if (bmDraft && bmReady) {
         next.push({
           entityType: "business_map_draft",
           draftId: bmDraft.id,

@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     BusinessMapObject,
+    ChatSession,
     EvidenceSource,
     StakeholderCard,
     User,
@@ -232,6 +233,12 @@ async def _adopt_entity_draft(
     obj.review_status = "reviewed"
     obj.reviewed_by = user.id
     obj.reviewed_at = datetime.now(timezone.utc)
+    source_session_id = getattr(obj, "source_session_id", None)
+    if source_session_id:
+        session = await db.get(ChatSession, source_session_id)
+        if session is not None and session.workflow_status == "active":
+            session.workflow_status = "adopted"
+            session.workflow_stage = "done"
     await db.commit()
     return AdoptResult(
         success=True,

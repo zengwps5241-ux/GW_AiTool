@@ -196,7 +196,7 @@ class FiveDimHealthOut(BaseModel):
 
     object_id: int
     five_dim_health: dict[str, Any]
-    source: str = Field(..., description="auto（规则计算）/ manual（手动覆盖）")
+    source: str = Field(..., description="ai_hypothesis（AI假设诊断）/ manual（手动覆盖）")
 
 
 def iso(value: datetime | None) -> str | None:

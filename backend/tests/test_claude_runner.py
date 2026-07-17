@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 
 async def test_load_history_passes_directory(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_SECRET", "s")
@@ -482,10 +480,14 @@ async def test_stream_chat_injects_builtin_zhipu_web_search_mcp(monkeypatch, tmp
     opts = recorded["options"]
     assert opts.mcp_servers == {
         "zhipu-web-search-sse": {
-            "type": "sse",
-            "url": "https://open.bigmodel.cn/api/mcp/web_search/sse?Authorization=zhipu-key",
+            "type": "http",
+            "url": (
+                "https://open.bigmodel.cn/api/mcp-broker/proxy/web-search/mcp"
+                "?Authorization=zhipu-key"
+            ),
         }
     }
+    assert "mcp__zhipu-web-search-sse__webSearchPro" in opts.allowed_tools
     assert "mcp__zhipu-web-search-sse__web_search" in opts.allowed_tools
 
 

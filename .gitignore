@@ -1,19 +1,54 @@
+# 编辑器、系统与本地 Agent 配置
 .idea/
-.venv/
-__pycache__/
-*.egg-info/
-.env
-*.env.local
+.vscode/
+.DS_Store
+Thumbs.db
 .omc/
 .claude/
+.agents/
+.codex/
+.mcp.json
+
+# 环境变量、密钥和证书；仅保留脱敏后的配置示例
+.env
+.env.*
+!.env.example
+!backend/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Python 环境、缓存与测试产物
+.venv/
+.uv-cache/
+.uv-python/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Backend runtime data
 backend/.venv/
 backend/data/
 user_workspaces/
+team_workspaces/
 claude_data/
 agent_workspaces/
+feedback_uploads/
 backend/.env
+backend/user_workspaces/
+backend/team_workspaces/
+backend/claude_data/
+backend/agent_workspaces/
+backend/feedback_uploads/
+backend/logs/
 .playwright-mcp/
 
 /.claude/worktrees/
@@ -22,9 +57,24 @@ backend/.env
 /.superpowers/
 .gstack/
 /docker/volumes/*
-/backend/logs
 /.codegraph/
-/.mcp.json
+
+# 前端依赖与构建产物
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 本地数据库、日志和临时文件
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.tmp
+*.swp
+*~
 
 # 一次性换皮原型与备份（NOTES 明示 throwaway，不并入生产代码）
 frontend/prototype/
