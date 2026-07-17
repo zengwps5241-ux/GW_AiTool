@@ -1,9 +1,9 @@
 """AI 结构化草稿工具框架测试（M3.1）。
 
 覆盖：
-- M3.1.2：三个草稿工具的输入 JSON Schema 定义本身合法 + 校验逻辑（合法通过 / 非法报错）
+- M3.1.2：草稿工具的输入 JSON Schema 定义本身合法 + 校验逻辑（合法通过 / 非法报错）
 - M3.1.3：handler 校验→落库→SSE 推送「待采纳」→返回工具结果
-- M3.1.1：build_draft_tool_server 用 create_sdk_mcp_server 注册三工具（配置合法 + 工具可见）
+- M3.1.1：build_draft_tool_server 用 create_sdk_mcp_server 注册草稿工具（配置合法 + 工具可见）
 - M2.4 衔接：reviews.adopt 派发器对 stakeholder/visit 草稿的采纳分支（§3.3 自确认→reviewed）
 
 不依赖真实 Claude 会话（与 test_claude_runner 同类环境依赖测试隔离）。
@@ -15,18 +15,22 @@ import pytest
 # ─── M3.1.2：JSON Schema 定义 + 校验 ────────────────────────────
 
 
-def test_three_draft_schemas_are_valid_jsonschema():
-    """三个工具的输入 Schema 自身是合法 JSON Schema（可构造校验器）。"""
+def test_draft_schemas_are_valid_jsonschema():
+    """草稿工具的输入 Schema 自身是合法 JSON Schema（可构造校验器）。"""
     import jsonschema
 
     from app.integrations.claude.tools import (
+        FINALIZE_HYPOTHESIS_MAP_DRAFT_SCHEMA,
         SAVE_BUSINESS_MAP_DRAFT_SCHEMA,
+        SAVE_HYPOTHESIS_MAP_STAGE_SCHEMA,
         SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA,
         SAVE_VISIT_RECORD_DRAFT_SCHEMA,
     )
 
     for schema in (
         SAVE_BUSINESS_MAP_DRAFT_SCHEMA,
+        SAVE_HYPOTHESIS_MAP_STAGE_SCHEMA,
+        FINALIZE_HYPOTHESIS_MAP_DRAFT_SCHEMA,
         SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA,
         SAVE_VISIT_RECORD_DRAFT_SCHEMA,
     ):
@@ -144,6 +148,122 @@ async def test_handle_save_business_map_draft_stores_and_publishes(logged_in_cli
 
 
 @pytest.mark.asyncio
+async def test_hypothesis_stage_save_accumulates_without_pending_event(logged_in_client):
+    from app.integrations.claude.tools import handle_save_hypothesis_map_stage
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    pre_result = await handle_save_hypothesis_map_stage(
+        ctx,
+        {
+            "stage": "pre_analysis",
+            "pre_analysis": {
+                "industry_value_chain": "产业链",
+                "customer_position": "行业地位",
+                "industry_trends": "趋势",
+                "strategic_positioning": "战略定位",
+                "digitalization_drivers": "数字化驱动力",
+            },
+        },
+    )
+    l1_result = await handle_save_hypothesis_map_stage(
+        ctx,
+        {
+            "stage": "L1",
+            "objects": [{"temp_id": "L1-1", "level": "L1", "name": "公司级价值链"}],
+        },
+    )
+
+    assert pre_result["is_error"] is False
+    assert l1_result["is_error"] is False
+    assert events == []
+    draft = (
+        await logged_in_client.get(f"/api/projects/{pid}/business-map/drafts")
+    ).json()
+    assert draft["draft_data"]["ready_for_adoption"] is False
+    assert draft["draft_data"]["pre_analysis"]["industry_value_chain"] == "产业链"
+    assert draft["draft_data"]["objects"][0]["map_type"] == "hypothesis"
+    assert draft["draft_data"]["objects"][0]["verification_status"] == "未验证"
+
+
+@pytest.mark.asyncio
+async def test_finalize_hypothesis_map_draft_publishes_accumulated_draft(logged_in_client):
+    from app.integrations.claude.tools import (
+        handle_finalize_hypothesis_map_draft,
+        handle_save_hypothesis_map_stage,
+    )
+
+    pid = await _project(logged_in_client)
+    events: list[dict] = []
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=events)
+
+    await handle_save_hypothesis_map_stage(
+        ctx,
+        {
+            "stage": "pre_analysis",
+            "pre_analysis": {
+                "industry_value_chain": "产业链",
+                "customer_position": "行业地位",
+                "industry_trends": "趋势",
+                "strategic_positioning": "战略定位",
+                "digitalization_drivers": "数字化驱动力",
+            },
+        },
+    )
+    for stage, objects in [
+        ("L1", [{"temp_id": "L1-1", "level": "L1", "name": "L1"}]),
+        ("L2", [{"temp_id": "L2-1", "parent_temp_id": "L1-1", "level": "L2", "name": "L2"}]),
+        ("L3", [{"temp_id": "L3-1", "parent_temp_id": "L2-1", "level": "L3", "name": "L3"}]),
+        ("L4", [{"temp_id": "L4-1", "parent_temp_id": "L3-1", "level": "L4", "name": "L4"}]),
+    ]:
+        result = await handle_save_hypothesis_map_stage(
+            ctx, {"stage": stage, "objects": objects}
+        )
+        assert result["is_error"] is False
+
+    result = await handle_finalize_hypothesis_map_draft(ctx, {})
+
+    assert result["is_error"] is False
+    assert len(events) == 1
+    evt = events[0]
+    assert evt["type"] == "draft_pending"
+    assert evt["preview"]["object_count"] == 4
+    draft = (
+        await logged_in_client.get(f"/api/projects/{pid}/business-map/drafts")
+    ).json()
+    assert draft["draft_data"]["ready_for_adoption"] is True
+    assert [o["name"] for o in draft["draft_data"]["objects"]] == ["L1", "L2", "L3", "L4"]
+
+
+@pytest.mark.asyncio
+async def test_unfinished_hypothesis_stage_draft_cannot_be_adopted(logged_in_client):
+    from app.integrations.claude.tools import handle_save_hypothesis_map_stage
+
+    pid = await _project(logged_in_client)
+    ctx = await _make_ctx(logged_in_client, pid, publish_events=[])
+
+    await handle_save_hypothesis_map_stage(
+        ctx,
+        {
+            "stage": "L1",
+            "objects": [{"temp_id": "L1-1", "level": "L1", "name": "公司级价值链"}],
+        },
+    )
+    draft = (
+        await logged_in_client.get(f"/api/projects/{pid}/business-map/drafts")
+    ).json()
+
+    res = await logged_in_client.post(
+        f"/api/projects/{pid}/business-map/drafts/{draft['id']}/adopt"
+    )
+
+    assert res.status_code == 400
+    assert "分阶段生成中" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_handle_save_stakeholder_card_draft_creates_draft_card(logged_in_client):
     from app.integrations.claude.tools import handle_save_stakeholder_card_draft
 
@@ -227,12 +347,12 @@ async def test_handle_invalid_input_returns_error_no_side_effects(logged_in_clie
     assert events == []
 
 
-# ─── M3.1.1：build_draft_tool_server 注册三工具 ────────────────
+# ─── M3.1.1：build_draft_tool_server 注册当前可见草稿工具 ───────
 
 
 @pytest.mark.asyncio
-async def test_build_draft_tool_server_registers_three_tools():
-    """build_draft_tool_server 返回 SDK MCP 配置，且 list_tools 暴露三个草稿工具。"""
+async def test_build_draft_tool_server_registers_draft_tools():
+    """build_draft_tool_server 返回 SDK MCP 配置，且 list_tools 只暴露当前允许 agent 使用的草稿工具。"""
     from mcp.types import ListToolsRequest
 
     from app.integrations.claude.tools import (
@@ -257,7 +377,8 @@ async def test_build_draft_tool_server_registers_three_tools():
     )
     names = {t.name for t in resp.root.tools}
     assert names == {
-        "save_business_map_draft",
+        "save_hypothesis_map_stage",
+        "finalize_hypothesis_map_draft",
         "save_stakeholder_card_draft",
         "save_visit_record_draft",
     }
@@ -270,9 +391,11 @@ def test_draft_tool_allowed_names_are_mcp_prefixed():
     )
 
     names = draft_tool_allowed_names()
-    assert len(names) == 3
+    assert len(names) == 4
     assert all(n.startswith(f"mcp__{DRAFT_SERVER_NAME}__") for n in names)
-    assert "mcp__consultant_drafts__save_business_map_draft" in names
+    assert "mcp__consultant_drafts__save_business_map_draft" not in names
+    assert "mcp__consultant_drafts__save_hypothesis_map_stage" in names
+    assert "mcp__consultant_drafts__finalize_hypothesis_map_draft" in names
 
 
 # ─── M2.4 衔接：reviews.adopt 对 stakeholder/visit 草稿的采纳分支 ─

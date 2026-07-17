@@ -1427,12 +1427,14 @@ export async function streamChat(
   onEvent: (evt: ChatEvent) => void,
   signal?: AbortSignal,
   modelSelection?: ChatModelSelection,
+  workflowType?: string | null,
 ): Promise<void> {
-  const body: { prompt: string; model?: string; thinking_level?: string } = { prompt };
+  const body: { prompt: string; model?: string; thinking_level?: string; workflow_type?: string } = { prompt };
   if (modelSelection?.model) body.model = modelSelection.model;
   if (modelSelection?.thinking_level) {
     body.thinking_level = modelSelection.thinking_level;
   }
+  if (workflowType) body.workflow_type = workflowType;
   const res = await fetch(`/api/sessions/${sessionId}/chat`, {
     method: "POST",
     credentials: "same-origin",
@@ -1442,7 +1444,19 @@ export async function streamChat(
   });
   handleUnauthorizedResponse(res);
   if (!res.ok || !res.body) {
-    onEvent({ type: "error", message: `HTTP ${res.status}` });
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = await res.clone().json();
+      if (data?.detail) message = String(data.detail);
+    } catch {
+      try {
+        const text = await res.text();
+        if (text.trim()) message = text.trim();
+      } catch {
+        // keep HTTP status fallback
+      }
+    }
+    onEvent({ type: "error", message });
     return;
   }
   const reader = res.body.getReader();

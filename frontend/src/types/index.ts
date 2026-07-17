@@ -102,6 +102,9 @@ export interface Session {
   /** 项目级会话绑定的项目（M3.4.2）；普通会话为 null */
   project_id: number | null;
   project_name: string | null;
+  workflow_type: string | null;
+  workflow_status: string | null;
+  workflow_stage: string | null;
   is_shared: boolean;
   workspace_member_role: TeamMemberRole | null;
   workspace_can_write: boolean;
@@ -739,6 +742,7 @@ export interface BusinessMapPayload {
   sourceRef?: string[];
   evidenceIds?: string[];
   generatedByAI?: boolean;
+  _healthSource?: "ai_hypothesis" | "manual" | string;
   // L1（5 要素 + 五维健康）
   coreActivities?: string;
   capabilityChain?: string;
@@ -895,7 +899,7 @@ export interface VersionDiff {
 export interface FiveDimHealthOut {
   object_id: number;
   five_dim_health: FiveDimHealth;
-  source: "auto" | "manual" | string;
+  source: "ai_hypothesis" | "manual" | string;
 }
 
 // ─── 营销地图（M4.2 / §5.2）──────────────────────────────────
@@ -1261,6 +1265,7 @@ export interface VisitRecord {
 export interface BusinessMapDraft {
   id: number;
   project_id: number;
+  draft_data?: Record<string, unknown> | null;
   revision: number;
   status: string;
   source_session_id: string | null;

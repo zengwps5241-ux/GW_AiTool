@@ -237,14 +237,11 @@ async def compute_object_health(
     project_and_user: tuple[Project, User] = Depends(require_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> FiveDimHealthOut:
-    """对单个节点重新计算五维健康（规则版）。L4 等无五维健康的节点返回 400。"""
-    out = await bm_service.compute_node_health(db, project_id, object_id)
-    if out is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="该节点不存在或不支持五维健康计算",
-        )
-    return out
+    """规则版五维健康计算已停用：当前只保留 agent 生成分数与人工调整。"""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="后端规则计算五维健康已停用；请通过 agent 生成或人工调整五维分数",
+    )
 
 
 @router.post("/health/recompute", response_model=list[FiveDimHealthOut])
@@ -253,8 +250,11 @@ async def recompute_health(
     project_and_user: tuple[Project, User] = Depends(require_project_member),
     db: AsyncSession = Depends(get_db),
 ) -> list[FiveDimHealthOut]:
-    """批量重评估项目下所有 L1/L2/L3 节点的五维健康。"""
-    return await bm_service.recompute_project_health(db, project_id)
+    """规则版批量重评估已停用：当前只保留 agent 生成分数与人工调整。"""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="后端批量重算五维健康已停用；请通过 agent 生成或人工调整五维分数",
+    )
 
 
 @router.put("/objects/{object_id}/health", response_model=FiveDimHealthOut)

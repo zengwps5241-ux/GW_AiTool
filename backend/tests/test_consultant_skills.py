@@ -4,7 +4,7 @@
 - 7 个技能目录与 SKILL.md 齐备
 - frontmatter（name/description）可被 scan_skills 解析
 - 名称与项目 Agent 绑定的 DEFAULT_PROJECT_SKILLS 一致（M1.3.7）
-- 产出结构化草稿的 4 个 Skill 指示调用正确的 save_xxx_draft 工具
+- 产出结构化草稿的 Skill 指示调用正确的草稿工具
 - seed_default_skills 能把模板播种到运行时 master 目录
 
 不依赖真实 Claude 会话；master 模板版本化存放于 app/skills_seed（claude_data/ 被 gitignore）。
@@ -18,12 +18,12 @@ import pytest
 # 版本化 master 模板目录：backend/tests → backend/app/skills_seed
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "app" / "skills_seed"
 
-# 7 个 Skill：名称 → (WF 编码, 产出草稿的工具裸名或 None)
+# 7 个 Skill：名称 → (WF 编码, 产出草稿的关键工具裸名或 None)
 EXPECTED_SKILLS = {
     "consultant-upload": ("WF02", None),
     "consultant-gap-check": ("WF03", None),
     "consultant-visit-plan": ("WF06", None),
-    "consultant-hypothesis-map": ("WF07", "save_business_map_draft"),
+    "consultant-hypothesis-map": ("WF07", "save_hypothesis_map_stage"),
     "consultant-interview": ("WF09", "save_visit_record_draft"),
     "consultant-verify": ("WF10", "save_business_map_draft"),
     "consultant-stakeholder": ("WF12", "save_stakeholder_card_draft"),
@@ -75,7 +75,7 @@ def test_each_skill_frontmatter_and_wf_code(skill_name, wf_code, draft_tool):
     [(name, tool) for name, (wf, tool) in EXPECTED_SKILLS.items() if tool is not None],
 )
 def test_draft_skills_reference_correct_tool(skill_name, draft_tool):
-    """产出结构化草稿的 4 个 Skill 必须指示调用对应的 save_xxx_draft 工具。"""
+    """产出结构化草稿的 Skill 必须指示调用对应草稿工具。"""
     text = (SKILLS_DIR / skill_name / "SKILL.md").read_text(encoding="utf-8")
     # 草稿工具在 Claude 侧的调用名为 mcp__consultant_drafts__<tool>（裸名也应出现）
     assert draft_tool in text, (

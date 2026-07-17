@@ -23,6 +23,9 @@ class SessionOut(BaseModel):
     # M3.4.2：项目级会话绑定（绑定后自动加载项目 Agent + 草稿工具）
     project_id: int | None = None
     project_name: str | None = None
+    workflow_type: str | None = None
+    workflow_status: str | None = None
+    workflow_stage: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -45,6 +48,13 @@ class ChatRequest(BaseModel):
     prompt: str = Field(min_length=1)
     model: str | None = Field(default=None, min_length=1)
     thinking_level: Literal["disabled", "low", "medium", "high"] = "low"
+    workflow_type: Literal[
+        "hypothesis_map",
+        "interview_summary",
+        "stakeholder_card",
+        "visit_plan",
+        "current_map_verify",
+    ] | None = None
 
 
 # 对话「标记为有价值」→ 个人空间知识片段（规格 §2.6 line157 / Phase 4 line1334）
