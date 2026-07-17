@@ -254,6 +254,9 @@ function ensureHistoricalToolResults(events: ChatEvent[]): ChatEvent[] {
 // 按事件序列折叠成 Turn[]
 function foldEvents(events: ChatEvent[]): Turn[] {
   const out: Turn[] = [];
+  // 同一草稿（entity_type:draft_id）可能同时来自「进入会话时 DB 找回」与「实时 SSE 直播」，
+  // 按 key 去重并以最新内容覆盖，避免渲染出重复的采纳卡片。
+  const draftByKey = new Map<string, DraftPart>();
   // 保证 turns[turns.length-1] 是 assistant turn
   const ensureAssistant = (): Turn => {
     const last = out[out.length - 1];
@@ -308,10 +311,10 @@ function foldEvents(events: ChatEvent[]): Turn[] {
     } else if (evt.type === "draft_pending") {
       // AI 调用 save_xxx_draft 落库后推送的「待采纳」卡片（M3.1.3/M3.1.4）
       // M3.4.3：增量更新携带 is_update/revision/previous 供前端 diff（§7.2）
-      const t = ensureAssistant();
-      t.parts.push({
+      const key = `${evt.entity_type}:${evt.draft_id}`;
+      const part: DraftPart = {
         kind: "draft",
-        id: `${evt.entity_type}:${evt.draft_id}`,
+        id: key,
         entityType: evt.entity_type,
         entityLabel: evt.entity_label,
         draftId: evt.draft_id,
@@ -320,7 +323,16 @@ function foldEvents(events: ChatEvent[]): Turn[] {
         isUpdate: evt.is_update,
         revision: evt.revision,
         previous: evt.previous,
-      });
+      };
+      const existing = draftByKey.get(key);
+      if (existing) {
+        // 同一草稿重复出现（DB 找回 + SSE 直播）：以最新内容覆盖，不新增卡片。
+        Object.assign(existing, part);
+      } else {
+        const t = ensureAssistant();
+        t.parts.push(part);
+        draftByKey.set(key, part);
+      }
     } else if (evt.type === "error") {
       const t = ensureAssistant();
       t.parts.push({ kind: "error", text: evt.message });
@@ -1285,7 +1297,17 @@ export default function ChatWorkspace({
       try {
         const msgs = await api.sessionMessages(id);
         if (currentIdRef.current !== id) return;
-        setEvents(ensureHistoricalToolResults(msgs));
+        // 找回本会话尚未采纳的草稿：draft_pending 事件不持久化到 SDK 历史，
+        // 切页返回后会话区里的「待采纳」卡片会丢失，这里按 source_session_id
+        // 从库中重建并追加到事件流末尾（foldEvents 会按 draft_id 去重，无需担心与实时流重复）。
+        let pendingDrafts: ChatEvent[] = [];
+        try {
+          pendingDrafts = await api.sessionPendingDrafts(id);
+        } catch {
+          // 草稿找回失败不阻断历史消息展示
+        }
+        if (currentIdRef.current !== id) return;
+        setEvents([...ensureHistoricalToolResults(msgs), ...pendingDrafts]);
         restoreRunningSession(id);
       } catch {
         if (currentIdRef.current !== id) return;

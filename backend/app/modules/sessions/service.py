@@ -39,6 +39,106 @@ async def get_accessible_session(db: AsyncSession, session_id: str, user: User) 
     return cs if cs.user_id == user.id or cs.is_shared else None
 
 
+async def list_pending_draft_events(db: AsyncSession, session_id: str) -> list[dict]:
+    """返回某会话尚未采纳的草稿，重建为 SSE draft_pending 事件。
+
+    解决「切页返回后采纳卡片消失」：draft_pending 事件只存在于运行态内存(run_state)与
+    前端组件 state，切换页面/刷新即丢失；但草稿数据本身落库并带 ``source_session_id``，
+    故可按会话找回并重建为采纳卡片。仅返回角色卡/拜访 ``review_status='draft'`` 与
+    业务地图草稿 ``status='active'``（已采纳/过期的不返回）。
+    """
+    # 懒导入避免与工具模块潜在的循环依赖；_snapshot_card/_snapshot_visit 复用草稿工具
+    # 的字段快照逻辑，保证重建卡片与实时生成卡片字段一致。
+    from app.integrations.claude.tools import _snapshot_card, _snapshot_visit
+    from app.models import BusinessMapDraft, StakeholderCard, VisitRecord
+
+    events: list[dict] = []
+
+    # 角色卡草稿
+    cards = (
+        await db.execute(
+            select(StakeholderCard).where(
+                StakeholderCard.source_session_id == session_id,
+                StakeholderCard.review_status == "draft",
+            )
+        )
+    ).scalars().all()
+    for card in cards:
+        events.append(
+            {
+                "type": "draft_pending",
+                "entity_type": "stakeholder_card_draft",
+                "entity_label": "角色卡草稿",
+                "draft_id": card.id,
+                "project_id": card.project_id,
+                "preview": _snapshot_card(card),
+                "is_update": False,
+            }
+        )
+
+    # 拜访记录草稿
+    visits = (
+        await db.execute(
+            select(VisitRecord).where(
+                VisitRecord.source_session_id == session_id,
+                VisitRecord.review_status == "draft",
+            )
+        )
+    ).scalars().all()
+    for visit in visits:
+        events.append(
+            {
+                "type": "draft_pending",
+                "entity_type": "visit_record_draft",
+                "entity_label": "拜访记录草稿",
+                "draft_id": visit.id,
+                "project_id": visit.project_id,
+                "preview": _snapshot_visit(visit),
+                "is_update": False,
+            }
+        )
+
+    # 业务地图草稿（整图草稿单元；status=active 即待采纳）
+    bm_drafts = (
+        await db.execute(
+            select(BusinessMapDraft).where(
+                BusinessMapDraft.source_session_id == session_id,
+                BusinessMapDraft.status == "active",
+            )
+        )
+    ).scalars().all()
+    for draft in bm_drafts:
+        data = draft.draft_data if isinstance(draft.draft_data, dict) else {}
+        raw_objects = data.get("objects")
+        objects = raw_objects if isinstance(raw_objects, list) else []
+        events.append(
+            {
+                "type": "draft_pending",
+                "entity_type": "business_map_draft",
+                "entity_label": "业务地图草稿",
+                "draft_id": draft.id,
+                "project_id": draft.project_id,
+                "preview": {
+                    "object_count": len(objects),
+                    "objects": [
+                        {
+                            "level": o.get("level"),
+                            "name": o.get("name"),
+                            "map_type": o.get("map_type"),
+                            "payload": o.get("payload"),
+                        }
+                        for o in objects
+                        if isinstance(o, dict)
+                    ],
+                },
+                "is_update": False,
+                "revision": draft.revision,
+            }
+        )
+
+    return events
+
+
 async def list_sessions(
     db: AsyncSession,
     user: User,

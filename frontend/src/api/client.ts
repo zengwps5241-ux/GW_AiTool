@@ -407,6 +407,9 @@ export const api = {
     }),
   sessionMessages: (id: string) =>
     request<ChatEvent[]>(`/api/sessions/${id}/messages`),
+  /** 找回本会话尚未采纳的草稿（重建为 draft_pending 事件，切页返回后重建采纳卡片）*/
+  sessionPendingDrafts: (id: string) =>
+    request<ChatEvent[]>(`/api/sessions/${encodeURIComponent(id)}/pending-drafts`),
   /** 对话「标记为有价值」→ 落盘个人空间知识片段（§2.6 line157）*/
   markValuable: (sessionId: string, body: KnowledgeFragmentInput) =>
     request<KnowledgeFragment>(

@@ -13,6 +13,7 @@ from app.modules.sessions.service import (
     create_session as create_session_svc,
     delete_session as delete_session_svc,
     get_accessible_session as get_accessible_session_svc,
+    list_pending_draft_events as list_pending_draft_events_svc,
     list_sessions as list_sessions_svc,
     rename_session as rename_session_svc,
     save_knowledge_fragment as save_knowledge_fragment_svc,
@@ -216,6 +217,23 @@ async def list_messages(
         scope.root,
         agent=agent,
     )
+
+
+@router.get("/{session_id}/pending-drafts")
+async def list_pending_drafts(
+    session_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """返回本会话尚未采纳的草稿（重建为 draft_pending 事件）。
+
+    draft_pending 事件不持久化到 SDK 历史，切页/刷新后聊天区的「待采纳」卡片会丢失。
+    前端进入会话时调用本接口，按 source_session_id 从库中找回该会话的 pending 草稿并重建卡片。
+    """
+    cs = await get_accessible_session_svc(db, session_id, user)
+    if cs is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    return await list_pending_draft_events_svc(db, session_id)
 
 
 @router.get("/{session_id}/running")
