@@ -39,6 +39,18 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 SAVE_BUSINESS_MAP_DRAFT_SCHEMA: dict = {
     "type": "object",
     "properties": {
+        "pre_analysis": {
+            "type": "object",
+            "description": "可选。假设地图草稿的项目前置分析；采纳业务地图草稿时会同步写入 pre_analyses。",
+            "properties": {
+                "industry_value_chain": {"type": "string"},
+                "customer_position": {"type": "string"},
+                "industry_trends": {"type": "string"},
+                "strategic_positioning": {"type": "string"},
+                "digitalization_drivers": {"type": "string"},
+            },
+            "additionalProperties": True,
+        },
         "objects": {
             "type": "array",
             "minItems": 1,
@@ -47,6 +59,14 @@ SAVE_BUSINESS_MAP_DRAFT_SCHEMA: dict = {
                 "properties": {
                     "level": {"type": "string", "enum": ["L1", "L2", "L3", "L4"]},
                     "name": {"type": "string", "minLength": 1},
+                    "temp_id": {
+                        "type": "string",
+                        "description": "候选阶段临时节点 ID，如 L2-1。采纳时由后端映射为真实数据库 id。",
+                    },
+                    "parent_temp_id": {
+                        "type": "string",
+                        "description": "候选阶段父节点临时 ID，如 L1-1/L2-1/L3-1。采纳时由后端转换为 parent_id。",
+                    },
                     "map_type": {"type": "string", "enum": ["hypothesis", "current"]},
                     "parent_id": {"type": "integer"},
                     "verification_status": {"type": "string"},
@@ -61,6 +81,27 @@ SAVE_BUSINESS_MAP_DRAFT_SCHEMA: dict = {
     },
     "required": ["objects"],
     "additionalProperties": True,
+}
+
+SAVE_HYPOTHESIS_MAP_STAGE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "stage": {
+            "type": "string",
+            "enum": ["pre_analysis", "L1", "L2", "L3", "L4"],
+            "description": "当前已获用户确认并需要固化的假设地图阶段。",
+        },
+        "pre_analysis": SAVE_BUSINESS_MAP_DRAFT_SCHEMA["properties"]["pre_analysis"],
+        "objects": SAVE_BUSINESS_MAP_DRAFT_SCHEMA["properties"]["objects"],
+    },
+    "required": ["stage"],
+    "additionalProperties": True,
+}
+
+FINALIZE_HYPOTHESIS_MAP_DRAFT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": False,
 }
 
 SAVE_STAKEHOLDER_CARD_DRAFT_SCHEMA: dict = {
@@ -211,6 +252,134 @@ def _snapshot_visit(visit) -> dict[str, Any]:
     return snap
 
 
+def _normalise_hypothesis_object(obj: dict[str, Any]) -> dict[str, Any]:
+    """阶段保存时补齐假设地图节点默认字段，避免每个 Skill 都重复写样板。"""
+    out = dict(obj)
+    out.setdefault("map_type", "hypothesis")
+    out.setdefault("verification_status", "未验证")
+    out.setdefault("generated_by_ai", True)
+    return out
+
+
+def _merge_hypothesis_stage_data(
+    current: dict[str, Any] | None, args: dict[str, Any]
+) -> dict[str, Any]:
+    """把已确认阶段合并到业务地图草稿 JSON。
+
+    这里把 BusinessMapDraft.draft_data 当作假设地图工作流的轻量中间状态。
+    每个阶段只替换同阶段内容，最终入库直接读取累计 JSON，避免最后让模型
+    从长对话上下文重建整张地图。
+    """
+    stage = str(args.get("stage"))
+    current_is_ready = isinstance(current, dict) and current.get("ready_for_adoption") is not False
+    # 从 Step 1 开始的新工作流不应混入上一个已经完成但尚未处理的业务地图草稿。
+    data: dict[str, Any] = {} if stage == "pre_analysis" and current_is_ready else (
+        dict(current) if isinstance(current, dict) else {}
+    )
+    data.setdefault("candidate_type", "hypothesis_map")
+    data.setdefault("map_type", "hypothesis")
+    data["workflow_status"] = "building"
+    data["ready_for_adoption"] = False
+    stages = data.get("confirmed_stages")
+    confirmed = [str(s) for s in stages] if isinstance(stages, list) else []
+
+    if stage == "pre_analysis":
+        pre_analysis = args.get("pre_analysis")
+        if not isinstance(pre_analysis, dict):
+            raise ValueError("pre_analysis 阶段必须提供 pre_analysis 对象")
+        data["pre_analysis"] = pre_analysis
+    else:
+        incoming = args.get("objects")
+        if not isinstance(incoming, list) or not incoming:
+            raise ValueError(f"{stage} 阶段必须提供 objects 数组")
+        objects = data.get("objects")
+        existing = [o for o in objects if isinstance(o, dict)] if isinstance(objects, list) else []
+        normalised = [
+            _normalise_hypothesis_object(o)
+            for o in incoming
+            if isinstance(o, dict) and o.get("level") == stage and o.get("name")
+        ]
+        if not normalised:
+            raise ValueError(f"{stage} 阶段没有可保存的有效节点")
+        data["objects"] = [o for o in existing if o.get("level") != stage] + normalised
+
+    if stage not in confirmed:
+        confirmed.append(stage)
+    data["confirmed_stages"] = confirmed
+    return data
+
+
+_PRE_ANALYSIS_FIELDS = (
+    "industry_value_chain",
+    "customer_position",
+    "industry_trends",
+    "strategic_positioning",
+    "digitalization_drivers",
+)
+
+
+def _validate_hypothesis_map_ready(data: dict[str, Any] | None) -> str | None:
+    """最终提交前校验累计 JSON 是否达到可采纳的最低结构要求。"""
+    if not isinstance(data, dict):
+        return "尚未保存任何假设地图阶段内容"
+    if data.get("candidate_type") != "hypothesis_map":
+        return "当前 active 草稿不是假设地图分阶段草稿"
+    pre = data.get("pre_analysis")
+    if not isinstance(pre, dict):
+        return "缺少前置分析阶段"
+    missing_pre = [k for k in _PRE_ANALYSIS_FIELDS if not pre.get(k)]
+    if missing_pre:
+        return "前置分析字段缺失：" + "、".join(missing_pre)
+    objects = data.get("objects")
+    specs = [o for o in objects if isinstance(o, dict)] if isinstance(objects, list) else []
+    if not specs:
+        return "缺少 L1-L4 节点"
+    by_level: dict[str, list[dict[str, Any]]] = {lv: [] for lv in ("L1", "L2", "L3", "L4")}
+    temp_ids: set[str] = set()
+    for idx, spec in enumerate(specs):
+        level = spec.get("level")
+        if level in by_level:
+            by_level[level].append(spec)
+        temp_id = spec.get("temp_id") or spec.get("tempId") or f"__auto_{idx}"
+        if temp_id in temp_ids:
+            return f"节点临时 ID 重复：{temp_id}"
+        temp_ids.add(str(temp_id))
+    missing_levels = [lv for lv, nodes in by_level.items() if not nodes]
+    if missing_levels:
+        return "缺少层级节点：" + "、".join(missing_levels)
+    for spec in specs:
+        level = spec.get("level")
+        if level in ("L2", "L3", "L4"):
+            parent = spec.get("parent_temp_id") or spec.get("parentTempId")
+            if not parent:
+                return f"{level} 节点「{spec.get('name', '未命名')}」缺少 parent_temp_id"
+            if str(parent) not in temp_ids:
+                return f"{level} 节点「{spec.get('name', '未命名')}」的 parent_temp_id={parent} 找不到父节点"
+    return None
+
+
+def _business_map_preview(args: dict[str, Any]) -> dict[str, Any]:
+    objects = args.get("objects", []) if isinstance(args, dict) else []
+    pre_analysis = args.get("pre_analysis") if isinstance(args, dict) else None
+    return {
+        "object_count": len(objects) if isinstance(objects, list) else 0,
+        "pre_analysis": pre_analysis if isinstance(pre_analysis, dict) else None,
+        "objects": [
+            {
+                "temp_id": o.get("temp_id"),
+                "parent_temp_id": o.get("parent_temp_id"),
+                "level": o.get("level"),
+                "name": o.get("name"),
+                "map_type": o.get("map_type"),
+                "parent_id": o.get("parent_id"),
+                "payload": o.get("payload"),
+            }
+            for o in (objects if isinstance(objects, list) else [])
+            if isinstance(o, dict)
+        ],
+    }
+
+
 # ─── M3.1.3：草稿工具 handler（校验→落库→推送→回写 Claude） ─────
 
 
@@ -228,6 +397,10 @@ async def handle_save_business_map_draft(
     from app.schemas.business_map import BusinessMapDraftUpdate
 
     objects = args.get("objects", []) if isinstance(args, dict) else []
+    pre_analysis = args.get("pre_analysis") if isinstance(args, dict) else None
+    draft_data = dict(args)
+    draft_data["ready_for_adoption"] = True
+    draft_data.setdefault("workflow_status", "ready")
     async with async_session() as db:
         user = await db.get(User, ctx.user_id)
         if user is None:
@@ -236,7 +409,7 @@ async def handle_save_business_map_draft(
             db,
             ctx.project_id,
             BusinessMapDraftUpdate(
-                draft_data=args,
+                draft_data=draft_data,
                 source_session_id=ctx.source_session_id,
             ),
             user,
@@ -250,30 +423,115 @@ async def handle_save_business_map_draft(
             "业务地图草稿",
             draft.id,
             ctx.project_id,
-            preview={
-                "object_count": len(objects),
-                # 节点摘要（level/name/map_type/payload），供采纳卡片分组展示 + 节点展开 payload 关键字段
-                "objects": [
-                    {
-                        "level": o.get("level"),
-                        "name": o.get("name"),
-                        "map_type": o.get("map_type"),
-                        "payload": o.get("payload"),
-                    }
-                    for o in objects
-                    if isinstance(o, dict)
-                ],
-            },
+            preview=_business_map_preview(draft_data),
             previous=draft.previous_data if is_update else None,
             revision=draft.revision,
             is_update=is_update,
         )
     )
     verb = "已更新业务地图草稿" if is_update else "已保存业务地图草稿"
+    pre_analysis_hint = "，包含前置分析" if isinstance(pre_analysis, dict) else ""
     return _ok_result(
-        f"{verb}（第 {draft.revision} 版，{len(objects)} 个节点，草稿ID #{draft.id}）。"
+        f"{verb}（第 {draft.revision} 版，{len(objects)} 个节点{pre_analysis_hint}，草稿ID #{draft.id}）。"
         "草稿已进入「待采纳」区，等待用户采纳后才写入正式地图。"
         "若用户要求调整，请基于用户指令重新调用本工具覆盖更新草稿（上一版已自动存档供对比）。"
+    )
+
+
+async def handle_save_hypothesis_map_stage(ctx: DraftToolContext, args: dict) -> dict:
+    """保存假设地图已确认阶段 → 累计到 BusinessMapDraft.draft_data，不推送待采纳卡片。"""
+    err = validate_tool_input(SAVE_HYPOTHESIS_MAP_STAGE_SCHEMA, args)
+    if err:
+        return _error_result(f"save_hypothesis_map_stage 入参校验失败：{err}")
+
+    from app.db.session import async_session
+    from app.models import User
+    from app.modules.business_map import service as business_map_service
+    from app.schemas.business_map import BusinessMapDraftUpdate
+
+    stage = str(args.get("stage"))
+    async with async_session() as db:
+        user = await db.get(User, ctx.user_id)
+        if user is None:
+            return _error_result("当前用户不存在，无法保存阶段内容")
+        current = await business_map_service.get_active_draft(db, ctx.project_id)
+        try:
+            merged = _merge_hypothesis_stage_data(
+                current.draft_data if current is not None else None,
+                args,
+            )
+        except ValueError as exc:
+            return _error_result(str(exc))
+        draft = await business_map_service.upsert_draft(
+            db,
+            ctx.project_id,
+            BusinessMapDraftUpdate(
+                draft_data=merged,
+                source_session_id=ctx.source_session_id,
+            ),
+            user,
+        )
+
+    objects = merged.get("objects") if isinstance(merged.get("objects"), list) else []
+    return _ok_result(
+        f"已固化假设地图 {stage} 阶段到中间草稿（第 {draft.revision} 版，累计 {len(objects)} 个节点）。"
+        "该中间草稿尚未进入待采纳区；请继续下一阶段。"
+    )
+
+
+async def handle_finalize_hypothesis_map_draft(
+    ctx: DraftToolContext, args: dict
+) -> dict:
+    """把已累计的假设地图中间草稿标记为可采纳，并推送最终待采纳卡片。"""
+    err = validate_tool_input(FINALIZE_HYPOTHESIS_MAP_DRAFT_SCHEMA, args)
+    if err:
+        return _error_result(f"finalize_hypothesis_map_draft 入参校验失败：{err}")
+
+    from app.db.session import async_session
+    from app.models import User
+    from app.modules.business_map import service as business_map_service
+    from app.schemas.business_map import BusinessMapDraftUpdate
+
+    async with async_session() as db:
+        user = await db.get(User, ctx.user_id)
+        if user is None:
+            return _error_result("当前用户不存在，无法提交最终草稿")
+        current = await business_map_service.get_active_draft(db, ctx.project_id)
+        if current is None:
+            return _error_result("尚未保存任何假设地图阶段内容，无法提交最终草稿")
+        draft_data = dict(current.draft_data) if isinstance(current.draft_data, dict) else {}
+        validation_error = _validate_hypothesis_map_ready(draft_data)
+        if validation_error:
+            return _error_result(f"假设地图最终草稿校验失败：{validation_error}")
+        draft_data["ready_for_adoption"] = True
+        draft_data["workflow_status"] = "ready"
+        draft = await business_map_service.upsert_draft(
+            db,
+            ctx.project_id,
+            BusinessMapDraftUpdate(
+                draft_data=draft_data,
+                source_session_id=ctx.source_session_id,
+            ),
+            user,
+        )
+
+    is_update = (draft.revision or 1) > 1
+    await ctx.publish(
+        _draft_pending_event(
+            "business_map_draft",
+            "业务地图草稿",
+            draft.id,
+            ctx.project_id,
+            preview=_business_map_preview(draft_data),
+            previous=draft.previous_data if is_update else None,
+            revision=draft.revision,
+            is_update=is_update,
+        )
+    )
+    objects = draft_data.get("objects") if isinstance(draft_data.get("objects"), list) else []
+    return _ok_result(
+        f"已提交假设地图最终草稿（第 {draft.revision} 版，{len(objects)} 个节点）。"
+        "草稿已进入「待采纳」区，用户采纳后才写入正式业务地图。"
     )
 
 
@@ -457,7 +715,8 @@ DRAFT_SERVER_NAME = "consultant_drafts"
 
 # 三个草稿工具的裸名（注册顺序固定，便于日志/调试）
 DRAFT_TOOL_NAMES = (
-    "save_business_map_draft",
+    "save_hypothesis_map_stage",
+    "finalize_hypothesis_map_draft",
     "save_stakeholder_card_draft",
     "save_visit_record_draft",
 )
@@ -471,13 +730,22 @@ def build_draft_tool_server(ctx: DraftToolContext) -> dict:
     工具名经 ``draft_tool_allowed_names()`` 加入 ``allowed_tools``。
     """
     @tool(
-        "save_business_map_draft",
-        "保存业务地图草稿（结构化节点列表）。AI 完成假设/现状地图结构化输出后调用，"
-        "草稿进入「待采纳」区，用户采纳后才写入正式业务地图。",
-        SAVE_BUSINESS_MAP_DRAFT_SCHEMA,
+        "save_hypothesis_map_stage",
+        "保存假设地图已确认阶段到后端中间草稿。每个阶段用户确认后调用一次；"
+        "本工具不会触发待采纳卡片，最终完成后再调用 finalize_hypothesis_map_draft。",
+        SAVE_HYPOTHESIS_MAP_STAGE_SCHEMA,
     )
-    async def _save_business_map_draft(args):  # noqa: ANN202
-        return await handle_save_business_map_draft(ctx, args)
+    async def _save_hypothesis_map_stage(args):  # noqa: ANN202
+        return await handle_save_hypothesis_map_stage(ctx, args)
+
+    @tool(
+        "finalize_hypothesis_map_draft",
+        "提交已累计的假设地图中间草稿，触发最终待采纳卡片。"
+        "本工具不接受完整地图内容，只读取后端已保存的阶段草稿。",
+        FINALIZE_HYPOTHESIS_MAP_DRAFT_SCHEMA,
+    )
+    async def _finalize_hypothesis_map_draft(args):  # noqa: ANN202
+        return await handle_finalize_hypothesis_map_draft(ctx, args)
 
     @tool(
         "save_stakeholder_card_draft",
@@ -498,7 +766,8 @@ def build_draft_tool_server(ctx: DraftToolContext) -> dict:
     return create_sdk_mcp_server(
         name=DRAFT_SERVER_NAME,
         tools=[
-            _save_business_map_draft,
+            _save_hypothesis_map_stage,
+            _finalize_hypothesis_map_draft,
             _save_stakeholder_card_draft,
             _save_visit_record_draft,
         ],

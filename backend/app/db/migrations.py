@@ -60,6 +60,9 @@ async def init_db() -> None:
             ("chat_sessions", "is_shared", "BOOLEAN NOT NULL DEFAULT FALSE"),
             # M3.4.2：项目级会话绑定（FK projects，删除项目→SET NULL）
             ("chat_sessions", "project_id", "INTEGER NULL REFERENCES projects(id) ON DELETE SET NULL"),
+            ("chat_sessions", "workflow_type", "VARCHAR NULL"),
+            ("chat_sessions", "workflow_status", "VARCHAR NULL"),
+            ("chat_sessions", "workflow_stage", "VARCHAR NULL"),
         ]:
             result = await conn.execute(text(
                 "SELECT COUNT(*) FROM information_schema.columns "

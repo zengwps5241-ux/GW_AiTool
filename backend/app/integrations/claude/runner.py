@@ -44,6 +44,7 @@ from app.modules.agents.workdir import get_agent_workdir, override_claude_config
 from app.modules.catalog.plugins import resolve_plugin_path  # noqa: F401 — 保留作 fallback,供其它入口复用
 
 _ZHIPU_WEB_SEARCH_MCP_NAME = "zhipu-web-search-sse"
+_ZHIPU_WEB_SEARCH_TOOL_NAMES = ("webSearchPro", "web_search")
 
 
 @dataclass(frozen=True)
@@ -144,9 +145,11 @@ def _builtin_mcp_servers() -> dict[str, dict[str, str]]:
     encoded_key = quote(api_key, safe="")
     return {
         _ZHIPU_WEB_SEARCH_MCP_NAME: {
-            "type": "sse",
+            # 使用智谱官方当前提供的 Streamable HTTP MCP 端点；
+            # 服务名保留旧后缀，避免破坏已有工具权限配置。
+            "type": "http",
             "url": (
-                "https://open.bigmodel.cn/api/mcp/web_search/sse"
+                "https://open.bigmodel.cn/api/mcp-broker/proxy/web-search/mcp"
                 f"?Authorization={encoded_key}"
             ),
         }
@@ -257,7 +260,10 @@ async def stream_chat(
     allowed_tools = ["Workflow", "Skill", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "Bash", "WebFetch"]
     if _ZHIPU_WEB_SEARCH_MCP_NAME in builtin_mcp_servers:
         # Claude MCP 工具名格式为 mcp__<server>__<tool>。
-        allowed_tools.append(f"mcp__{_ZHIPU_WEB_SEARCH_MCP_NAME}__web_search")
+        allowed_tools.extend(
+            f"mcp__{_ZHIPU_WEB_SEARCH_MCP_NAME}__{tool_name}"
+            for tool_name in _ZHIPU_WEB_SEARCH_TOOL_NAMES
+        )
     # 草稿工具（M3.1）：注入会话上下文（project/user/session）后挂载为进程内 MCP server，
     # Claude 调用 mcp__consultant_drafts__save_xxx_draft → 拦截校验 → 落库 → SSE「待采纳」。
     mcp_servers: dict[str, dict] = builtin_mcp_servers

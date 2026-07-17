@@ -30,6 +30,9 @@ class ChatSession(Base):
         ForeignKey("team_spaces.id", ondelete="CASCADE"), nullable=True
     )
     is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    workflow_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    workflow_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    workflow_stage: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
     )

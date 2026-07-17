@@ -37,6 +37,38 @@ from app.modules.workspace.scope import WorkspaceScope, team_workspace_scope
 
 logger = logging.getLogger(__name__)
 
+WORKFLOW_TO_SKILL: dict[str, str] = {
+    "hypothesis_map": "consultant-hypothesis-map",
+    "interview_summary": "consultant-interview",
+    "stakeholder_card": "consultant-stakeholder",
+    "visit_plan": "consultant-visit-plan",
+    "current_map_verify": "consultant-verify",
+}
+SKILL_TO_WORKFLOW: dict[str, str] = {skill: wf for wf, skill in WORKFLOW_TO_SKILL.items()}
+
+WORKFLOW_INITIAL_STAGE: dict[str, str] = {
+    "hypothesis_map": "A",
+    "interview_summary": "draft",
+    "stakeholder_card": "draft",
+    "visit_plan": "draft",
+    "current_map_verify": "draft",
+}
+
+PERSISTENT_WORKFLOWS: set[str] = {
+    "hypothesis_map",
+    "interview_summary",
+    "stakeholder_card",
+    "current_map_verify",
+}
+
+
+def _workflow_from_slash_prompt(prompt: str) -> str | None:
+    match = re.match(r"^\s*/([^\s]+)", prompt)
+    if not match:
+        return None
+    command = match.group(1)
+    return SKILL_TO_WORKFLOW.get(command)
+
 _active_stops: dict[str, asyncio.Event] = {}
 _session_locks: dict[str, asyncio.Lock] = {}
 
@@ -252,6 +284,7 @@ async def _build_draft_brief(db, project_id: int) -> str | None:
     draft = await bm_svc.get_active_draft(db, project_id)
     if draft is not None:
         specs = bm_svc._extract_object_specs(draft.draft_data)
+        ready_for_adoption = bm_svc.is_draft_ready_for_adoption(draft.draft_data)
         by_level: dict[str, list[str]] = {}
         for spec in specs:
             by_level.setdefault(str(spec.get("level", "?")), []).append(
@@ -265,7 +298,8 @@ async def _build_draft_brief(db, project_id: int) -> str | None:
         else:
             level_desc = "（空）"
         rev = getattr(draft, "revision", 1) or 1
-        lines.append(f"- 业务地图草稿（第 {rev} 版，{len(specs)} 个节点）：{level_desc}")
+        label = "业务地图草稿" if ready_for_adoption else "假设地图构建中草稿"
+        lines.append(f"- {label}（第 {rev} 版，{len(specs)} 个节点）：{level_desc}")
     # 角色卡：draft 态
     cards = (
         await db.execute(
@@ -298,10 +332,11 @@ async def _build_draft_brief(db, project_id: int) -> str | None:
     if not lines:
         return None
     return (
-        "【当前待采纳草稿】用户可能基于以下草稿用自然语言提出修改。"
-        "若用户要求调整，应基于原文+用户指令重新调用对应草稿工具覆盖更新"
-        "（业务地图整图草稿直接覆盖；角色卡/拜访记录需带 update_draft_id 更新对应草稿，"
-        "避免新建重复草稿），更新后主动询问是否采纳：\n" + "\n".join(lines)
+        "【当前草稿状态】用户可能基于以下草稿用自然语言提出修改。"
+        "若用户要求调整，应基于原文+用户指令重新调用对应草稿工具更新"
+        "（假设地图构建中草稿按阶段保存；已完成业务地图草稿可整图覆盖；"
+        "角色卡/拜访记录需带 update_draft_id 更新对应草稿，避免新建重复草稿），"
+        "更新后主动询问用户下一步：\n" + "\n".join(lines)
     )
 
 
@@ -312,6 +347,7 @@ async def stream_session_chat(
     agent: Agent | None = None,
     model: str | None = None,
     thinking_level: str = "low",
+    workflow_type: str | None = None,
 ) -> StreamingResponse:
     prior_session_id = cs.claude_session_id
     is_first_message = prior_session_id is None
@@ -326,6 +362,27 @@ async def stream_session_chat(
     # M3.4.2：项目绑定在 runner 前捕获为局部量（runner 在请求会话关闭后仍可能运行，
     # 且后台 runner 不直接访问 cs 对象，与 session_id/prior_session_id 同处理）。
     project_id = getattr(cs, "project_id", None)
+    requested_workflow_type = (workflow_type or "").strip() or _workflow_from_slash_prompt(prompt)
+    if requested_workflow_type is not None and requested_workflow_type not in WORKFLOW_TO_SKILL:
+        raise ValueError(f"不支持的工作流类型: {requested_workflow_type}")
+    active_workflow_type = (
+        getattr(cs, "workflow_type", None)
+        if getattr(cs, "workflow_status", None) == "active"
+        else None
+    )
+    if requested_workflow_type is not None:
+        if project_id is None:
+            raise ValueError("业务工作流必须绑定项目")
+        if active_workflow_type is not None and active_workflow_type != requested_workflow_type:
+            raise ValueError("当前会话已有未完成工作流，不能启动新的工作流")
+    workflow_to_start = (
+        requested_workflow_type
+        if active_workflow_type is None and requested_workflow_type in PERSISTENT_WORKFLOWS
+        else None
+    )
+    effective_workflow_type = requested_workflow_type or active_workflow_type
+    if effective_workflow_type is not None and project_id is None:
+        raise ValueError("业务工作流必须绑定项目")
     run_id = str(uuid.uuid4())
     async with _session_lock_for(session_id):
         run_state_store.start(session_id, run_id)
@@ -416,6 +473,10 @@ async def stream_session_chat(
                             fresh.claude_session_id = new_sid
                         if is_first_message:
                             fresh.title = await _make_semantic_title(prompt)
+                        if workflow_to_start is not None:
+                            fresh.workflow_type = workflow_to_start
+                            fresh.workflow_status = "active"
+                            fresh.workflow_stage = WORKFLOW_INITIAL_STAGE.get(workflow_to_start)
                         fresh.updated_at = datetime.now(timezone.utc)
                         await s.commit()
 
@@ -459,12 +520,34 @@ async def stream_session_chat(
 
     async def runner() -> None:
         try:
+            await on_message({"type": "assistant_thinking", "text": "正在准备业务工作流..."})
             # M3.3.1 consultant-router：项目 Agent 绑定路由 Plugin 时，对用户输入
             # 做意图路由（斜杠/chip 直达 / LLM 分类 / 关键词兜底 / chat 兜底），
             # 落 IntentRoutingLog，并把路由到 Skill 的提示改写为 /<skill> <原提示>
             # （复用 M3.4.1 斜杠命令机制）。失败只记日志，不阻断对话。
             routed_prompt = prompt
-            if router_plugin_active(agent):
+            if effective_workflow_type is not None:
+                skill = WORKFLOW_TO_SKILL[effective_workflow_type]
+                skill_prompt = (
+                    prompt
+                    if _workflow_from_slash_prompt(prompt) == effective_workflow_type
+                    else f"/{skill} {prompt}"
+                )
+                workflow_action = "进入" if workflow_to_start is not None else "继续"
+                if effective_workflow_type == "visit_plan":
+                    workflow_rule = (
+                        f"【工作流规则】用户已{workflow_action}拜访方案生成工作流。"
+                        "这是文档归档类工作流，不调用业务草稿工具，也不会触发业务入库采纳卡片。"
+                        "本轮生成完整拜访方案；如用户要求归档，使用 Write 保存到个人空间对应项目目录。"
+                    )
+                else:
+                    workflow_rule = (
+                        f"【工作流规则】用户已{workflow_action}该业务工作流。"
+                        "中间阶段只通过自然语言确认、提问或修改推进；不要在中间阶段要求用户点击采纳按钮。"
+                        "只有完整最终候选完成后，才调用对应候选/草稿保存工具，触发最终采纳卡片。"
+                    )
+                routed_prompt = f"{skill_prompt}\n\n{workflow_rule}"
+            elif router_plugin_active(agent):
                 try:
                     decision = await route_user_prompt(agent=agent, prompt=prompt)
                     async with async_session() as s:
@@ -504,7 +587,7 @@ async def stream_session_chat(
             # M3.4.2/M3.4.3：项目级会话挂载草稿工具（绑定项目且当前用户仍为成员），
             # 并把当前待采纳草稿摘要注入 system prompt（§7.2 Chat 调整循环——使 AI
             # 基于原文+指令重新生成并覆盖更新草稿，而非新建重复草稿）。
-            if project_id is not None:
+            if project_id is not None and effective_workflow_type in PERSISTENT_WORKFLOWS:
                 draft_brief: str | None = None
                 async with async_session() as s:
                     draft_context = await _build_draft_context(
@@ -537,6 +620,8 @@ async def stream_session_chat(
                     source_session_id=session_id,
                     project_name=_project_name,
                 )
+            await on_message({"type": "assistant_thinking", "text": "正在连接模型服务..."})
+
             summary = await stream_chat(**stream_kwargs)
             await finalize_usage(summary)
             finish_run_state(summary, summary.error_message)

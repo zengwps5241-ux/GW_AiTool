@@ -165,6 +165,50 @@ export default function BusinessMapPage({ project, onOpenVisitRecords, focusObje
   const childrenOf = (parentId: number | null, level: string) =>
     visibleObjects.filter((o) => o.level === level && o.parent_id === parentId);
 
+  const expandAncestors = useCallback((node: BusinessMapObject) => {
+    let parentId: number | null = node.parent_id;
+    const nextL1 = new Set(expandedL1);
+    const nextL2 = new Set(expandedL2);
+    while (parentId != null) {
+      const parent = objects.find((o) => o.id === parentId);
+      if (!parent) break;
+      if (parent.level === "L1") nextL1.add(parent.id);
+      else if (parent.level === "L2") nextL2.add(parent.id);
+      parentId = parent.parent_id;
+    }
+    setExpandedL1(nextL1);
+    setExpandedL2(nextL2);
+  }, [expandedL1, expandedL2, objects]);
+
+  const selectAndReveal = useCallback((node: BusinessMapObject) => {
+    setSelectedId(node.id);
+    setSubView(node.map_type === "current" ? "current" : "hypothesis");
+    expandAncestors(node);
+  }, [expandAncestors]);
+
+  const treeRenderedIds = useMemo(() => {
+    const ids = new Set<number>();
+    const addNode = (node: BusinessMapObject) => {
+      if (ids.has(node.id)) return;
+      ids.add(node.id);
+      if (node.level === "L1") {
+        for (const l2 of visibleObjects.filter((o) => o.level === "L2" && o.parent_id === node.id)) addNode(l2);
+      } else if (node.level === "L2") {
+        for (const l3 of visibleObjects.filter((o) => o.level === "L3" && o.parent_id === node.id)) addNode(l3);
+      } else if (node.level === "L3") {
+        for (const l4 of visibleObjects.filter((o) => o.level === "L4" && o.parent_id === node.id)) addNode(l4);
+      }
+    };
+    for (const root of l1Nodes) addNode(root);
+    for (const root of supportL2) addNode(root);
+    return ids;
+  }, [l1Nodes, supportL2, visibleObjects]);
+
+  const unlinkedNodes = useMemo(
+    () => visibleObjects.filter((o) => !treeRenderedIds.has(o.id)),
+    [treeRenderedIds, visibleObjects],
+  );
+
   const selected = useMemo(
     () => objects.find((o) => o.id === selectedId) ?? null,
     [objects, selectedId],
@@ -361,8 +405,7 @@ export default function BusinessMapPage({ project, onOpenVisitRecords, focusObje
             projectId={project.id}
             onChanged={refresh}
             onJump={(node) => {
-              setSelectedId(node.id);
-              setSubView(node.map_type === "current" ? "current" : "hypothesis");
+              selectAndReveal(node);
             }}
           />
         ) : subView === "version" ? (
@@ -466,6 +509,26 @@ export default function BusinessMapPage({ project, onOpenVisitRecords, focusObje
                             ))}
                           </div>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {unlinkedNodes.length > 0 && (
+                  <div style={{ marginTop: 20, borderTop: "2px dashed var(--warn)", paddingTop: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--warn)", textTransform: "uppercase", marginBottom: 6 }}>
+                      未挂接节点
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--ink-4)", lineHeight: 1.5, marginBottom: 8 }}>
+                      以下节点已入库，但父子链路不完整，暂无法挂到对应 L1/L2/L3 下。建议后续编辑父节点或重新采纳修正后的草稿。
+                    </div>
+                    {unlinkedNodes.map((node) => (
+                      <div key={node.id} style={{ marginTop: 4 }}>
+                        <NodeRow
+                          node={node}
+                          selectedId={selectedId}
+                          onSelect={() => setSelectedId(node.id)}
+                        />
                       </div>
                     ))}
                   </div>
@@ -1637,7 +1700,7 @@ function OntologyBlock({ ont }: { ont: NonNullable<BusinessMapPayload["ontologyE
   );
 }
 
-// ─── 五维健康视图（M4.1.7：评分表 + 重算 + 手动覆盖） ──────────
+// ─── 五维健康视图（M4.1.7：评分表 + 手动覆盖） ─────────────────
 
 function HealthView({
   objects,
@@ -1650,8 +1713,6 @@ function HealthView({
   onChanged: () => void;
   onJump: (node: BusinessMapObject) => void;
 }) {
-  const toast = useToast();
-  const [recomputing, setRecomputing] = useState(false);
   const [editing, setEditing] = useState<BusinessMapObject | null>(null);
 
   const withHealth = (lv: string) =>
@@ -1662,42 +1723,20 @@ function HealthView({
   const l3 = withHealth("L3");
   const empty = l1.length + l2.length + l3.length === 0;
 
-  const recompute = async () => {
-    setRecomputing(true);
-    try {
-      await api.recomputeBusinessMapHealth(projectId);
-      toast.showToast("五维健康已按规则重新计算", "success");
-      onChanged();
-    } catch (e) {
-      toast.showToast(e instanceof Error ? e.message : "重算失败", "error");
-    } finally {
-      setRecomputing(false);
-    }
-  };
-
   return (
     <>
       <Card style={{ flex: 1, padding: 20, overflow: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--serif)" }}>五维健康总览</div>
-          <Btn
-            size="sm"
-            variant="soft"
-            icon={<I.Refresh size={13} />}
-            onClick={recompute}
-            disabled={recomputing}
-          >
-            {recomputing ? "重算中…" : "重新计算全部"}
-          </Btn>
         </div>
         <div style={{ fontSize: 12, color: "var(--ink-3)", marginBottom: 16 }}>
-          评分按规则自动计算（M2.1.9）；点击表格行跳转节点详情，「调整」可手动覆盖评分（标记 manual）。
+          评分来自假设地图生成时的 AI 诊断；点击表格行跳转节点详情，「调整」可人工覆盖评分。
         </div>
 
         {empty ? (
           <div style={{ padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13 }}>
             <I.Activity size={28} style={{ color: "var(--ink-4)", marginBottom: 10 }} />
-            暂无带五维健康的节点。先在对话中生成业务地图（WF07）并采纳，或点「重新计算全部」。
+            暂无带五维健康的节点。请先在对话中生成包含五维诊断的业务地图（WF07）并采纳。
           </div>
         ) : (
           <>
@@ -1767,6 +1806,7 @@ function HealthTable({
           <thead>
             <tr style={{ background: "var(--bg-2)", borderBottom: "2px solid var(--line)" }}>
               <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "var(--ink-3)" }}>节点</th>
+              <th style={{ padding: "8px 8px", textAlign: "center", fontWeight: 700, color: "var(--ink-3)" }}>来源</th>
               {DIM_ORDER.map((d) => (
                 <th key={d.key} style={{ padding: "8px 8px", textAlign: "center", fontWeight: 700, color: "var(--ink-3)" }}>
                   {d.label}
@@ -1780,6 +1820,7 @@ function HealthTable({
             {nodes.map((node) => {
               const h = node.payload?.fiveDimHealth!;
               const scores = DIM_ORDER.map((d) => h[d.key]?.score ?? 0);
+              const source = node.payload?._healthSource;
               const avg = scores.filter((s) => s > 0).length
                 ? (scores.reduce((a, b) => a + b, 0) / scores.filter((s) => s > 0).length).toFixed(1)
                 : "—";
@@ -1790,6 +1831,9 @@ function HealthTable({
                     onClick={() => onJump(node)}
                   >
                     {node.name}
+                  </td>
+                  <td style={{ padding: "8px 8px", textAlign: "center" }}>
+                    <HealthSourceTag source={source} />
                   </td>
                   {scores.map((s, i) => (
                     <td key={i} style={{ padding: "8px 8px", textAlign: "center" }}>
@@ -1807,6 +1851,27 @@ function HealthTable({
         </table>
       </div>
     </div>
+  );
+}
+
+function HealthSourceTag({ source }: { source?: string }) {
+  const label = source === "manual" ? "人工调整" : "AI假设";
+  const tone = source === "manual" ? "var(--warn)" : "var(--info)";
+  const bg = source === "manual" ? "var(--warn-soft)" : "var(--info-soft)";
+  return (
+    <span
+      style={{
+        padding: "2px 7px",
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 600,
+        background: bg,
+        color: tone,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
   );
 }
 

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, select
@@ -21,11 +22,12 @@ from app.models import (
     BusinessMapDraft,
     BusinessMapObject,
     BusinessMapVersion,
+    ChatSession,
     PreAnalysis,
     User,
 )
 from app.modules.business_map.health import (
-    compute_five_dim_health,
+    FIVE_DIM_KEYS,
     merge_health_into_payload,
 )
 from app.modules.projects.access import get_user_project_role
@@ -148,8 +150,7 @@ async def create_object(
         map_type=payload.map_type,
         verification_status=payload.verification_status,
         linked_hypothesis_id=payload.linked_hypothesis_id,
-        # M5.5.5：新建对象自动派生 payload.fiveDimHealth（L1/L2/L3）
-        payload=_payload_with_auto_health(payload.payload, payload.level),
+        payload=_payload_with_health_source(payload.payload),
         review_status=payload.review_status,
         generated_by_ai=1 if payload.generated_by_ai else 0,
         created_by=user.id,
@@ -182,8 +183,7 @@ async def update_object(
     if payload.linked_hypothesis_id is not None:
         obj.linked_hypothesis_id = payload.linked_hypothesis_id
     if payload.payload is not None:
-        # M5.5.5：payload 变更时重算 auto 健康；_healthSource==='manual' 则保留人工评分
-        obj.payload = _merge_updated_payload(obj.payload, payload.payload, obj.level)
+        obj.payload = _merge_updated_payload(obj.payload, payload.payload)
     if payload.review_status is not None:
         obj.review_status = payload.review_status
         obj.reviewed_at = datetime.now(timezone.utc) if payload.review_status == "reviewed" else obj.reviewed_at
@@ -241,6 +241,16 @@ async def upsert_pre_analysis(
     db: AsyncSession, project_id: int, payload: PreAnalysisInput, user: User
 ) -> PreAnalysisOut:
     """创建或更新前置分析（一个项目一份）。"""
+    pa = await _apply_pre_analysis(db, project_id, payload, user)
+    await db.commit()
+    await db.refresh(pa)
+    return _pre_to_out(pa, await _user_name(db, pa.created_by))
+
+
+async def _apply_pre_analysis(
+    db: AsyncSession, project_id: int, payload: PreAnalysisInput, user: User
+) -> PreAnalysis:
+    """在当前事务中创建或更新前置分析，不提交。"""
     pa = (
         await db.execute(
             select(PreAnalysis).where(PreAnalysis.project_id == project_id)
@@ -263,9 +273,7 @@ async def upsert_pre_analysis(
         pa.industry_trends = payload.industry_trends
         pa.strategic_positioning = payload.strategic_positioning
         pa.digitalization_drivers = payload.digitalization_drivers
-    await db.commit()
-    await db.refresh(pa)
-    return _pre_to_out(pa, await _user_name(db, pa.created_by))
+    return pa
 
 
 # ─── 草稿区 + 采纳 ─────────────────────────────────────────────
@@ -370,6 +378,17 @@ async def upsert_draft(
     return _draft_to_out(draft, await _user_name(db, draft.created_by))
 
 
+def is_draft_ready_for_adoption(draft_data: dict | None) -> bool:
+    """业务地图草稿是否已经完成到可采纳状态。
+
+    旧版草稿没有 ready_for_adoption 字段，按可采纳处理，避免破坏既有流程。
+    新的假设地图分阶段流程会在阶段保存时显式写入 False，最终完成后再改为 True。
+    """
+    if not isinstance(draft_data, dict):
+        return True
+    return draft_data.get("ready_for_adoption") is not False
+
+
 def _extract_object_specs(draft_data: dict | None) -> list[dict]:
     """从草稿数据中抽取对象规格列表，兼容 {objects:[...]} 与 [...] 两种形态。"""
     if not draft_data:
@@ -380,6 +399,95 @@ def _extract_object_specs(draft_data: dict | None) -> list[dict]:
     if isinstance(objs, list):
         return [d for d in objs if isinstance(d, dict)]
     return []
+
+
+def _extract_pre_analysis_spec(draft_data: dict | None) -> dict | None:
+    """从业务地图草稿中抽取项目前置分析。"""
+    if not isinstance(draft_data, dict):
+        return None
+    pre_analysis = draft_data.get("pre_analysis")
+    return pre_analysis if isinstance(pre_analysis, dict) else None
+
+
+def _pre_analysis_text(value) -> str | None:
+    """把模型产出的前置分析字段归一化为可入库文本。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+LEVEL_ORDER = ("L1", "L2", "L3", "L4")
+PARENT_LEVEL: dict[str, str | None] = {
+    "L1": None,
+    "L2": "L1",
+    "L3": "L2",
+    "L4": "L3",
+}
+
+
+def _spec_temp_id(spec: dict, fallback_index: int) -> str:
+    value = spec.get("temp_id") or spec.get("tempId")
+    if value:
+        return str(value)
+    level = spec.get("level", "L1")
+    return f"__auto_{level}_{fallback_index}"
+
+
+def _spec_parent_temp_id(spec: dict) -> str | None:
+    value = (
+        spec.get("parent_temp_id")
+        or spec.get("parentTempId")
+        or spec.get("parent_tempId")
+    )
+    return str(value) if value else None
+
+
+def _spec_parent_name(spec: dict) -> str | None:
+    value = spec.get("parent_name") or spec.get("parentName")
+    payload = spec.get("payload")
+    if not value and isinstance(payload, dict):
+        value = payload.get("parentName") or payload.get("parent_name")
+    return str(value) if value else None
+
+
+def _resolve_parent_id(
+    spec: dict,
+    *,
+    level: str,
+    temp_id_to_db_id: dict[str, int],
+    name_to_db_id: dict[tuple[str, str], int],
+) -> int | None:
+    expected_parent_level = PARENT_LEVEL.get(level)
+    if expected_parent_level is None:
+        return None
+
+    parent_temp_id = _spec_parent_temp_id(spec)
+    if parent_temp_id:
+        parent_id = temp_id_to_db_id.get(parent_temp_id)
+        if parent_id is None:
+            raise ValueError(
+                f"{level} 节点「{spec.get('name', '未命名')}」的 parent_temp_id={parent_temp_id} 未找到对应父节点"
+            )
+        return parent_id
+
+    raw_parent_id = spec.get("parent_id")
+    if isinstance(raw_parent_id, int):
+        return raw_parent_id
+
+    parent_name = _spec_parent_name(spec)
+    if parent_name:
+        parent_id = name_to_db_id.get((expected_parent_level, parent_name))
+        if parent_id is not None:
+            return parent_id
+
+    raise ValueError(
+        f"{level} 节点「{spec.get('name', '未命名')}」缺少有效父级关系。"
+        "请重新生成草稿，确保 L2/L3/L4 均包含 parent_temp_id。"
+    )
 
 
 async def _next_version_number(db: AsyncSession, project_id: int) -> int:
@@ -442,33 +550,64 @@ async def adopt_draft(
     await db.refresh(draft)
     if draft.status != "active":
         raise ValueError(f"草稿当前状态为 {draft.status}，不能采纳")
+    if not is_draft_ready_for_adoption(draft.draft_data):
+        raise ValueError("该业务地图草稿仍在分阶段生成中，尚未完成，不能采纳")
+
+    pre_analysis_spec = _extract_pre_analysis_spec(draft.draft_data)
+    if pre_analysis_spec is not None:
+        await _apply_pre_analysis(
+            db,
+            project_id,
+            PreAnalysisInput(
+                industry_value_chain=_pre_analysis_text(pre_analysis_spec.get("industry_value_chain")),
+                customer_position=_pre_analysis_text(pre_analysis_spec.get("customer_position")),
+                industry_trends=_pre_analysis_text(pre_analysis_spec.get("industry_trends")),
+                strategic_positioning=_pre_analysis_text(pre_analysis_spec.get("strategic_positioning")),
+                digitalization_drivers=_pre_analysis_text(pre_analysis_spec.get("digitalization_drivers")),
+            ),
+            user,
+        )
 
     specs = _extract_object_specs(draft.draft_data)
     created_count = 0
-    for spec in specs:
-        level = spec.get("level", "L1")
-        obj = BusinessMapObject(
-            project_id=project_id,
-            level=level,
-            name=spec.get("name", "未命名"),
-            parent_id=spec.get("parent_id"),
-            map_type=spec.get("map_type", "hypothesis"),
-            verification_status=spec.get("verification_status", "未验证"),
-            linked_hypothesis_id=spec.get("linked_hypothesis_id"),
-            # M5.5.5：采纳时对 L1/L2/L3 自动派生 payload.fiveDimHealth（随版本快照落库）
-            payload=_payload_with_auto_health(spec.get("payload"), level),
-            review_status=target_review_status,
-            generated_by_ai=1 if spec.get("generated_by_ai") else 0,
-            created_by=user.id,
-            is_public=1 if spec.get("is_public") else 0,
-            shared_with=spec.get("shared_with"),
-            sensitivity_level=spec.get("sensitivity_level", "internal"),
-        )
-        db.add(obj)
-        created_count += 1
+    temp_id_to_db_id: dict[str, int] = {}
+    name_to_db_id: dict[tuple[str, str], int] = {}
+    indexed_specs = list(enumerate(specs))
+    for level in LEVEL_ORDER:
+        for spec_index, spec in indexed_specs:
+            if spec.get("level", "L1") != level:
+                continue
+            parent_id = _resolve_parent_id(
+                spec,
+                level=level,
+                temp_id_to_db_id=temp_id_to_db_id,
+                name_to_db_id=name_to_db_id,
+            )
+            obj = BusinessMapObject(
+                project_id=project_id,
+                level=level,
+                name=spec.get("name", "未命名"),
+                parent_id=parent_id,
+                map_type=spec.get("map_type", "hypothesis"),
+                verification_status=spec.get("verification_status", "未验证"),
+                linked_hypothesis_id=spec.get("linked_hypothesis_id"),
+                payload=_payload_with_health_source(spec.get("payload")),
+                review_status=target_review_status,
+                generated_by_ai=1 if spec.get("generated_by_ai") else 0,
+                created_by=user.id,
+                is_public=1 if spec.get("is_public") else 0,
+                shared_with=spec.get("shared_with"),
+                sensitivity_level=spec.get("sensitivity_level", "internal"),
+            )
+            db.add(obj)
+            await db.flush()
+            temp_id_to_db_id[_spec_temp_id(spec, spec_index)] = obj.id
+            name_to_db_id[(level, obj.name)] = obj.id
+            created_count += 1
 
     # 采纳后对 reviewed 正式数据生成版本快照
     version_no = await _next_version_number(db, project_id)
+    await db.flush()
     snapshot = await _snapshot_reviewed_objects(db, project_id)
     db.add(
         BusinessMapVersion(
@@ -481,6 +620,11 @@ async def adopt_draft(
     )
 
     draft.status = "adopted"
+    if draft.source_session_id:
+        session = await db.get(ChatSession, draft.source_session_id)
+        if session is not None and session.workflow_status == "active":
+            session.workflow_status = "adopted"
+            session.workflow_stage = "done"
     await db.commit()
     # 审计埋点（决策 #64）
     from app.modules.audit.service import log_audit
@@ -490,6 +634,7 @@ async def adopt_draft(
         detail={"before": {"draft_id": draft_id, "draft_status": "active"},
                 "after": {"draft_status": "adopted", "version": version_no,
                           "object_count": created_count,
+                          "pre_analysis": bool(pre_analysis_spec),
                           "review_status": target_review_status}},
     )
 
@@ -690,40 +835,18 @@ async def diff_version_against_current(
 async def compute_node_health(
     db: AsyncSession, project_id: int, object_id: int
 ) -> FiveDimHealthOut | None:
-    """对单个节点重新计算五维健康（规则版）并写回 payload.fiveDimHealth。"""
-    obj = await db.get(BusinessMapObject, object_id)
-    if obj is None or obj.project_id != project_id:
-        return None
-    health = compute_five_dim_health(obj.payload, obj.level)
-    if not health:
-        return None  # L4 等不计算五维健康
-    obj.payload = merge_health_into_payload(obj.payload, health, source="auto")
-    await db.commit()
-    await db.refresh(obj)
-    return FiveDimHealthOut(object_id=obj.id, five_dim_health=health, source="auto")
+    """规则版五维健康计算已停用。
+
+    当前口径：五维健康只来自 agent 假设诊断或人工调整，后端不再基于字段完整度自动计算。
+    """
+    return None
 
 
 async def recompute_project_health(
     db: AsyncSession, project_id: int
 ) -> list[FiveDimHealthOut]:
-    """对项目下所有支持五维健康的节点（L1/L2/L3）批量重评估。"""
-    objs = (
-        await db.execute(
-            select(BusinessMapObject).where(
-                BusinessMapObject.project_id == project_id,
-                BusinessMapObject.level.in_(["L1", "L2", "L3"]),
-            )
-        )
-    ).scalars().all()
-    out: list[FiveDimHealthOut] = []
-    for obj in objs:
-        health = compute_five_dim_health(obj.payload, obj.level)
-        if not health:
-            continue
-        obj.payload = merge_health_into_payload(obj.payload, health, source="auto")
-        out.append(FiveDimHealthOut(object_id=obj.id, five_dim_health=health, source="auto"))
-    await db.commit()
-    return out
+    """规则版批量重评估已停用。"""
+    return []
 
 
 async def set_node_health(
@@ -739,30 +862,53 @@ async def set_node_health(
     return FiveDimHealthOut(object_id=obj.id, five_dim_health=health, source="manual")
 
 
-def _payload_with_auto_health(payload: dict | None, level: str) -> dict | None:
-    """对 payload 自动计算五维健康并合并写入（M5.5.5）。
+def _is_valid_five_dim_health(value: object) -> bool:
+    """校验 agent/人工提交的五维健康结构是否完整。"""
+    if not isinstance(value, dict):
+        return False
+    for dim in FIVE_DIM_KEYS:
+        item = value.get(dim)
+        if not isinstance(item, dict):
+            return False
+        score = item.get("score")
+        if not isinstance(score, int) or score < 1 or score > 5:
+            return False
+        desc = item.get("desc")
+        if not isinstance(desc, str) or not desc.strip():
+            return False
+    return True
 
-    L4 等无健康维度的层级原样返回 payload。供 create_object / adopt_draft
-    新建对象时派生 payload.fiveDimHealth（source=auto）。
-    """
-    health = compute_five_dim_health(payload, level)
-    if not health:
-        return payload
-    return merge_health_into_payload(payload, health, source="auto")
+
+def _payload_with_health_source(payload: dict | None, source: str = "ai_hypothesis") -> dict | None:
+    """保留结构完整的五维健康，并标记来源；不做后端自动计算。"""
+    if payload is None:
+        return None
+    health = payload.get("fiveDimHealth")
+    if not _is_valid_five_dim_health(health):
+        out = dict(payload)
+        out.pop("fiveDimHealth", None)
+        out.pop("_healthSource", None)
+        return out
+    current_source = payload.get("_healthSource")
+    return merge_health_into_payload(
+        payload,
+        health,  # type: ignore[arg-type]
+        source=current_source if current_source in ("ai_hypothesis", "manual") else source,
+    )
 
 
-def _merge_updated_payload(prev_payload: dict | None, new_payload: dict | None, level: str) -> dict | None:
-    """更新对象 payload 时的五维健康处理（M5.5.5）。
-
-    - 上一版 _healthSource==='manual'：保留人工评分，携带到新 payload（不覆盖人工判断）。
-    - 否则（auto / 首次）：基于新 payload 重算 auto 健康评分。
-    """
+def _merge_updated_payload(prev_payload: dict | None, new_payload: dict | None) -> dict | None:
+    """更新对象 payload 时保留既有五维健康，不做规则重算。"""
     if new_payload is None:
         return prev_payload
+    if _is_valid_five_dim_health(new_payload.get("fiveDimHealth")):
+        return _payload_with_health_source(new_payload)
+    prev_health = (prev_payload or {}).get("fiveDimHealth")
     prev_source = (prev_payload or {}).get("_healthSource")
-    if prev_source == "manual":
-        prev_health = (prev_payload or {}).get("fiveDimHealth")
-        if prev_health:
-            return merge_health_into_payload(new_payload, prev_health, source="manual")
-        return new_payload
-    return _payload_with_auto_health(new_payload, level)
+    if _is_valid_five_dim_health(prev_health):
+        return merge_health_into_payload(
+            new_payload,
+            prev_health,  # type: ignore[arg-type]
+            source=prev_source if prev_source in ("ai_hypothesis", "manual") else "ai_hypothesis",
+        )
+    return _payload_with_health_source(new_payload)

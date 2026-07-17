@@ -324,8 +324,17 @@ function foldEvents(events: ChatEvent[]): Turn[] {
     } else if (evt.type === "error") {
       const t = ensureAssistant();
       t.parts.push({ kind: "error", text: evt.message });
+    } else if (evt.type === "assistant_thinking" && evt.text) {
+      const t = ensureAssistant();
+      const text = `(${evt.text})`;
+      const last = t.parts[t.parts.length - 1];
+      if (last && last.kind === "text" && last.text.startsWith("(")) {
+        last.text = text;
+      } else {
+        t.parts.push({ kind: "text", text });
+      }
     }
-    // result / assistant_thinking 暂不影响显示
+    // result 暂不影响显示
   }
   return out;
 }
@@ -484,7 +493,7 @@ function FilterChip({
 }
 
 // ============ 工作流快捷 chip（M3.4.1）============
-// 项目级会话可用的 5 个工作流快捷入口：点击向会话发送 `/${command} ${hint}` 触发对应 Skill。
+// 项目级会话可用的 5 个工作流快捷入口：点击后标记“下一条消息进入该工作流”。
 // command 严格对齐 app/skills_seed/<name> 的 Skill 名（项目 Agent 绑定的 7 个 Skill 中 5 个产出型）。
 type WfChipIcon = ComponentType<{ size?: number; style?: CSSProperties }>;
 interface WfChipDef {
@@ -493,15 +502,16 @@ interface WfChipDef {
   Icon: WfChipIcon;
   /** Skill 名（即斜杠命令）；点击后发送 `/${command} ${hint}` */
   command: string;
+  workflowType: string;
   /** 附在命令后的简短意图说明，帮助模型确定启动该 Skill */
   hint: string;
 }
 const WF_CHIPS: WfChipDef[] = [
-  { key: "hypothesis-map", label: "生成假设地图", Icon: I.Map, command: "consultant-hypothesis-map", hint: "请基于当前项目资料，开始生成分层业务假设地图（L1→L4 分步）。" },
-  { key: "visit-plan", label: "生成拜访前方案", Icon: I.ClipboardList, command: "consultant-visit-plan", hint: "请为本项目下一次关键拜访生成前置方案。" },
-  { key: "interview", label: "整理拜访纪要", Icon: I.MessagesSquare, command: "consultant-interview", hint: "我将提供拜访纪要素材，请结构化整理并抽取四维度证据。" },
-  { key: "verify", label: "验证假设", Icon: I.ClipboardCheck, command: "consultant-verify", hint: "请基于已有证据验证假设地图并更新现状节点。" },
-  { key: "stakeholder", label: "营销地图", Icon: I.Users, command: "consultant-stakeholder", hint: "请为本项目生成营销地图角色卡。" },
+  { key: "hypothesis-map", label: "生成假设地图", Icon: I.Map, command: "consultant-hypothesis-map", workflowType: "hypothesis_map", hint: "请基于当前项目资料，开始生成分层业务假设地图（L1→L4 分步）。" },
+  { key: "visit-plan", label: "生成拜访前方案", Icon: I.ClipboardList, command: "consultant-visit-plan", workflowType: "visit_plan", hint: "请为本项目下一次关键拜访生成前置方案。" },
+  { key: "interview", label: "整理拜访纪要", Icon: I.MessagesSquare, command: "consultant-interview", workflowType: "interview_summary", hint: "我将提供拜访纪要素材，请结构化整理并抽取四维度证据。" },
+  { key: "verify", label: "验证假设", Icon: I.ClipboardCheck, command: "consultant-verify", workflowType: "current_map_verify", hint: "请基于已有证据验证假设地图并更新现状节点。" },
+  { key: "stakeholder", label: "营销地图", Icon: I.Users, command: "consultant-stakeholder", workflowType: "stakeholder_card", hint: "请为本项目生成营销地图角色卡。" },
 ];
 
 // ─── M4.4.5 采纳卡片全字段预览（三类草稿，§7.1 第9条「关键字段默认 + 可展开完整」） ──
@@ -654,32 +664,197 @@ function VisitDraftPreview({ preview }: { preview: Record<string, unknown> }) {
 
 /** 业务地图草稿全字段预览（L1-L4 分组 + 节点可展开 payload 关键字段） */
 const DRAFT_BM_LEVELS = ["L1", "L2", "L3", "L4"] as const;
+
+const BM_PRE_ANALYSIS_LABELS: Record<string, string> = {
+  industry_value_chain: "行业价值链",
+  customer_position: "客户行业地位",
+  industry_trends: "行业趋势与变化",
+  strategic_positioning: "客户战略定位",
+  digitalization_drivers: "数字化驱动力",
+};
+
+const BM_PAYLOAD_LABELS: Record<string, string> = {
+  confidenceLevel: "置信度",
+  sourceType: "信息来源",
+  coreActivities: "核心业务活动",
+  capabilityChain: "能力链",
+  itSystems: "核心支撑系统",
+  organization: "关键组织单元",
+  fiveDimHealth: "五维数字健康观测",
+  domainType: "域类型",
+  domainGoal: "域目标",
+  valueStream: "价值流",
+  subScenarios: "子场景",
+  coreCapabilities: "核心能力",
+  supportITSystems: "支撑系统",
+  keyOrganizations: "关键组织",
+  keyDataEntities: "关键数据对象",
+  disconnectionPoints: "断点与问题",
+  businessObjective: "业务目标",
+  businessProcess: "业务流程",
+  keyActivities: "关键活动",
+  capabilityUnits: "能力单元",
+  dataFlow: "数据流",
+  positions: "关联岗位",
+  supportSystems: "支撑系统",
+  painPoints: "痛点",
+  ontologyExtraction: "业务本体抽取",
+  aiOpportunity: "AI Agent 机会",
+  l3KeyActivity: "对应 L3 关键活动",
+  capabilityUnitName: "能力单元名称",
+  capabilityType: "能力类型",
+  capabilityDetail: "能力详情",
+  masteryLevel: "掌握程度",
+  associatedPosition: "关联岗位 / 人才画像",
+  currentRate: "当前水平判断",
+  talentGap: "人才缺口",
+};
+
+const BM_PAYLOAD_FIELDS_BY_LEVEL: Record<string, string[]> = {
+  L1: [
+    "coreActivities",
+    "capabilityChain",
+    "itSystems",
+    "organization",
+    "fiveDimHealth",
+    "confidenceLevel",
+    "sourceType",
+  ],
+  L2: [
+    "domainType",
+    "domainGoal",
+    "valueStream",
+    "subScenarios",
+    "coreCapabilities",
+    "supportITSystems",
+    "keyOrganizations",
+    "keyDataEntities",
+    "disconnectionPoints",
+    "fiveDimHealth",
+    "confidenceLevel",
+    "sourceType",
+  ],
+  L3: [
+    "businessObjective",
+    "businessProcess",
+    "keyActivities",
+    "capabilityUnits",
+    "dataFlow",
+    "positions",
+    "supportSystems",
+    "painPoints",
+    "ontologyExtraction",
+    "aiOpportunity",
+    "fiveDimHealth",
+    "confidenceLevel",
+    "sourceType",
+  ],
+  L4: [
+    "l3KeyActivity",
+    "capabilityUnitName",
+    "capabilityType",
+    "capabilityDetail",
+    "masteryLevel",
+    "associatedPosition",
+    "currentRate",
+    "talentGap",
+    "confidenceLevel",
+    "sourceType",
+  ],
+};
+
+function bmDraftValue(v: unknown): string {
+  if (v == null || v === "") return "";
+  if (Array.isArray(v)) return v.map(bmDraftValue).filter(Boolean).join("；");
+  if (typeof v !== "object") return String(v);
+  const obj = v as Record<string, unknown>;
+  const healthKeys = ["L1_数字骨架", "L2_数字血液", "L3_数字器官", "L4_数字神经", "L5_数字意识"];
+  if (healthKeys.some((key) => Object.prototype.hasOwnProperty.call(obj, key))) {
+    return healthKeys
+      .map((key) => {
+        const item = obj[key];
+        if (!item || typeof item !== "object") return "";
+        const rec = item as Record<string, unknown>;
+        const score = draftStr(rec.score);
+        const desc = draftStr(rec.desc);
+        return `${key}${score ? ` ${score}分` : ""}${desc ? `：${desc}` : ""}`;
+      })
+      .filter(Boolean)
+      .join("；");
+  }
+  const ontologyParts: string[] = [];
+  const ontologyLabels: Record<string, string> = {
+    entities: "实体",
+    relations: "关系",
+    rules: "规则",
+    actions: "动作",
+  };
+  for (const key of ["entities", "relations", "rules", "actions"]) {
+    if (obj[key] != null) {
+      ontologyParts.push(`${ontologyLabels[key]}：${bmDraftValue(obj[key])}`);
+    }
+  }
+  if (ontologyParts.length > 0) return ontologyParts.join("；");
+  return Object.entries(obj)
+    .map(([key, value]) => `${BM_PAYLOAD_LABELS[key] ?? key}：${bmDraftValue(value)}`)
+    .filter(Boolean)
+    .join("；");
+}
+
 function BusinessMapDraftPreview({ preview }: { preview: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false);
   const objects = Array.isArray(preview.objects) ? (preview.objects as Record<string, unknown>[]) : [];
+  const preAnalysis = preview.pre_analysis && typeof preview.pre_analysis === "object"
+    ? (preview.pre_analysis as Record<string, unknown>)
+    : null;
+  const preAnalysisCount = preAnalysis
+    ? Object.keys(BM_PRE_ANALYSIS_LABELS).filter((key) => bmDraftValue(preAnalysis[key])).length
+    : 0;
+  const tempIds = new Set(objects.map((o) => draftStr(o.temp_id)).filter(Boolean));
+  const missingLinks = objects.filter((o) => {
+    const level = draftStr(o.level);
+    if (!["L2", "L3", "L4"].includes(level)) return false;
+    const parentTempId = draftStr(o.parent_temp_id);
+    return !parentTempId || !tempIds.has(parentTempId);
+  });
   const byLevel = (lv: string) => objects.filter((o) => draftStr(o.level) === lv);
   /** 取节点 payload 关键展示字段（按层级差异化） */
-  const payloadHighlights = (p: Record<string, unknown> | undefined): [string, unknown][] => {
+  const payloadHighlights = (level: string, p: Record<string, unknown> | undefined): [string, string][] => {
     if (!p) return [];
-    const out: [string, unknown][] = [];
-    if (draftStr(p.confidenceLevel)) out.push(["置信度", p.confidenceLevel]);
-    if (draftStr(p.sourceType)) out.push(["来源", p.sourceType]);
-    if (draftStr(p.fiveDimHealth)) out.push(["五维健康", p.fiveDimHealth]);
-    if (draftStr(p.domainGoal)) out.push(["域目标", p.domainGoal]);
-    if (draftStr(p.painPoints)) out.push(["痛点", p.painPoints]);
-    if (draftStr(p.aiOpportunity)) out.push(["AI 机会", p.aiOpportunity]);
-    if (draftStr(p.masteryLevel)) out.push(["掌握程度", p.masteryLevel]);
-    return out;
+    return (BM_PAYLOAD_FIELDS_BY_LEVEL[level] ?? Object.keys(p))
+      .map((key): [string, string] => [BM_PAYLOAD_LABELS[key] ?? key, bmDraftValue(p[key])])
+      .filter(([, value]) => Boolean(value));
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 10, fontSize: 12, color: "var(--ink-3)", flexWrap: "wrap" }}>
         <span>共 {objects.length} 节点</span>
+        {preAnalysisCount > 0 && <span>前置分析:<b style={{ color: "var(--ink)" }}>{preAnalysisCount}</b>项</span>}
+        {missingLinks.length > 0 && <span style={{ color: "var(--danger)" }}>层级关系缺失:{missingLinks.length}</span>}
         {DRAFT_BM_LEVELS.map((lv) => {
           const n = byLevel(lv).length;
           return n > 0 ? <span key={lv}>{lv}:<b style={{ color: "var(--ink)" }}>{n}</b></span> : null;
         })}
       </div>
+      {preAnalysis && expanded && (
+        <div style={{ padding: 8, background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-3)" }}>前置分析</div>
+          {Object.entries(BM_PRE_ANALYSIS_LABELS).map(([key, label]) => {
+            const value = bmDraftValue(preAnalysis[key]);
+            return value ? (
+              <div key={key} style={{ fontSize: 11.5, color: "var(--ink-4)", lineHeight: 1.5 }}>
+                <span style={{ color: "var(--ink-3)" }}>{label}：</span>{value}
+              </div>
+            ) : null;
+          })}
+        </div>
+      )}
+      {missingLinks.length > 0 && expanded && (
+        <div style={{ padding: 8, background: "var(--danger-soft)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 11.5, color: "var(--danger)", lineHeight: 1.5 }}>
+          以下节点缺少有效父级关系，采纳会被后端拒绝。请让 AI 修正后再采纳：
+          {missingLinks.map((o) => ` ${draftStr(o.level)}「${draftStr(o.name)}」`).join("、")}
+        </div>
+      )}
       {DRAFT_BM_LEVELS.map((lv) => {
         const nodes = byLevel(lv);
         if (nodes.length === 0) return null;
@@ -690,11 +865,21 @@ function BusinessMapDraftPreview({ preview }: { preview: Record<string, unknown>
               {nodes.map((o, i) => (
                 <div key={i} style={{ color: "var(--ink-2)" }}>
                   • {draftStr(o.name)}
-                  {expanded && (
+                  {expanded && draftStr(o.temp_id) && (
                     <span style={{ color: "var(--ink-4)", fontSize: 11 }}>
-                      {payloadHighlights(o.payload as Record<string, unknown> | undefined)
-                        .map(([k, v]) => `${k}:${draftStr(v)}`).join("  ")}
+                      {" "}({draftStr(o.temp_id)}
+                      {draftStr(o.parent_temp_id) ? ` ← ${draftStr(o.parent_temp_id)}` : ""})
                     </span>
+                  )}
+                  {expanded && (
+                    <div style={{ color: "var(--ink-4)", fontSize: 11, margin: "3px 0 0 14px", display: "flex", flexDirection: "column", gap: 2 }}>
+                      {payloadHighlights(lv, o.payload as Record<string, unknown> | undefined)
+                        .map(([k, v]) => (
+                          <div key={k}>
+                            <span style={{ color: "var(--ink-3)" }}>{k}：</span>{v}
+                          </div>
+                        ))}
+                    </div>
                   )}
                 </div>
               ))}
@@ -753,6 +938,7 @@ export default function ChatWorkspace({
   const sessionListRef = useRef<HTMLDivElement | null>(null);
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [input, setInput] = useState("");
+  const [pendingWorkflow, setPendingWorkflow] = useState<WfChipDef | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [commands, setCommands] = useState<AgentCommand[]>([]);
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
@@ -782,6 +968,11 @@ export default function ChatWorkspace({
   const uploadInFlightRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentSession = sessions.find((s) => s.id === currentId);
+  const activeWorkflowType =
+    currentSession?.workflow_status === "active" ? currentSession.workflow_type : null;
+  const activeWorkflowChip = activeWorkflowType
+    ? WF_CHIPS.find((chip) => chip.workflowType === activeWorkflowType)
+    : null;
   const activeWorkspaceKind: WorkspaceChoice["kind"] =
     currentSession?.workspace_kind === "team" || (mode === "team" && teamSpaceId)
       ? "team"
@@ -1123,6 +1314,7 @@ export default function ChatWorkspace({
       setCurrentId(null);
       currentIdRef.current = null;
       setEvents([]);
+      setPendingWorkflow(null);
       setChatMode("empty");
     }
     // 重取会话列表：按新项目过滤。loadSessions 依赖 sessionParams，sessionParams 已含 project_id。
@@ -1152,6 +1344,7 @@ export default function ChatWorkspace({
         setCurrentId(null);
         currentIdRef.current = null;
         setEvents([]);
+        setPendingWorkflow(null);
         setChatMode("empty");
       }
     },
@@ -1198,6 +1391,7 @@ export default function ChatWorkspace({
     currentIdRef.current = null;
     setEvents([]);
     setInput("");
+    setPendingWorkflow(null);
     setAttached([]);
     setUploadErr(null);
     setChatMode("empty");
@@ -1281,6 +1475,7 @@ export default function ChatWorkspace({
       setCurrentId(id);
       currentIdRef.current = id;
       setEvents([]);
+      setPendingWorkflow(null);
       setChatMode("chat");
       try {
         const msgs = await api.sessionMessages(id);
@@ -1320,6 +1515,7 @@ export default function ChatWorkspace({
     currentIdRef.current = null;
     setEvents([]);
     setInput("");
+    setPendingWorkflow(null);
     setAttached([]);
     setUploadErr(null);
     setWorkspace([]);
@@ -1458,6 +1654,15 @@ export default function ChatWorkspace({
       // 允许"仅附件"发送:只要有附件或文本之一即可
       if (!trimmed && attached.length === 0) return;
       if (streaming) return;
+      const workflowToStart = pendingWorkflow && !activeWorkflowType ? pendingWorkflow.workflowType : null;
+      if (pendingWorkflow && activeWorkflowType && pendingWorkflow.workflowType !== activeWorkflowType) {
+        setEvents((es) => [...es, { type: "error", message: "当前会话已有未完成工作流，不能启动新的工作流" }]);
+        return;
+      }
+      if (workflowToStart && !selectedProject) {
+        setEvents((es) => [...es, { type: "error", message: "请先选择客户项目，再启动业务工作流" }]);
+        return;
+      }
 
       let sid = currentId;
       if (!sid) {
@@ -1496,6 +1701,7 @@ export default function ChatWorkspace({
       // 立即追加用户消息事件,优化反馈感
       setEvents((es) => [...es, { type: "user_text", text: finalPrompt }]);
       setInput("");
+      setPendingWorkflow(null);
       setAttached([]);
       setUploadErr(null);
       setStreaming(true);
@@ -1516,6 +1722,7 @@ export default function ChatWorkspace({
             model: selectedModel,
             thinking_level: thinkingLevel,
           },
+          workflowToStart,
         );
       } catch {
         // 中止或网络异常都按结束流程
@@ -1533,6 +1740,8 @@ export default function ChatWorkspace({
       shareDraftSession,
       setChatMode,
       attached,
+      activeWorkflowType,
+      pendingWorkflow,
       selectedModel,
       thinkingLevel,
       finishStreaming,
@@ -2265,6 +2474,7 @@ export default function ChatWorkspace({
                   turn={turn}
                   username={me.display_name ?? me.username}
                   sessionId={currentId}
+                  onDraftAdopted={() => void loadSessions(0, false)}
                 />
               ))}
               {streaming && (
@@ -2309,7 +2519,18 @@ export default function ChatWorkspace({
           commands={commands}
           wfChips={WF_CHIPS}
           showWfChips={hasProjectContext}
-          onWfChip={(prompt) => sendMessage(prompt)}
+          pendingWorkflow={pendingWorkflow}
+          activeWorkflow={activeWorkflowChip}
+          onWfChip={(chip) => {
+            if (activeWorkflowType && activeWorkflowType !== chip.workflowType) {
+              setEvents((es) => [...es, { type: "error", message: "当前会话已有未完成工作流，不能启动新的工作流" }]);
+              return;
+            }
+            if (activeWorkflowType === chip.workflowType) {
+              return;
+            }
+            setPendingWorkflow((current) => current?.key === chip.key ? null : chip);
+          }}
           attached={attached}
           uploading={uploading}
           uploadErr={uploadErr}
@@ -2359,10 +2580,12 @@ function TurnView({
   turn,
   username,
   sessionId,
+  onDraftAdopted,
 }: {
   turn: Turn;
   username: string;
   sessionId?: string | null;
+  onDraftAdopted?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   // AI 草稿「待采纳」卡片的采纳/驳回状态（M3.1.4）。key = `${entityType}:${draftId}`
@@ -2386,6 +2609,7 @@ function TurnView({
         ...s,
         [part.id]: { status: "adopted", message: res.message || "采纳成功" },
       }));
+      onDraftAdopted?.();
     } catch (e) {
       setDraftAction((s) => ({
         ...s,
@@ -2395,7 +2619,7 @@ function TurnView({
         },
       }));
     }
-  }, []);
+  }, [onDraftAdopted]);
 
   const handleRejectDraft = useCallback((part: DraftPart) => {
     // 驳回 = 暂不采纳（仅前端收起操作，草稿仍留存可于数据页后续采纳/到期清理）
@@ -3481,6 +3705,8 @@ function ChatInput({
   commands,
   wfChips,
   showWfChips,
+  pendingWorkflow,
+  activeWorkflow,
   onWfChip,
   attached,
   uploading,
@@ -3506,8 +3732,10 @@ function ChatInput({
   wfChips: WfChipDef[];
   /** 是否显示工作流 chip（仅项目上下文） */
   showWfChips: boolean;
-  /** 点击 chip：发送 `/${command} ${hint}` 触发对应 Skill */
-  onWfChip: (prompt: string) => void;
+  pendingWorkflow: WfChipDef | null;
+  activeWorkflow: WfChipDef | null | undefined;
+  /** 点击 chip：标记下一条消息进入该工作流 */
+  onWfChip: (chip: WfChipDef) => void;
   attached: UploadedFile[];
   uploading: boolean;
   uploadErr: string | null;
@@ -3684,7 +3912,7 @@ function ChatInput({
         flexShrink: 0,
       }}
     >
-      {/* 工作流快捷 chip（M3.4.1）：仅项目级会话显示，点击向会话发送 /skill-name 触发对应 Skill */}
+      {/* 工作流快捷 chip：仅项目级会话显示，点击后标记下一条消息进入该工作流 */}
       {showWfChips && wfChips.length > 0 && (
         <div
           style={{
@@ -3693,49 +3921,66 @@ function ChatInput({
             display: "flex",
             flexWrap: "wrap",
             gap: 6,
+            alignItems: "center",
           }}
         >
           {wfChips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              disabled={streaming}
-              onClick={() => onWfChip(`/${chip.command} ${chip.hint}`)}
-              title={`/${chip.command}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                height: 30,
-                padding: "0 12px",
-                background: "var(--surface)",
-                border: "1px solid var(--line)",
-                borderRadius: 999,
-                color: "var(--ink-2)",
-                cursor: streaming ? "not-allowed" : "pointer",
-                fontSize: 12.5,
-                fontWeight: 500,
-                fontFamily: "inherit",
-                opacity: streaming ? 0.55 : 1,
-                transition: "border-color 140ms, color 140ms, background 140ms",
-              }}
-              onMouseEnter={(e) => {
-                if (streaming) return;
-                e.currentTarget.style.borderColor = "var(--accent-soft)";
-                e.currentTarget.style.color = "var(--accent-2)";
-                e.currentTarget.style.background = "var(--accent-soft)";
-              }}
-              onMouseLeave={(e) => {
-                if (streaming) return;
-                e.currentTarget.style.borderColor = "var(--line)";
-                e.currentTarget.style.color = "var(--ink-2)";
-                e.currentTarget.style.background = "var(--surface)";
-              }}
-            >
-              <chip.Icon size={13} style={{ flexShrink: 0 }} />
-              <span>{chip.label}</span>
-            </button>
+            (() => {
+              const selected = pendingWorkflow?.key === chip.key || activeWorkflow?.key === chip.key;
+              const disabled = streaming || Boolean(activeWorkflow && activeWorkflow.key !== chip.key);
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onWfChip(chip)}
+                  title={activeWorkflow?.key === chip.key ? "当前工作流进行中" : `下一条消息进入：${chip.label}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 30,
+                    padding: "0 12px",
+                    background: selected ? "var(--accent-soft)" : "var(--surface)",
+                    border: selected ? "1px solid var(--accent)" : "1px solid var(--line)",
+                    borderRadius: 999,
+                    color: selected ? "var(--accent)" : "var(--ink-2)",
+                    cursor: disabled ? "not-allowed" : "pointer",
+                    fontSize: 12.5,
+                    fontWeight: selected ? 650 : 500,
+                    fontFamily: "inherit",
+                    opacity: disabled && !selected ? 0.45 : streaming ? 0.65 : 1,
+                    transition: "border-color 140ms, color 140ms, background 140ms",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (disabled || selected) return;
+                    e.currentTarget.style.borderColor = "var(--accent-soft)";
+                    e.currentTarget.style.color = "var(--accent-2)";
+                    e.currentTarget.style.background = "var(--accent-soft)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (disabled || selected) return;
+                    e.currentTarget.style.borderColor = "var(--line)";
+                    e.currentTarget.style.color = "var(--ink-2)";
+                    e.currentTarget.style.background = "var(--surface)";
+                  }}
+                >
+                  <chip.Icon size={13} style={{ flexShrink: 0 }} />
+                  <span>{chip.label}</span>
+                </button>
+              );
+            })()
           ))}
+          {pendingWorkflow && !activeWorkflow && (
+            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+              下一条消息将进入「{pendingWorkflow.label}」
+            </span>
+          )}
+          {activeWorkflow && (
+            <span style={{ fontSize: 12, color: "var(--accent)" }}>
+              当前工作流：{activeWorkflow.label}
+            </span>
+          )}
         </div>
       )}
       <div

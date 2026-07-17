@@ -48,7 +48,7 @@ description: WF12 营销地图角色卡生成——按客观层/主观层/行为
 5. **评分主观层**：按公式给 engagement/influence/support 打分并算 compositeScore、gradeLevel；填 stance、explicitKPI、personalMotivation、attitudeToUs、attitudeToCompetitor、coreConcerns、leverage、**confidence（置信度，按上方标准：高/中/低）**。
 6. **行为记录**：behaviors 数组，每条含 observation（客观）/ interpretation（解读）/ suggestedAction（建议下一步）。
 7. **生成话术**（可选）：针对该角色类型 + 场景（初次拜访/方案汇报/价值呈现/应对价格质疑等）给 1-2 段对话体话术（在文本中给出，话术库后续沉淀）。
-8. **与用户确认**后调用草稿工具写入项目草稿区。
+8. **本轮形成候选草稿**：先在回复中给出角色卡预览、关键判断依据和不确定项，然后立即调用草稿工具写入项目草稿区，触发最终「待采纳」卡片。用户若不满意，会在下一轮用自然语言提出修改，你应基于上一版草稿增量更新，不要要求用户先口头确认再保存。
 
 ## 结构化输出（调用草稿工具）
 
@@ -68,6 +68,7 @@ mcp__consultant_drafts__save_stakeholder_card_draft
 
 - `compositeScore` 与 `gradeLevel` 由后端按公式自动计算（你只需给三个维度分），无需手填。
 - 调用后系统存入草稿区（review_status=draft）并推送「待采纳」卡片；告知用户采纳后才进入正式营销地图。
+- 若用户后续提出修改，必须带 `update_draft_id=<本草稿ID>` 重新调用本工具覆盖更新草稿，并在回复中只说明关键改动，不要重复输出整张角色卡。
 - 多个角色分别调用多次（每次一张卡）。
 
 ## 约束
