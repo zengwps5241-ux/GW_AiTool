@@ -55,6 +55,10 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple uv
 # npm 国内源，可选
 RUN npm config set registry https://registry.npmmirror.com
 RUN npm install -g bun
+# Claude Code CLI：claude-agent-sdk 运行时通过子进程拉起 `claude`，必须预装；
+# 否则 AI 对话会报 "Failed to start Claude Code"。走上方 npmmirror 国内源。
+# 如需可复现构建，可固定版本，例如：@anthropic-ai/claude-code@2.1.156
+RUN npm install -g @anthropic-ai/claude-code
 
 # 安装gstack
 RUN git clone --single-branch --depth 1 https://gh-proxy.org/https://github.com/garrytan/gstack.git ~/.claude/skills/gstack  \
@@ -71,4 +75,5 @@ RUN python --version \
  && npx --version \
  && bun --version \
  && git --version \
- && uv --version
+ && uv --version \
+ && claude --version
