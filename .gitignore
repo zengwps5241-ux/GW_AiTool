@@ -14,6 +14,8 @@ Thumbs.db
 .env.*
 !.env.example
 !backend/.env.example
+# 部署手册已填入真实 API 凭证(GLM/DeepSeek/Zhipu)，仅本地保留，勿入库
+design/zengwp/部署手册V1.0.md
 *.pem
 *.key
 *.p12
